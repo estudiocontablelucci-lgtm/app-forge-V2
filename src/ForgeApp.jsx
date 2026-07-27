@@ -6,7 +6,11 @@ import { useState, useEffect, useMemo } from "react";
    ============================================================ */
 
 const WEEKS = [1, 2, 3, 4, "DL"];
-const SESSIONS = ["A", "B", "C"];
+const DEFAULT_SESSIONS = [
+  { id: "A", name: "Volumen & Tempo" },
+  { id: "B", name: "Moderada & Variación" },
+  { id: "C", name: "Intensidad & Fuerza" },
+];
 
 /* ---------- Seed: Ciclo 2 ---------- */
 const SEED = [
@@ -139,6 +143,7 @@ function ExSetRow({ ex, n, week, logs, onSetChange }) {
 
 /* ============================================================ */
 export default function ForgeApp() {
+  const [sessions, setSessions] = useState(DEFAULT_SESSIONS);
   const [program, setProgram] = useState(SEED);
   const [logs, setLogs] = useState({});
   const [history, setHistory] = useState([]);
@@ -150,15 +155,16 @@ export default function ForgeApp() {
   const [blockIdx, setBlockIdx] = useState(0);
   const [timer, setTimer] = useState(null);
   const [editing, setEditing] = useState(null);
-  const [progSession, setProgSession] = useState("A");
+  const [progSession, setProgSession] = useState(null); // session id
+  const [editingSessions, setEditingSessions] = useState(false);
   const [healthCheck, setHealthCheck] = useState(null);
   const [savedHealth, setSavedHealth] = useState(null);
   const [sessionStart, setSessionStart] = useState(null);
   const [expandedLog, setExpandedLog] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null); // "finish" | "exit" | null
 
-  useEffect(() => { const s = loadState(); if (s) { setProgram(s.program || SEED); setLogs(s.logs || {}); setHistory(s.history || []); } setLoaded(true); }, []);
-  useEffect(() => { if (loaded) saveState({ program, logs, history }); }, [program, logs, history, loaded]);
+  useEffect(() => { const s = loadState(); if (s) { setSessions(s.sessions || DEFAULT_SESSIONS); setProgram(s.program || SEED); setLogs(s.logs || {}); setHistory(s.history || []); } setLoaded(true); }, []);
+  useEffect(() => { if (loaded) saveState({ sessions, program, logs, history }); }, [sessions, program, logs, history, loaded]);
 
   useEffect(() => {
     if (!timer || timer.remaining <= 0) return;
@@ -172,6 +178,8 @@ export default function ForgeApp() {
     return () => clearInterval(iv);
   }, [timer?.id]);
 
+  const sessName = (id) => { const s = sessions.find((s) => s.id === id); return s ? s.name : id; };
+  const activeProgSession = progSession || (sessions[0]?.id ?? "A");
   const sessionExs = useMemo(() => program.filter((e) => e.session === session).sort((a, b) => a.order - b.order), [program, session]);
   const blocks = useMemo(() => getBlocks(sessionExs), [sessionExs]);
   const block = blocks[blockIdx];
@@ -214,7 +222,7 @@ export default function ForgeApp() {
         for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
         return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
       });
-      setHistory((H) => [{ id: uid(), week, session, date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData }, ...H]);
+      setHistory((H) => [{ id: uid(), week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData }, ...H]);
     }
     setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null);
     setConfirmAction(null);
@@ -235,7 +243,7 @@ export default function ForgeApp() {
   function deleteExercise(id) { setProgram((P) => P.filter((e) => e.id !== id).map((e) => (e.superset === id ? { ...e, superset: null } : e))); setEditing(null); }
 
   // Blocks for Programa tab (must be before early return)
-  const progBlocks = useMemo(() => getBlocks(program.filter((e) => e.session === progSession)), [program, progSession]);
+  const progBlocks = useMemo(() => getBlocks(program.filter((e) => e.session === activeProgSession)), [program, activeProgSession]);
 
   if (!loaded) return <div style={{ background: "#F2F2F7", minHeight: "100vh" }} />;
 
@@ -247,7 +255,7 @@ export default function ForgeApp() {
         {/* ======== HEALTH CHECK ======== */}
         {tab === "entrenar" && session !== null && healthCheck && (
           <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Como te sentís hoy?</h1><p className="sub">{weekLabel(week)} · Sesión {session}</p></header>
+            <header className="top"><div className="brand">FORGE</div><h1>Como te sentís hoy?</h1><p className="sub">{weekLabel(week)} · {sessName(session)}</p></header>
             {[
               { key: "sleep", label: "Sueño", emoji: ["😴", "😪", "😐", "😊", "😁"] },
               { key: "stress", label: "Estrés", emoji: ["🧘", "😌", "😐", "😣", "😤"] },
@@ -280,16 +288,16 @@ export default function ForgeApp() {
             </div>
             {week === "DL" && <div className="dlnote">Deload: series - 1, bajá la intensidad</div>}
             <div className="sessioncards">
-              {SESSIONS.map((s) => {
-                const exs = program.filter((e) => e.session === s);
+              {sessions.map((sess) => {
+                const exs = program.filter((e) => e.session === sess.id);
                 const groups = [...new Set(exs.map((e) => e.group))].slice(0, 3).join(" · ");
                 const total = exs.reduce((a, e) => a + setsFor(e, week), 0);
                 const done = exs.reduce((a, e) => { let n = 0; for (let i = 1; i <= setsFor(e, week); i++) if (logs[keyOf(week, e.id, i)]?.done) n++; return a + n; }, 0);
                 const allDone = done === total && total > 0;
                 return (
-                  <button key={s} className={`scard ${allDone ? "completed" : ""}`} onClick={() => startSession(s)}>
-                    <div className="sletter">{s}</div>
-                    <div className="sinfo"><div className="sname">Sesión {s}</div><div className="sgroups">{groups}</div><div className="sbar"><div style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} /></div></div>
+                  <button key={sess.id} className={`scard ${allDone ? "completed" : ""}`} onClick={() => startSession(sess.id)}>
+                    <div className="sletter">{sess.id}</div>
+                    <div className="sinfo"><div className="sname">{sess.name}</div><div className="sgroups">{groups}</div><div className="sbar"><div style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} /></div></div>
                     <div className="sright"><span className="spct mono">{allDone ? "Done" : `${done}/${total}`}</span></div>
                   </button>
                 );
@@ -304,7 +312,7 @@ export default function ForgeApp() {
             <header className="wtop">
               <button className="back" onClick={() => setConfirmAction("exit")}>&#8249;</button>
               <div className="wtitle">
-                <span>{weekLabel(week)} · Sesión {session}</span>
+                <span>{weekLabel(week)} · {sessName(session)}</span>
                 <div className="dots">
                   {blocks.map((b, i) => (
                     <span key={i} className={`dot ${blockDone(b) ? "full" : ""} ${i === blockIdx ? "cur" : ""} ${b.type === "superset" ? "wide" : ""}`}
@@ -365,7 +373,8 @@ export default function ForgeApp() {
           <div className="screen">
             <header className="top"><div className="brand">FORGE</div><h1>Programa</h1><p className="sub">Mesociclo DUP · 4 sem + deload</p></header>
             <div className="weekchips">
-              {SESSIONS.map((s) => (<button key={s} className={`chip ${progSession === s ? "on" : ""}`} onClick={() => setProgSession(s)}>Sesión {s}</button>))}
+              {sessions.map((s) => (<button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>{s.name}</button>))}
+              {session === null && <button className="chip chip-add" onClick={() => setEditingSessions(true)}>+</button>}
             </div>
             <div className="plist">
               {progBlocks.map((b, bi) => (
@@ -384,7 +393,7 @@ export default function ForgeApp() {
               ))}
             </div>
             {session === null && (
-              <button className="addbtn" onClick={() => setEditing({ id: uid(), session: progSession, order: (Math.max(0, ...program.filter((e) => e.session === progSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps" })}>+ Agregar ejercicio</button>
+              <button className="addbtn" onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps" })}>+ Agregar ejercicio</button>
             )}
           </div>
         )}
@@ -397,7 +406,7 @@ export default function ForgeApp() {
             {history.map((h) => (
               <div key={h.id} className="hist-card">
                 <button className="hist-head" onClick={() => setExpandedLog(expandedLog === h.id ? null : h.id)}>
-                  <div className="hist-left"><div className="hist-title">{weekLabel(h.week)} · Sesión {h.session}</div><div className="hist-meta">{fmtDate(h.date)}{h.duration ? ` · ${h.duration} min` : ""}</div></div>
+                  <div className="hist-left"><div className="hist-title">{weekLabel(h.week)} · {h.sessionName || sessName(h.session)}</div><div className="hist-meta">{fmtDate(h.date)}{h.duration ? ` · ${h.duration} min` : ""}</div></div>
                   {h.health && <div className="hist-health mono"><span>😴{h.health.sleep}</span><span>😤{h.health.stress}</span><span>⚡{h.health.energy}</span></div>}
                   <span className="hist-chev">{expandedLog === h.id ? "▲" : "▼"}</span>
                 </button>
@@ -457,6 +466,39 @@ export default function ForgeApp() {
                 <button className="confirm-cancel" onClick={() => setConfirmAction(null)}>Cancelar</button>
                 <button className="confirm-ok" onClick={handleConfirmOk}>OK</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======== SESSION EDITOR ======== */}
+        {editingSessions && (
+          <div className="overlay" onClick={() => setEditingSessions(false)}>
+            <div className="sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="sheethead"><h3>Sesiones</h3><button className="x" onClick={() => setEditingSessions(false)}>×</button></div>
+              <div className="sess-list">
+                {sessions.map((s) => {
+                  const exCount = program.filter((e) => e.session === s.id).length;
+                  return (
+                    <div key={s.id} className="sess-row">
+                      <span className="sess-id mono">{s.id}</span>
+                      <input className="sess-name-input" value={s.name} onChange={(e) => setSessions((S) => S.map((x) => x.id === s.id ? { ...x, name: e.target.value } : x))} />
+                      <span className="sess-count mono">{exCount} ej.</span>
+                      <button className="sess-del" onClick={() => {
+                        if (exCount > 0 && !window.confirm(`"${s.name}" tiene ${exCount} ejercicios. Eliminar sesión y sus ejercicios?`)) return;
+                        setSessions((S) => S.filter((x) => x.id !== s.id));
+                        setProgram((P) => P.filter((e) => e.session !== s.id));
+                        if (activeProgSession === s.id) setProgSession(null);
+                      }}>×</button>
+                    </div>
+                  );
+                })}
+              </div>
+              <button className="addbtn" style={{ marginTop: 12 }} onClick={() => {
+                const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+                const used = new Set(sessions.map((s) => s.id));
+                const next = letters.find((l) => !used.has(l)) || `S${sessions.length + 1}`;
+                setSessions((S) => [...S, { id: next, name: `Sesión ${next}` }]);
+              }}>+ Agregar sesión</button>
             </div>
           </div>
         )}
@@ -621,6 +663,16 @@ const CSS = `
 .pmeta { color: #636366; font-size: 12px; margin-top: 2px; }
 .pnums { color: #48484A; font-size: 13px; text-align: right; flex-shrink: 0; }
 .addbtn { width: 100%; margin-top: 12px; height: 50px; border-radius: 12px; border: 1.5px dashed #C7C7CC; background: transparent; color: #2C6BED; font: 600 14px 'Inter'; cursor: pointer; }
+.chip-add { border-style: dashed; color: #2C6BED; border-color: #2C6BED; background: transparent; font-size: 16px; padding: 7px 14px; }
+
+/* Session editor */
+.sess-list { display: flex; flex-direction: column; gap: 8px; }
+.sess-row { display: flex; align-items: center; gap: 8px; }
+.sess-id { width: 28px; font-size: 14px; font-weight: 700; color: #2C6BED; text-align: center; flex-shrink: 0; }
+.sess-name-input { flex: 1; height: 40px; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 8px; color: #1C1C1E; padding: 0 10px; font: 400 14px 'Inter'; }
+.sess-name-input:focus { outline: none; border-color: #2C6BED; }
+.sess-count { font-size: 12px; color: #636366; flex-shrink: 0; white-space: nowrap; }
+.sess-del { width: 32px; height: 32px; border-radius: 8px; border: 1px solid rgba(255,59,48,.3); background: transparent; color: #FF3B30; font-size: 16px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 
 /* Historial */
 .hist-card { background: #FFF; border-radius: 14px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
