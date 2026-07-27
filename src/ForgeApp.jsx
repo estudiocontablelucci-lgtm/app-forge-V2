@@ -98,11 +98,12 @@ function semaphore(exercise, logs, week) {
   for (let i = 1; i <= n; i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push(l); }
   if (!sets.length || exercise.unit === "pasos") return "gray";
   const guideReps = exercise.repsMin;
+  const guideRir = parseFloat(exercise.rir) || 0;
   const repsOk = sets.every((s) => parseInt(s.reps) >= guideReps);
-  if (repsOk) return "green";
-  // Some sets below target but some met it
-  const someOk = sets.some((s) => parseInt(s.reps) >= guideReps);
-  if (someOk) return "yellow";
+  const rirsValid = sets.filter((s) => isNum(parseFloat(s.rir)));
+  const avgRir = rirsValid.length ? rirsValid.reduce((a, s) => a + parseFloat(s.rir), 0) / rirsValid.length : null;
+  if (repsOk && (avgRir === null || avgRir >= guideRir)) return "green";
+  if (repsOk) return "yellow";
   return "red";
 }
 const SEM_LABELS = { green: "Subir peso", yellow: "Mantener", red: "Revisar", gray: "" };
@@ -118,13 +119,17 @@ function ExSetRow({ ex, n, week, logs, onSetChange }) {
   const k = keyOf(week, ex.id, n);
   const l = logs[k] || {};
   const handleChange = (field, val) => onSetChange(ex, n, field, val);
+  // Pre-fill KG with refKg on first focus if empty
+  const prefillKg = () => { if ((l.kg === undefined || l.kg === "") && isNum(ex.refKg)) handleChange("kg", String(ex.refKg)); };
   return (
     <div className={`setrow ${l.done ? "done" : ""}`}>
       <span className="setn mono">S{n}</span>
       <input className="nf mono" inputMode="decimal" placeholder={isNum(ex.refKg) ? String(ex.refKg) : ex.refKg === "BW" ? "0" : "—"}
-        value={l.kg ?? ""} onChange={(e) => handleChange("kg", e.target.value)} />
+        value={l.kg ?? ""} onFocus={prefillKg} onChange={(e) => handleChange("kg", e.target.value)} />
       <input className="nf mono" inputMode="numeric" placeholder={`${ex.repsMax}`}
         value={l.reps ?? ""} onChange={(e) => handleChange("reps", e.target.value)} />
+      <input className="nf mono" inputMode="decimal" placeholder={ex.rir || "—"}
+        value={l.rir ?? ""} onChange={(e) => handleChange("rir", e.target.value)} />
     </div>
   );
 }
@@ -202,7 +207,7 @@ export default function ForgeApp() {
     const exs = program.filter((e) => e.session === session);
     const exerciseData = exs.map((exercise) => {
       const sets = [];
-      for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null }); }
+      for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
       return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
     });
     setHistory((H) => [{ id: uid(), week, session, date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: healthCheck || null, exercises: exerciseData }, ...H]);
@@ -324,7 +329,7 @@ export default function ForgeApp() {
                 </div>
 
                 <div className="sets">
-                  <div className="setshead"><span></span><span>{ex.refKg === "BW" ? "+KG" : "KG"}</span><span>{ex.unit === "pasos" ? "PASOS" : "REPS"}</span></div>
+                  <div className="setshead"><span></span><span>{ex.refKg === "BW" ? "+KG" : "KG"}</span><span>{ex.unit === "pasos" ? "PASOS" : "REPS"}</span><span>RIR</span></div>
                   {Array.from({ length: setsFor(ex, week) }, (_, i) => i + 1).map((n) => (
                     <ExSetRow key={n} ex={ex} n={n} week={week} logs={logs} onSetChange={onSetChange} />
                   ))}
@@ -390,7 +395,7 @@ export default function ForgeApp() {
                     {h.exercises.filter((e) => e.sets.length > 0).map((e) => (
                       <div key={e.id} className="hist-ex">
                         <div className="hist-exhead"><span className="hist-exname">{e.name}</span><span className="sem-dot-sm" style={{ background: SEM_COLORS[e.sem] }} /></div>
-                        <div className="hist-sets mono">{e.sets.map((s, i) => <span key={i}>{isNum(s.kg) ? s.kg : "BW"}×{s.reps}</span>)}</div>
+                        <div className="hist-sets mono">{e.sets.map((s, i) => <span key={i}>{isNum(s.kg) ? s.kg : "BW"}×{s.reps}{isNum(s.rir) ? ` @${s.rir}` : ""}</span>)}</div>
                       </div>
                     ))}
                   </div>
@@ -544,9 +549,9 @@ const CSS = `
 .refline { font-size: 12px; color: #48484A; line-height: 1.5; }
 .sep { color: #AEAEB2; margin: 0 3px; }
 .sets { margin-top: 12px; }
-.setshead { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 8px; padding: 0 2px 6px; font-size: 11px; letter-spacing: .1em; color: #636366; font-weight: 600; }
+.setshead { display: grid; grid-template-columns: 34px 1fr 1fr 1fr; gap: 8px; padding: 0 2px 6px; font-size: 11px; letter-spacing: .1em; color: #636366; font-weight: 600; }
 .setshead span { text-align: center; } .setshead span:first-child { text-align: left; }
-.setrow { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+.setrow { display: grid; grid-template-columns: 34px 1fr 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
 .setn { color: #48484A; font-size: 14px; font-weight: 600; }
 .nf { width: 100%; height: 50px; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 12px; color: #1C1C1E; font-size: 20px; text-align: center; transition: border-color .15s; }
 .nf::placeholder { color: #AEAEB2; }
