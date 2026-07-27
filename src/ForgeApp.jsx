@@ -296,7 +296,7 @@ export default function ForgeApp() {
         {tab === "entrenar" && session !== null && !healthCheck && block && (
           <div className="screen workout">
             <header className="wtop">
-              <button className="back" onClick={() => { setSession(null); setTimer(null); setSessionStart(null); }}>&#8249;</button>
+              <button className="back" onClick={() => { if (confirm("Salir sin guardar?")) { setSession(null); setTimer(null); setSessionStart(null); } }}>&#8249;</button>
               <div className="wtitle">
                 <span>{weekLabel(week)} · Sesión {session}</span>
                 <div className="dots">
@@ -306,7 +306,7 @@ export default function ForgeApp() {
                   ))}
                 </div>
               </div>
-              <span className="counter mono">{blockIdx + 1}/{blocks.length}</span>
+              <button className="finish-btn" onClick={finishSession}>Terminar</button>
             </header>
 
             {block.type === "superset" && (
@@ -541,7 +541,7 @@ const CSS = `
 .dot.wide { width: 18px; border-radius: 4px; }
 .dot.full { background: #2C6BED; }
 .dot.cur { outline: 2px solid rgba(44,107,237,.4); outline-offset: 1px; }
-.counter { color: #636366; font-size: 13px; font-weight: 500; }
+.finish-btn { padding: 6px 14px; border-radius: 8px; border: none; background: #2C6BED; color: #FFF; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; }
 
 .ssbanner { background: #FFF3E0; border: 1px solid #F5A623; color: #C75000; font-size: 14px; font-weight: 700; padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; }
 
