@@ -91,6 +91,9 @@ function getBlocks(exercises) {
   return blocks;
 }
 
+/* ---------- Helpers: isDone ---------- */
+function isDone(log) { return log && ((log.kg !== undefined && log.kg !== "") || (log.reps !== undefined && log.reps !== "")); }
+
 /* ---------- Semáforo ---------- */
 function semaphore(exercise, logs, week) {
   const n = setsFor(exercise, week);
@@ -173,8 +176,6 @@ export default function ForgeApp() {
   const blocks = useMemo(() => getBlocks(sessionExs), [sessionExs]);
   const block = blocks[blockIdx];
 
-  // A set is "done" if it has kg or reps filled in
-  function isDone(log) { return log && ((log.kg !== undefined && log.kg !== "") || (log.reps !== undefined && log.reps !== "")); }
   function countDone(exercise) { let n = 0; for (let i = 1; i <= setsFor(exercise, week); i++) if (isDone(logs[keyOf(week, exercise.id, i)])) n++; return n; }
   function blockDone(b) { return b.exercises.every((ex) => countDone(ex) >= setsFor(ex, week)); }
 
