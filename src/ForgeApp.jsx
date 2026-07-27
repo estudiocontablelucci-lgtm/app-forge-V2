@@ -152,7 +152,7 @@ export default function ForgeApp() {
   const [savedHealth, setSavedHealth] = useState(null);
   const [sessionStart, setSessionStart] = useState(null);
   const [expandedLog, setExpandedLog] = useState(null);
-  const [confirmModal, setConfirmModal] = useState(null); // {msg, onOk}
+  const [confirmAction, setConfirmAction] = useState(null); // "finish" | "exit" | null
 
   useEffect(() => { const s = loadState(); if (s) { setProgram(s.program || SEED); setLogs(s.logs || {}); setHistory(s.history || []); } setLoaded(true); }, []);
   useEffect(() => { if (loaded) saveState({ program, logs, history }); }, [program, logs, history, loaded]);
@@ -205,23 +205,18 @@ export default function ForgeApp() {
   function startSession(s) { setHealthCheck({ sleep: 3, stress: 3, energy: 3 }); setSession(s); setBlockIdx(0); }
   function confirmHealth() { setSavedHealth(healthCheck); setSessionStart(Date.now()); setHealthCheck(null); }
 
-  function doFinishSession() {
-    const exs = program.filter((e) => e.session === session);
-    const exerciseData = exs.map((exercise) => {
-      const sets = [];
-      for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
-      return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
-    });
-    setHistory((H) => [{ id: uid(), week, session, date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData }, ...H]);
+  function handleConfirmOk() {
+    if (confirmAction === "finish") {
+      const exs = program.filter((e) => e.session === session);
+      const exerciseData = exs.map((exercise) => {
+        const sets = [];
+        for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
+        return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
+      });
+      setHistory((H) => [{ id: uid(), week, session, date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData }, ...H]);
+    }
     setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null);
-  }
-
-  function finishSession() {
-    setConfirmModal({ msg: "Terminar la sesión y guardar al historial?", onOk: doFinishSession });
-  }
-
-  function exitWithoutSaving() {
-    setConfirmModal({ msg: "Salir sin guardar?", onOk: () => { setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null); } });
+    setConfirmAction(null);
   }
 
   const metrics = useMemo(() => {
@@ -306,7 +301,7 @@ export default function ForgeApp() {
         {tab === "entrenar" && session !== null && !healthCheck && block && (
           <div className="screen workout">
             <header className="wtop">
-              <button className="back" onClick={exitWithoutSaving}>&#8249;</button>
+              <button className="back" onClick={() => setConfirmAction("exit")}>&#8249;</button>
               <div className="wtitle">
                 <span>{weekLabel(week)} · Sesión {session}</span>
                 <div className="dots">
@@ -316,7 +311,7 @@ export default function ForgeApp() {
                   ))}
                 </div>
               </div>
-              <button className="finish-btn" onClick={finishSession}>Terminar</button>
+              <button className="finish-btn" onClick={() => setConfirmAction("finish")}>Terminar</button>
             </header>
 
             {block.type === "superset" && (
@@ -358,7 +353,7 @@ export default function ForgeApp() {
               {blockIdx < blocks.length - 1 ? (
                 <button className="navbtn pri" onClick={() => setBlockIdx((i) => i + 1)}>Siguiente &#8250;</button>
               ) : (
-                <button className="navbtn pri" onClick={finishSession}>Terminar &#10003;</button>
+                <button className="navbtn pri" onClick={() => setConfirmAction("finish")}>Terminar &#10003;</button>
               )}
             </div>
           </div>
@@ -453,13 +448,13 @@ export default function ForgeApp() {
         )}
 
         {/* ======== CONFIRM MODAL ======== */}
-        {confirmModal && (
-          <div className="overlay centered" onClick={() => setConfirmModal(null)}>
+        {confirmAction && (
+          <div className="overlay centered" onClick={() => setConfirmAction(null)}>
             <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
-              <p className="confirm-msg">{confirmModal.msg}</p>
+              <p className="confirm-msg">{confirmAction === "finish" ? "Terminar la sesión y guardar al historial?" : "Salir sin guardar?"}</p>
               <div className="confirm-actions">
-                <button className="confirm-cancel" onClick={() => setConfirmModal(null)}>Cancelar</button>
-                <button className="confirm-ok" onClick={() => { confirmModal.onOk(); setConfirmModal(null); }}>OK</button>
+                <button className="confirm-cancel" onClick={() => setConfirmAction(null)}>Cancelar</button>
+                <button className="confirm-ok" onClick={handleConfirmOk}>OK</button>
               </div>
             </div>
           </div>
