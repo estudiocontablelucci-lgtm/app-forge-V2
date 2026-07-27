@@ -3,5 +3,5 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/app-forge-v2/',
+  base: '/app-forge-V2/',
 })
