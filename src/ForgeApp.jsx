@@ -149,6 +149,7 @@ export default function ForgeApp() {
   const [editing, setEditing] = useState(null);
   const [progSession, setProgSession] = useState("A");
   const [healthCheck, setHealthCheck] = useState(null);
+  const [savedHealth, setSavedHealth] = useState(null);
   const [sessionStart, setSessionStart] = useState(null);
   const [expandedLog, setExpandedLog] = useState(null);
 
@@ -201,17 +202,18 @@ export default function ForgeApp() {
   }
 
   function startSession(s) { setHealthCheck({ sleep: 3, stress: 3, energy: 3 }); setSession(s); setBlockIdx(0); }
-  function confirmHealth() { setSessionStart(Date.now()); setHealthCheck(null); }
+  function confirmHealth() { setSavedHealth(healthCheck); setSessionStart(Date.now()); setHealthCheck(null); }
 
   function finishSession() {
+    if (!confirm("Terminar la sesión y guardar al historial?")) return;
     const exs = program.filter((e) => e.session === session);
     const exerciseData = exs.map((exercise) => {
       const sets = [];
       for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
       return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
     });
-    setHistory((H) => [{ id: uid(), week, session, date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: healthCheck || null, exercises: exerciseData }, ...H]);
-    setSession(null); setTimer(null); setSessionStart(null);
+    setHistory((H) => [{ id: uid(), week, session, date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData }, ...H]);
+    setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null);
   }
 
   const metrics = useMemo(() => {
