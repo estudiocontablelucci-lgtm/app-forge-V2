@@ -355,7 +355,16 @@ export default function ForgeApp() {
         )}
 
         {/* ======== PROGRAMA ======== */}
-        {tab === "programa" && (
+        {tab === "programa" && session !== null && (
+          <div className="screen">
+            <header className="top"><div className="brand">FORGE</div><h1>Programa</h1></header>
+            <div className="lock-card">
+              <span className="lock-icon">🔒</span>
+              <div><div className="lock-title">Sesión activa</div><div className="lock-sub">No podés editar el programa mientras entrenás. Terminá o cancelá la sesión primero.</div></div>
+            </div>
+          </div>
+        )}
+        {tab === "programa" && session === null && (
           <div className="screen">
             <header className="top"><div className="brand">FORGE</div><h1>Programa</h1><p className="sub">Mesociclo DUP · 4 sem + deload</p></header>
             <div className="weekchips">
@@ -456,18 +465,24 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew }) 
     <div className="overlay" onClick={() => setDraft(null)}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheethead"><h3>{isNew ? "Nuevo ejercicio" : "Editar ejercicio"}</h3><button className="x" onClick={() => setDraft(null)}>×</button></div>
-        <div className="fgrid">
-          <label className="f2"><span>Ejercicio</span><input value={draft.name} onChange={(e) => set("name", e.target.value)} placeholder="Belt Squat" /></label>
-          <label><span>Grupo muscular</span><input value={draft.group} onChange={(e) => set("group", e.target.value)} placeholder="Cuádriceps" /></label>
-          <label><span>Series</span><input className="mono" inputMode="numeric" value={draft.sets} onChange={(e) => set("sets", num(e.target.value, true))} /></label>
-          <label><span>Ref KG</span><input className="mono" value={draft.refKg ?? ""} onChange={(e) => { const v = e.target.value.trim(); const n = parseFloat(v); set("refKg", v === "" ? null : !isNaN(n) && String(n) === v ? n : v); }} placeholder="120" /></label>
-          <label><span>Unidad</span><select value={draft.unit} onChange={(e) => set("unit", e.target.value)}><option value="reps">reps</option><option value="pasos">pasos</option></select></label>
-          <label><span>Reps min</span><input className="mono" inputMode="numeric" value={draft.repsMin} onChange={(e) => set("repsMin", num(e.target.value, true))} /></label>
-          <label><span>Reps max</span><input className="mono" inputMode="numeric" value={draft.repsMax} onChange={(e) => set("repsMax", num(e.target.value, true))} /></label>
-          <label><span>Tempo</span><input className="mono" value={draft.tempo} onChange={(e) => set("tempo", e.target.value)} placeholder="2-0-1-0" /></label>
-          <label><span>Descanso (seg)</span><input className="mono" inputMode="numeric" value={draft.rest} onChange={(e) => set("rest", num(e.target.value, true))} /></label>
-          <label><span>RIR objetivo</span><input className="mono" value={draft.rir} onChange={(e) => set("rir", e.target.value)} placeholder="2-3" /></label>
-          <label className="f2"><span>Superserie con</span><select value={draft.superset ?? ""} onChange={(e) => set("superset", e.target.value || null)}><option value="">— sin superserie —</option>{siblings.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+        <div className="ed-form">
+          <label className="ed-full"><span>Ejercicio</span><input value={draft.name} onChange={(e) => set("name", e.target.value)} placeholder="Belt Squat" /></label>
+          <label className="ed-full"><span>Grupo muscular</span><input value={draft.group} onChange={(e) => set("group", e.target.value)} placeholder="Cuádriceps" /></label>
+          <div className="ed-row3">
+            <label><span>Series</span><input className="mono" inputMode="numeric" value={draft.sets} onChange={(e) => set("sets", num(e.target.value, true))} /></label>
+            <label><span>Reps min</span><input className="mono" inputMode="numeric" value={draft.repsMin} onChange={(e) => set("repsMin", num(e.target.value, true))} /></label>
+            <label><span>Reps max</span><input className="mono" inputMode="numeric" value={draft.repsMax} onChange={(e) => set("repsMax", num(e.target.value, true))} /></label>
+          </div>
+          <div className="ed-row3">
+            <label><span>Ref KG</span><input className="mono" value={draft.refKg ?? ""} onChange={(e) => { const v = e.target.value.trim(); const n = parseFloat(v); set("refKg", v === "" ? null : !isNaN(n) && String(n) === v ? n : v); }} placeholder="120" /></label>
+            <label><span>Tempo</span><input className="mono" value={draft.tempo} onChange={(e) => set("tempo", e.target.value)} placeholder="2-0-1-0" /></label>
+            <label><span>RIR</span><input className="mono" value={draft.rir} onChange={(e) => set("rir", e.target.value)} placeholder="2-3" /></label>
+          </div>
+          <div className="ed-row2">
+            <label><span>Descanso (seg)</span><input className="mono" inputMode="numeric" value={draft.rest} onChange={(e) => set("rest", num(e.target.value, true))} /></label>
+            <label><span>Unidad</span><select value={draft.unit} onChange={(e) => set("unit", e.target.value)}><option value="reps">reps</option><option value="pasos">pasos</option></select></label>
+          </div>
+          <label className="ed-full"><span>Superserie con</span><select value={draft.superset ?? ""} onChange={(e) => set("superset", e.target.value || null)}><option value="">— sin superserie —</option>{siblings.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
         </div>
         <div className="sheetactions">
           {!isNew && <button className="del" onClick={() => onDelete(draft.id)}>Eliminar</button>}
@@ -630,22 +645,33 @@ const CSS = `
 .tabbar button { flex: 1; padding: 10px 0 14px; background: none; border: none; color: #636366; font: 500 11px 'Inter'; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .tabbar button.on { color: #2C6BED; }
 .ticon { font-size: 18px; line-height: 1; }
+/* Lock card */
+.lock-card { display: flex; align-items: center; gap: 14px; padding: 18px; background: #FFF; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.lock-icon { font-size: 28px; flex-shrink: 0; }
+.lock-title { font-weight: 600; font-size: 15px; color: #1C1C1E; }
+.lock-sub { font-size: 13px; color: #636366; margin-top: 2px; }
+
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
 .sheet { width: 100%; max-width: 430px; max-height: 88vh; overflow-y: auto; background: #FFF; border: none; border-radius: 20px 20px 0 0; padding: 20px 16px 28px; box-shadow: 0 -4px 20px rgba(0,0,0,.1); }
-.sheethead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.sheethead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .sheethead h3 { font-size: 18px; font-weight: 700; }
 .x { background: none; border: none; color: #636366; font-size: 28px; cursor: pointer; line-height: 1; }
-.fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.fgrid label { display: flex; flex-direction: column; gap: 6px; }
-.fgrid .f2 { grid-column: span 2; }
-.fgrid span { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #636366; font-weight: 600; }
-.fgrid input, .fgrid select { height: 46px; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 10px; color: #1C1C1E; padding: 0 12px; font: 400 15px 'Inter'; }
-.fgrid input.mono { font-family: 'DM Mono', monospace; }
-.fgrid input:focus, .fgrid select:focus { outline: none; border-color: #2C6BED; }
-.fgrid select { appearance: none; }
-.sheetactions { display: flex; gap: 10px; margin-top: 20px; }
-.del { flex: 0 0 auto; padding: 0 18px; height: 50px; border-radius: 12px; border: 1px solid rgba(255,59,48,.3); background: transparent; color: #FF3B30; font: 600 14px 'Inter'; cursor: pointer; }
-.save { flex: 1; height: 50px; border-radius: 12px; border: none; background: #2C6BED; color: #FFF; font: 700 15px 'Inter'; cursor: pointer; }
+
+/* Editor form — compact for mobile */
+.ed-form { display: flex; flex-direction: column; gap: 12px; }
+.ed-form label { display: flex; flex-direction: column; gap: 4px; }
+.ed-form span { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #636366; font-weight: 600; }
+.ed-form input, .ed-form select { height: 42px; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 10px; color: #1C1C1E; padding: 0 10px; font: 400 14px 'Inter'; width: 100%; }
+.ed-form input.mono { font-family: 'DM Mono', monospace; }
+.ed-form input:focus, .ed-form select:focus { outline: none; border-color: #2C6BED; }
+.ed-form select { appearance: none; }
+.ed-full { width: 100%; }
+.ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ed-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+.sheetactions { display: flex; gap: 10px; margin-top: 16px; }
+.del { flex: 0 0 auto; padding: 0 18px; height: 46px; border-radius: 12px; border: 1px solid rgba(255,59,48,.3); background: transparent; color: #FF3B30; font: 600 14px 'Inter'; cursor: pointer; }
+.save { flex: 1; height: 46px; border-radius: 12px; border: none; background: #2C6BED; color: #FFF; font: 700 15px 'Inter'; cursor: pointer; }
 .save:disabled { opacity: .35; }
 .prevbox { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding: 8px 12px; background: #F2F2F7; border: 1px dashed #AEAEB2; border-radius: 10px; font-size: 12px; color: #1C1C1E; }
 .pvlabel { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #636366; font-weight: 600; }
