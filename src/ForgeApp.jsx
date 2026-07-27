@@ -152,6 +152,7 @@ export default function ForgeApp() {
   const [savedHealth, setSavedHealth] = useState(null);
   const [sessionStart, setSessionStart] = useState(null);
   const [expandedLog, setExpandedLog] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null); // {msg, onOk}
 
   useEffect(() => { const s = loadState(); if (s) { setProgram(s.program || SEED); setLogs(s.logs || {}); setHistory(s.history || []); } setLoaded(true); }, []);
   useEffect(() => { if (loaded) saveState({ program, logs, history }); }, [program, logs, history, loaded]);
@@ -173,7 +174,7 @@ export default function ForgeApp() {
   const block = blocks[blockIdx];
 
   // A set is "done" if it has kg or reps filled in
-  function isDone(log) { return log && (log.kg !== undefined && log.kg !== "" || log.reps !== undefined && log.reps !== ""); }
+  function isDone(log) { return log && ((log.kg !== undefined && log.kg !== "") || (log.reps !== undefined && log.reps !== "")); }
   function countDone(exercise) { let n = 0; for (let i = 1; i <= setsFor(exercise, week); i++) if (isDone(logs[keyOf(week, exercise.id, i)])) n++; return n; }
   function blockDone(b) { return b.exercises.every((ex) => countDone(ex) >= setsFor(ex, week)); }
 
@@ -204,8 +205,7 @@ export default function ForgeApp() {
   function startSession(s) { setHealthCheck({ sleep: 3, stress: 3, energy: 3 }); setSession(s); setBlockIdx(0); }
   function confirmHealth() { setSavedHealth(healthCheck); setSessionStart(Date.now()); setHealthCheck(null); }
 
-  function finishSession() {
-    if (!confirm("Terminar la sesión y guardar al historial?")) return;
+  function doFinishSession() {
     const exs = program.filter((e) => e.session === session);
     const exerciseData = exs.map((exercise) => {
       const sets = [];
@@ -214,6 +214,14 @@ export default function ForgeApp() {
     });
     setHistory((H) => [{ id: uid(), week, session, date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData }, ...H]);
     setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null);
+  }
+
+  function finishSession() {
+    setConfirmModal({ msg: "Terminar la sesión y guardar al historial?", onOk: doFinishSession });
+  }
+
+  function exitWithoutSaving() {
+    setConfirmModal({ msg: "Salir sin guardar?", onOk: () => { setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null); } });
   }
 
   const metrics = useMemo(() => {
@@ -298,7 +306,7 @@ export default function ForgeApp() {
         {tab === "entrenar" && session !== null && !healthCheck && block && (
           <div className="screen workout">
             <header className="wtop">
-              <button className="back" onClick={() => { if (confirm("Salir sin guardar?")) { setSession(null); setTimer(null); setSessionStart(null); } }}>&#8249;</button>
+              <button className="back" onClick={exitWithoutSaving}>&#8249;</button>
               <div className="wtitle">
                 <span>{weekLabel(week)} · Sesión {session}</span>
                 <div className="dots">
@@ -441,6 +449,19 @@ export default function ForgeApp() {
           <div className={`timerbar ${timer.remaining === 0 ? "zero" : ""}`}>
             <div className="tfill" style={{ width: `${(1 - timer.remaining / timer.total) * 100}%` }} />
             <div className="tcontent"><span className="tlabel">{timer.remaining === 0 ? "A LA BARRA!" : "DESCANSO"}</span><span className="ttime mono">{fmtTime(timer.remaining)}</span><button className="tskip" onClick={() => setTimer(null)}>{timer.remaining === 0 ? "OK" : "Saltar"}</button></div>
+          </div>
+        )}
+
+        {/* ======== CONFIRM MODAL ======== */}
+        {confirmModal && (
+          <div className="overlay centered" onClick={() => setConfirmModal(null)}>
+            <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+              <p className="confirm-msg">{confirmModal.msg}</p>
+              <div className="confirm-actions">
+                <button className="confirm-cancel" onClick={() => setConfirmModal(null)}>Cancelar</button>
+                <button className="confirm-ok" onClick={() => { confirmModal.onOk(); setConfirmModal(null); }}>OK</button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -651,6 +672,12 @@ const CSS = `
 .lock-inline { font-size: 11px; margin-left: 6px; }
 
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.overlay.centered { align-items: center; }
+.confirm-box { background: #FFF; border-radius: 16px; padding: 24px 20px 16px; width: 300px; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.15); }
+.confirm-msg { font-size: 16px; font-weight: 600; color: #1C1C1E; margin-bottom: 20px; line-height: 1.4; }
+.confirm-actions { display: flex; gap: 10px; }
+.confirm-cancel { flex: 1; height: 44px; border-radius: 10px; border: 1px solid #D1D1D6; background: #FFF; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
+.confirm-ok { flex: 1; height: 44px; border-radius: 10px; border: none; background: #2C6BED; color: #FFF; font: 600 15px 'Inter'; cursor: pointer; }
 .sheet { width: 100%; max-width: 430px; max-height: 88vh; overflow-y: auto; background: #FFF; border: none; border-radius: 20px 20px 0 0; padding: 20px 16px 28px; box-shadow: 0 -4px 20px rgba(0,0,0,.1); }
 .sheethead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .sheethead h3 { font-size: 18px; font-weight: 700; }
