@@ -162,6 +162,7 @@ export default function ForgeApp() {
   const [sessionStart, setSessionStart] = useState(null);
   const [expandedLog, setExpandedLog] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null); // "finish" | "exit" | null
+  const [reentryChoice, setReentryChoice] = useState(null); // session id pending choice
 
   useEffect(() => { const s = loadState(); if (s) { setSessions(s.sessions || DEFAULT_SESSIONS); setProgram(s.program || SEED); setLogs(s.logs || {}); setHistory(s.history || []); } setLoaded(true); }, []);
   useEffect(() => { if (loaded) saveState({ sessions, program, logs, history }); }, [sessions, program, logs, history, loaded]);
@@ -211,7 +212,44 @@ export default function ForgeApp() {
     return { pw, rows, e1rm: best > 0 ? Math.round(best) : null };
   }
 
-  function startSession(s) { setHealthCheck({ sleep: 3, stress: 3, energy: 3 }); setSession(s); setBlockIdx(0); }
+  function hasSessionData(w, sessId) {
+    return program.filter((e) => e.session === sessId).some((ex) => {
+      for (let i = 1; i <= setsFor(ex, w); i++) if (isDone(logs[keyOf(w, ex.id, i)])) return true;
+      return false;
+    });
+  }
+
+  function clearSessionLogs(w, sessId) {
+    setLogs((L) => {
+      const next = { ...L };
+      program.filter((e) => e.session === sessId).forEach((ex) => {
+        for (let i = 1; i <= setsFor(ex, w); i++) delete next[keyOf(w, ex.id, i)];
+      });
+      return next;
+    });
+  }
+
+  function startSession(s) {
+    if (hasSessionData(week, s)) {
+      setReentryChoice(s);
+    } else {
+      setHealthCheck({ sleep: 3, stress: 3, energy: 3 }); setSession(s); setBlockIdx(0);
+    }
+  }
+
+  function handleReentry(action) {
+    const s = reentryChoice;
+    setReentryChoice(null);
+    if (action === "review") {
+      setSession(s); setBlockIdx(0); setSessionStart(Date.now()); // skip health check, go straight to workout
+    } else if (action === "fresh") {
+      clearSessionLogs(week, s);
+      // Also remove previous history entry for this week+session
+      setHistory((H) => H.filter((h) => !(h.week === week && h.session === s)));
+      setHealthCheck({ sleep: 3, stress: 3, energy: 3 }); setSession(s); setBlockIdx(0);
+    }
+  }
+
   function confirmHealth() { setSavedHealth(healthCheck); setSessionStart(Date.now()); setHealthCheck(null); }
 
   function handleConfirmOk() {
@@ -222,7 +260,13 @@ export default function ForgeApp() {
         for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
         return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
       });
-      setHistory((H) => [{ id: uid(), week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData }, ...H]);
+      const entry = { id: uid(), week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData };
+      // Replace existing entry for same week+session, or add new
+      setHistory((H) => {
+        const existing = H.findIndex((h) => h.week === week && h.session === session);
+        if (existing >= 0) { const next = [...H]; next[existing] = entry; return next; }
+        return [entry, ...H];
+      });
     }
     setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null);
     setConfirmAction(null);
@@ -454,6 +498,28 @@ export default function ForgeApp() {
           <div className={`timerbar ${timer.remaining === 0 ? "zero" : ""}`}>
             <div className="tfill" style={{ width: `${(1 - timer.remaining / timer.total) * 100}%` }} />
             <div className="tcontent"><span className="tlabel">{timer.remaining === 0 ? "A LA BARRA!" : "DESCANSO"}</span><span className="ttime mono">{fmtTime(timer.remaining)}</span><button className="tskip" onClick={() => setTimer(null)}>{timer.remaining === 0 ? "OK" : "Saltar"}</button></div>
+          </div>
+        )}
+
+        {/* ======== REENTRY MODAL ======== */}
+        {reentryChoice && (
+          <div className="overlay centered" onClick={() => setReentryChoice(null)}>
+            <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+              <p className="confirm-msg">Ya registraste {sessName(reentryChoice)} en {weekLabel(week)}</p>
+              <div className="reentry-actions">
+                <button className="reentry-btn" onClick={() => handleReentry("review")}>
+                  <span className="reentry-icon">&#9998;</span>
+                  <span className="reentry-label">Revisar / Editar</span>
+                  <span className="reentry-sub">Modificar datos y guardar</span>
+                </button>
+                <button className="reentry-btn danger" onClick={() => handleReentry("fresh")}>
+                  <span className="reentry-icon">&#8635;</span>
+                  <span className="reentry-label">Empezar de cero</span>
+                  <span className="reentry-sub">Borrar datos y repetir</span>
+                </button>
+              </div>
+              <button className="confirm-cancel" style={{ width: "100%", marginTop: 10 }} onClick={() => setReentryChoice(null)}>Cancelar</button>
+            </div>
           </div>
         )}
 
@@ -726,6 +792,16 @@ const CSS = `
 .confirm-actions { display: flex; gap: 10px; }
 .confirm-cancel { flex: 1; height: 44px; border-radius: 10px; border: 1px solid #D1D1D6; background: #FFF; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
 .confirm-ok { flex: 1; height: 44px; border-radius: 10px; border: none; background: #2C6BED; color: #FFF; font: 600 15px 'Inter'; cursor: pointer; }
+
+/* Reentry modal */
+.reentry-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.reentry-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px; border-radius: 12px; border: 1.5px solid #D1D1D6; background: #FFF; cursor: pointer; transition: all .15s; }
+.reentry-btn:active { background: #F2F2F7; }
+.reentry-btn.danger { border-color: rgba(255,59,48,.3); }
+.reentry-icon { font-size: 20px; }
+.reentry-label { font: 600 15px 'Inter'; color: #1C1C1E; }
+.reentry-btn.danger .reentry-label { color: #FF3B30; }
+.reentry-sub { font-size: 12px; color: #636366; }
 .sheet { width: 100%; max-width: 430px; max-height: 88vh; overflow-y: auto; background: #FFF; border: none; border-radius: 20px 20px 0 0; padding: 20px 16px 28px; box-shadow: 0 -4px 20px rgba(0,0,0,.1); }
 .sheethead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .sheethead h3 { font-size: 18px; font-weight: 700; }
