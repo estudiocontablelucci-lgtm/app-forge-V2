@@ -95,17 +95,17 @@ function getBlocks(exercises) {
 function semaphore(exercise, logs, week) {
   const n = setsFor(exercise, week);
   const sets = [];
-  for (let i = 1; i <= n; i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l?.done && l.reps > 0) sets.push(l); }
+  for (let i = 1; i <= n; i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push(l); }
   if (!sets.length || exercise.unit === "pasos") return "gray";
   const guideReps = exercise.repsMin;
-  const guideRir = parseFloat(exercise.rir) || 0;
-  const repsOk = sets.every((s) => s.reps >= guideReps);
-  const avgRir = sets.reduce((a, s) => a + (isNum(s.rir) ? s.rir : 0), 0) / sets.length;
-  if (repsOk && avgRir >= guideRir) return "green";
-  if (repsOk) return "yellow";
+  const repsOk = sets.every((s) => parseInt(s.reps) >= guideReps);
+  if (repsOk) return "green";
+  // Some sets below target but some met it
+  const someOk = sets.some((s) => parseInt(s.reps) >= guideReps);
+  if (someOk) return "yellow";
   return "red";
 }
-const SEM_LABELS = { green: "+2.5kg", yellow: "Mantener", red: "Revisar", gray: "" };
+const SEM_LABELS = { green: "Subir peso", yellow: "Mantener", red: "Revisar", gray: "" };
 const SEM_COLORS = { green: "#34C759", yellow: "#FF9500", red: "#FF3B30", gray: "#D1D1D6" };
 
 /* ---------- Persistencia ---------- */
@@ -114,19 +114,17 @@ let saveT = null;
 function saveState(s) { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem("forge-v2", JSON.stringify(s)); } catch {} }, 500); }
 
 /* ---------- Mini components ---------- */
-function ExSetRow({ ex, n, week, logs, updateSet, completeSet, uncompleteSet }) {
+function ExSetRow({ ex, n, week, logs, onSetChange }) {
   const k = keyOf(week, ex.id, n);
   const l = logs[k] || {};
+  const handleChange = (field, val) => onSetChange(ex, n, field, val);
   return (
     <div className={`setrow ${l.done ? "done" : ""}`}>
       <span className="setn mono">S{n}</span>
       <input className="nf mono" inputMode="decimal" placeholder={isNum(ex.refKg) ? String(ex.refKg) : ex.refKg === "BW" ? "0" : "—"}
-        value={l.kg ?? ""} onChange={(e) => updateSet(k, "kg", e.target.value)} disabled={l.done} />
+        value={l.kg ?? ""} onChange={(e) => handleChange("kg", e.target.value)} />
       <input className="nf mono" inputMode="numeric" placeholder={`${ex.repsMax}`}
-        value={l.reps ?? ""} onChange={(e) => updateSet(k, "reps", e.target.value)} disabled={l.done} />
-      <input className="nf mono" inputMode="decimal" placeholder={ex.rir || "—"}
-        value={l.rir ?? ""} onChange={(e) => updateSet(k, "rir", e.target.value)} disabled={l.done} />
-      <button className={`ck ${l.done ? "on" : ""}`} onClick={() => l.done ? uncompleteSet(ex, n) : completeSet(ex, n)}>&#10003;</button>
+        value={l.reps ?? ""} onChange={(e) => handleChange("reps", e.target.value)} />
     </div>
   );
 }
@@ -168,36 +166,24 @@ export default function ForgeApp() {
   const blocks = useMemo(() => getBlocks(sessionExs), [sessionExs]);
   const block = blocks[blockIdx];
 
-  function countDone(exercise) { let n = 0; for (let i = 1; i <= setsFor(exercise, week); i++) if (logs[keyOf(week, exercise.id, i)]?.done) n++; return n; }
+  // A set is "done" if it has kg or reps filled in
+  function isDone(log) { return log && (log.kg !== undefined && log.kg !== "" || log.reps !== undefined && log.reps !== ""); }
+  function countDone(exercise) { let n = 0; for (let i = 1; i <= setsFor(exercise, week); i++) if (isDone(logs[keyOf(week, exercise.id, i)])) n++; return n; }
   function blockDone(b) { return b.exercises.every((ex) => countDone(ex) >= setsFor(ex, week)); }
 
-  function updateSet(k, field, val) { setLogs((L) => ({ ...L, [k]: { ...(L[k] || {}), [field]: val } })); }
-
-  function completeSet(exercise, setN) {
+  function onSetChange(exercise, setN, field, val) {
     const k = keyOf(week, exercise.id, setN);
-    const cur = logs[k] || {};
-    const kg = cur.kg !== undefined && cur.kg !== "" ? parseFloat(cur.kg) : isNum(exercise.refKg) ? exercise.refKg : null;
-    const reps = cur.reps !== undefined && cur.reps !== "" ? parseInt(cur.reps) : exercise.repsMax;
-    const rir = cur.rir !== undefined && cur.rir !== "" ? parseFloat(cur.rir) : null;
-    setLogs((L) => ({ ...L, [k]: { kg: isNaN(kg) ? null : kg, reps: isNaN(reps) ? null : reps, rir: isNaN(rir) ? null : rir, done: true } }));
-    // Timer only after completing a full round of the superset block (or single exercise set)
-    if (block && block.type === "superset") {
-      // Check if all exercises in block have this setN done (after this update)
-      const allDoneThisRound = block.exercises.every((ex) => {
-        if (ex.id === exercise.id) return true; // just completed
-        const l = logs[keyOf(week, ex.id, setN)];
-        return l?.done;
-      });
-      if (allDoneThisRound) {
-        const restEx = block.exercises[block.exercises.length - 1];
-        setTimer({ total: restEx.rest, remaining: restEx.rest, id: uid(), label: "Ronda completa" });
-      }
-    } else {
-      setTimer({ total: exercise.rest, remaining: exercise.rest, id: uid(), label: exercise.name });
-    }
+    setLogs((L) => {
+      const prev = L[k] || {};
+      const next = { ...prev, [field]: val };
+      // Auto-mark done when has data
+      next.done = isDone(next);
+      // Parse for storage
+      if (next.kg !== undefined && next.kg !== "") next.kg = next.kg;
+      if (next.reps !== undefined && next.reps !== "") next.reps = next.reps;
+      return { ...L, [k]: next };
+    });
   }
-
-  function uncompleteSet(exercise, setN) { const k = keyOf(week, exercise.id, setN); setLogs((L) => ({ ...L, [k]: { ...(L[k] || {}), done: false } })); }
 
   function prevWeekSummary(exercise) {
     const pw = week === "DL" ? 4 : week - 1;
@@ -216,7 +202,7 @@ export default function ForgeApp() {
     const exs = program.filter((e) => e.session === session);
     const exerciseData = exs.map((exercise) => {
       const sets = [];
-      for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l?.done) sets.push({ setN: i, kg: l.kg, reps: l.reps, rir: l.rir }); }
+      for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null }); }
       return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
     });
     setHistory((H) => [{ id: uid(), week, session, date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: healthCheck || null, exercises: exerciseData }, ...H]);
@@ -253,7 +239,7 @@ export default function ForgeApp() {
             <header className="top"><div className="brand">FORGE</div><h1>Como te sentís hoy?</h1><p className="sub">{weekLabel(week)} · Sesión {session}</p></header>
             {[
               { key: "sleep", label: "Sueño", emoji: ["😴", "😪", "😐", "😊", "😁"] },
-              { key: "stress", label: "Estrés", emoji: ["😤", "😣", "😐", "😌", "🧘"] },
+              { key: "stress", label: "Estrés", emoji: ["🧘", "😌", "😐", "😣", "😤"] },
               { key: "energy", label: "Energía", emoji: ["🪫", "😮‍💨", "😐", "💪", "⚡"] },
             ].map(({ key, label, emoji }) => (
               <div key={key} className="hc-row">
@@ -289,13 +275,11 @@ export default function ForgeApp() {
                 const total = exs.reduce((a, e) => a + setsFor(e, week), 0);
                 const done = exs.reduce((a, e) => { let n = 0; for (let i = 1; i <= setsFor(e, week); i++) if (logs[keyOf(week, e.id, i)]?.done) n++; return a + n; }, 0);
                 const allDone = done === total && total > 0;
-                const sems = allDone ? exs.map((e) => semaphore(e, logs, week)).filter((s) => s !== "gray") : [];
-                const worstSem = sems.includes("red") ? "red" : sems.includes("yellow") ? "yellow" : sems.length ? "green" : null;
                 return (
                   <button key={s} className={`scard ${allDone ? "completed" : ""}`} onClick={() => startSession(s)}>
                     <div className="sletter">{s}</div>
                     <div className="sinfo"><div className="sname">Sesión {s}</div><div className="sgroups">{groups}</div><div className="sbar"><div style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} /></div></div>
-                    <div className="sright">{worstSem && <span className="sem-dot" style={{ background: SEM_COLORS[worstSem] }} />}<span className="spct mono">{allDone ? "Done" : `${done}/${total}`}</span></div>
+                    <div className="sright"><span className="spct mono">{allDone ? "Done" : `${done}/${total}`}</span></div>
                   </button>
                 );
               })}
@@ -340,22 +324,16 @@ export default function ForgeApp() {
                 </div>
 
                 <div className="sets">
-                  <div className="setshead"><span></span><span>{ex.refKg === "BW" ? "+KG" : "KG"}</span><span>{ex.unit === "pasos" ? "PASOS" : "REPS"}</span><span>RIR</span><span></span></div>
+                  <div className="setshead"><span></span><span>{ex.refKg === "BW" ? "+KG" : "KG"}</span><span>{ex.unit === "pasos" ? "PASOS" : "REPS"}</span></div>
                   {Array.from({ length: setsFor(ex, week) }, (_, i) => i + 1).map((n) => (
-                    <ExSetRow key={n} ex={ex} n={n} week={week} logs={logs} updateSet={updateSet} completeSet={completeSet} uncompleteSet={uncompleteSet} />
+                    <ExSetRow key={n} ex={ex} n={n} week={week} logs={logs} onSetChange={onSetChange} />
                   ))}
                 </div>
 
                 {(() => {
                   let best = 0;
-                  for (let i = 1; i <= setsFor(ex, week); i++) { const l = logs[keyOf(week, ex.id, i)]; if (l?.done && isNum(l.kg) && l.reps) best = Math.max(best, brzycki(l.kg, l.reps) || 0); }
-                  const sem = countDone(ex) >= setsFor(ex, week) ? semaphore(ex, logs, week) : null;
-                  return (best > 0 || (sem && sem !== "gray")) ? (
-                    <div className="ex-footer">
-                      {best > 0 && <span className="e1rmnow mono">e1RM: <b>{Math.round(best)}</b></span>}
-                      {sem && sem !== "gray" && <span className="sem-badge" style={{ background: SEM_COLORS[sem] }}>{SEM_LABELS[sem]}</span>}
-                    </div>
-                  ) : null;
+                  for (let i = 1; i <= setsFor(ex, week); i++) { const l = logs[keyOf(week, ex.id, i)]; if (isDone(l) && isNum(parseFloat(l.kg)) && parseInt(l.reps)) best = Math.max(best, brzycki(parseFloat(l.kg), parseInt(l.reps)) || 0); }
+                  return best > 0 ? <div className="ex-footer"><span className="e1rmnow mono">e1RM: <b>{Math.round(best)}</b></span></div> : null;
                 })()}
               </div>
             ))}
@@ -412,7 +390,7 @@ export default function ForgeApp() {
                     {h.exercises.filter((e) => e.sets.length > 0).map((e) => (
                       <div key={e.id} className="hist-ex">
                         <div className="hist-exhead"><span className="hist-exname">{e.name}</span><span className="sem-dot-sm" style={{ background: SEM_COLORS[e.sem] }} /></div>
-                        <div className="hist-sets mono">{e.sets.map((s, i) => <span key={i}>{isNum(s.kg) ? s.kg : "BW"}×{s.reps}{isNum(s.rir) ? ` @${s.rir}` : ""}</span>)}</div>
+                        <div className="hist-sets mono">{e.sets.map((s, i) => <span key={i}>{isNum(s.kg) ? s.kg : "BW"}×{s.reps}</span>)}</div>
                       </div>
                     ))}
                   </div>
@@ -566,9 +544,9 @@ const CSS = `
 .refline { font-size: 12px; color: #48484A; line-height: 1.5; }
 .sep { color: #AEAEB2; margin: 0 3px; }
 .sets { margin-top: 12px; }
-.setshead { display: grid; grid-template-columns: 34px 1fr 1fr 1fr 48px; gap: 8px; padding: 0 2px 6px; font-size: 11px; letter-spacing: .1em; color: #636366; font-weight: 600; }
+.setshead { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 8px; padding: 0 2px 6px; font-size: 11px; letter-spacing: .1em; color: #636366; font-weight: 600; }
 .setshead span { text-align: center; } .setshead span:first-child { text-align: left; }
-.setrow { display: grid; grid-template-columns: 34px 1fr 1fr 1fr 48px; gap: 8px; align-items: center; margin-bottom: 6px; }
+.setrow { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
 .setn { color: #48484A; font-size: 14px; font-weight: 600; }
 .nf { width: 100%; height: 50px; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 12px; color: #1C1C1E; font-size: 20px; text-align: center; transition: border-color .15s; }
 .nf::placeholder { color: #AEAEB2; }
