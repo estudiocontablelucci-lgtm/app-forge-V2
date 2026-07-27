@@ -374,7 +374,7 @@ export default function ForgeApp() {
             <header className="top"><div className="brand">FORGE</div><h1>Programa</h1><p className="sub">Mesociclo DUP · 4 sem + deload</p></header>
             <div className="weekchips">
               {sessions.map((s) => (<button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>{s.name}</button>))}
-              {session === null && <button className="chip chip-add" onClick={() => setEditingSessions(true)}>+</button>}
+              {session === null && <button className="chip chip-edit" onClick={() => setEditingSessions(true)}>&#9998;</button>}
             </div>
             <div className="plist">
               {progBlocks.map((b, bi) => (
@@ -663,7 +663,7 @@ const CSS = `
 .pmeta { color: #636366; font-size: 12px; margin-top: 2px; }
 .pnums { color: #48484A; font-size: 13px; text-align: right; flex-shrink: 0; }
 .addbtn { width: 100%; margin-top: 12px; height: 50px; border-radius: 12px; border: 1.5px dashed #C7C7CC; background: transparent; color: #2C6BED; font: 600 14px 'Inter'; cursor: pointer; }
-.chip-add { border-style: dashed; color: #2C6BED; border-color: #2C6BED; background: transparent; font-size: 16px; padding: 7px 14px; }
+.chip-edit { border-style: dashed; color: #2C6BED; border-color: #2C6BED; background: transparent; font-size: 15px; padding: 7px 12px; }
 
 /* Session editor */
 .sess-list { display: flex; flex-direction: column; gap: 8px; }
