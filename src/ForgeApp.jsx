@@ -355,16 +355,7 @@ export default function ForgeApp() {
         )}
 
         {/* ======== PROGRAMA ======== */}
-        {tab === "programa" && session !== null && (
-          <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Programa</h1></header>
-            <div className="lock-card">
-              <span className="lock-icon">🔒</span>
-              <div><div className="lock-title">Sesión activa</div><div className="lock-sub">No podés editar el programa mientras entrenás. Terminá o cancelá la sesión primero.</div></div>
-            </div>
-          </div>
-        )}
-        {tab === "programa" && session === null && (
+        {tab === "programa" && (
           <div className="screen">
             <header className="top"><div className="brand">FORGE</div><h1>Programa</h1><p className="sub">Mesociclo DUP · 4 sem + deload</p></header>
             <div className="weekchips">
@@ -375,15 +366,20 @@ export default function ForgeApp() {
                 <div key={bi} className={b.type === "superset" ? "prog-ss-group" : ""}>
                   {b.type === "superset" && <div className="prog-ss-label">⚡ {b.exercises.length === 2 ? "Superserie" : b.exercises.length === 3 ? "Tri-set" : "Giant set"}</div>}
                   {b.exercises.map((e) => (
-                    <button key={e.id} className={`prow ${b.type === "superset" ? "in-ss" : ""}`} onClick={() => setEditing({ ...e })}>
-                      <div className="pmain"><div className="pname">{e.name}</div><div className="pmeta">{e.group}</div></div>
+                    <button key={e.id} className={`prow ${b.type === "superset" ? "in-ss" : ""}`} onClick={() => {
+                      if (session !== null) { alert("Terminá o cancelá la sesión activa para editar el programa."); return; }
+                      setEditing({ ...e });
+                    }}>
+                      <div className="pmain"><div className="pname">{e.name}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}</div></div>
                       <div className="pnums mono">{e.sets}x{e.repsMin}-{e.repsMax} · {refLine(e).split(" ×")[0]}</div>
                     </button>
                   ))}
                 </div>
               ))}
             </div>
-            <button className="addbtn" onClick={() => setEditing({ id: uid(), session: progSession, order: (Math.max(0, ...program.filter((e) => e.session === progSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps" })}>+ Agregar ejercicio</button>
+            {session === null && (
+              <button className="addbtn" onClick={() => setEditing({ id: uid(), session: progSession, order: (Math.max(0, ...program.filter((e) => e.session === progSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps" })}>+ Agregar ejercicio</button>
+            )}
           </div>
         )}
 
@@ -650,6 +646,7 @@ const CSS = `
 .lock-icon { font-size: 28px; flex-shrink: 0; }
 .lock-title { font-weight: 600; font-size: 15px; color: #1C1C1E; }
 .lock-sub { font-size: 13px; color: #636366; margin-top: 2px; }
+.lock-inline { font-size: 11px; margin-left: 6px; }
 
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
 .sheet { width: 100%; max-width: 430px; max-height: 88vh; overflow-y: auto; background: #FFF; border: none; border-radius: 20px 20px 0 0; padding: 20px 16px 28px; box-shadow: 0 -4px 20px rgba(0,0,0,.1); }
