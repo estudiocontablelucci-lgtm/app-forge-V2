@@ -29,6 +29,11 @@ app-forge-v2/
 │   └── assets/            # imagenes (hero.png, iconos)
 ├── public/                # assets estaticos
 ├── dist/                  # build output (GitHub Pages)
+├── scripts/               # utilidades node (no entran al bundle)
+│   ├── gen-programa-xlsx.mjs  # genera el .xlsx del SEED para importar por el wizard
+│   ├── verify-import.mjs      # round-trip del import, contra los helpers reales
+│   └── verify-export.mjs      # export del historial contra historial sintetico
+├── data/                  # .xlsx generados (gitignored — datos personales)
 ├── forge-arquitectura.md  # documento de diseno tecnico completo
 ├── forge-mvp.jsx          # version anterior de referencia
 ├── index.html             # HTML shell
@@ -106,6 +111,21 @@ Migracion automatica de v1 (flat program[]) a v2 (programs[]) en `migrateState()
 - No commitear a main directamente
 - El deploy solo corre con push a `main` (`.github/workflows/deploy.yml`) — una rama feature
   commiteada **no** esta en produccion. Mergear a main antes de dar una fase por cerrada
+
+---
+
+## Datos del atleta
+
+El SEED es el programa real (Ciclo 2, fullbody 3x DUP). Fuente de verdad **externa** al repo:
+`OneDrive/Documentos/Organizacion Personal/Salud/Sistema cronobiologico/Claude/rutina_gym.md`
+y `programa_tecnicas_ciclo2 sin belt quat.md`. Antes de tocar refs o ejercicios, leer esos archivos.
+
+Restriccion medica que condiciona la seleccion de ejercicios: discopatias lumbares incipientes L3-S1.
+**Nunca** proponer back squat, front squat, peso muerto convencional ni good mornings pesados.
+Sustitutos validos en uso: sentadilla pendular, prensa horizontal, prensa 45, trap bar, hip thrust.
+
+`npm run gen:programa` genera `data/*.xlsx` para importar por el wizard (el SEED solo aplica a
+instalaciones nuevas). `npm run verify:excel` valida import y export contra los helpers reales.
 
 ---
 

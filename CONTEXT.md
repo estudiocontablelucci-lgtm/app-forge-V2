@@ -37,6 +37,8 @@ Estado actual del proyecto y decisiones tomadas.
 - [x] Semanas y deload dinamicos por programa
 - [x] Historial y progreso filtrados por programa activo
 - [x] Migracion automatica de localStorage v1 a v2
+- [x] Export del historial a Excel (hoja Sesiones + hoja Series, una fila por set)
+- [x] Programa real del atleta (Ciclo 2) cargado en el SEED con refs post-24/06/2026
 
 ## Pendiente (futuro)
 
@@ -44,7 +46,8 @@ Estado actual del proyecto y decisiones tomadas.
 - [ ] Multi-device sync
 - [ ] Roles coach/athlete + dashboard trainer
 - [ ] PWA con service worker
-- [ ] Exportar programa a Excel
+- [ ] Exportar programa a Excel (el historial ya se exporta)
+- [ ] Campo `tecnica` en ejercicio (DS / ASIM-IZQ) — hoy viven como texto en `description`
 - [ ] Prediccion de carga (regresion lineal e1RM)
 - [ ] Medidas corporales + proporciones McCallum
 
@@ -83,6 +86,23 @@ Estado actual del proyecto y decisiones tomadas.
 ### 2026-07 — Import Excel client-side con SheetJS
 **Decision**: parseo de Excel 100% en el browser con `xlsx` (SheetJS). Wizard de 3 pasos.
 **Motivo**: funciona offline, no requiere backend. El server solo recibira JSON normalizado cuando se implemente sync.
+
+### 2026-07 — Export a Excel si, API no (todavia)
+**Decision**: el historial se exporta a .xlsx desde el cliente (2 hojas: Sesiones y Series, una fila por set).
+No se expone API.
+**Motivo**: FORGE v2 es una SPA estatica en GitHub Pages — no hay servidor desde el cual exponer nada.
+Una API real es exactamente el trabajo de Fase 4 (Turso + backend); construirla antes obligaria a levantar
+un backend solo para eso. El .xlsx cubre el caso de analisis externo hoy, sin infraestructura.
+
+### 2026-07 — Datos del atleta: fuente de verdad externa
+**Decision**: el SEED refleja el Ciclo 2 real (refs post-ajustes 24/06/2026). La fuente de verdad sigue
+siendo `OneDrive/.../Sistema cronobiologico/Claude/rutina_gym.md` + `programa_tecnicas_ciclo2.md`.
+**Motivo**: el SEED solo aplica a instalaciones nuevas — `migrateState()` conserva el localStorage
+existente. Para cargar el programa en un navegador con datos, se genera un .xlsx con
+`npm run gen:programa` y se importa por el wizard. El .xlsx queda en `data/` (gitignored: son datos
+personales de salud y el repo es publico).
+**Tecnicas (DS, ASIM-IZQ)**: no hay campo `tecnica` en el modelo — van como texto en `description`,
+visibles con el badge "i" durante el entrenamiento. Suficiente para operar; el campo propio queda pendiente.
 
 ### 2026-07 — Timer de descanso: trigger explicito
 **Decision**: el descanso arranca cuando se escribe el primer caracter en REPS (transicion vacio -> con dato).
