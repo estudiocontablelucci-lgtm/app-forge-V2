@@ -269,18 +269,32 @@ export default function ForgeApp() {
   function countDone(exercise) { let n = 0; for (let i = 1; i <= setsFor(exercise, week); i++) if (isDone(logs[keyOf(week, exercise.id, i)])) n++; return n; }
   function blockDone(b) { return b.exercises.every((ex) => countDone(ex) >= setsFor(ex, week)); }
 
+  // Descanso: arranca cuando se completa la vuelta. En superserie, recién al
+  // cerrar la serie N de todos los ejercicios del bloque (ese es el punto de la SS).
+  function maybeStartRest(exercise, setN) {
+    const b = blocks.find((bl) => bl.exercises.some((e) => e.id === exercise.id));
+    const mates = b && b.type === "superset" ? b.exercises : [exercise];
+    const roundDone = mates.every((e) => e.id === exercise.id || setN > setsFor(e, week) || isDone(logs[keyOf(week, e.id, setN)]));
+    if (!roundDone) return;
+    const rest = Math.max(0, ...mates.map((e) => e.rest || 0));
+    if (!rest) return;
+    setTimer({ id: uid(), total: rest, remaining: rest });
+  }
+
   function onSetChange(exercise, setN, field, val) {
     const k = keyOf(week, exercise.id, setN);
+    const prev = logs[k] || {};
     setLogs((L) => {
-      const prev = L[k] || {};
-      const next = { ...prev, [field]: val };
+      const p = L[k] || {};
+      const next = { ...p, [field]: val };
       // Auto-mark done when has data
       next.done = isDone(next);
-      // Parse for storage
-      if (next.kg !== undefined && next.kg !== "") next.kg = next.kg;
-      if (next.reps !== undefined && next.reps !== "") next.reps = next.reps;
       return { ...L, [k]: next };
     });
+    // El primer dato en REPS marca la serie como hecha → dispara el descanso.
+    // Solo en la transición vacío → con dato, así editar una serie vieja no lo relanza.
+    const justLogged = field === "reps" && String(val).trim() !== "" && !String(prev.reps ?? "").trim();
+    if (justLogged) maybeStartRest(exercise, setN);
   }
 
   function prevWeekSummary(exercise) {

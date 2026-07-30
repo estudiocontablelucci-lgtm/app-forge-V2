@@ -90,6 +90,8 @@ Migracion automatica de v1 (flat program[]) a v2 (programs[]) en `migrateState()
 - e1RM: Brzycki `kg * 36 / (37 - reps)`
 - Deload: `sets - 1` automatico
 - Semaforo: verde (subir) / amarillo (mantener) / rojo (revisar) basado en reps vs guia y RIR
+- Descanso: dispara en la transicion vacio -> con dato del campo REPS. En superserie espera a que la
+  serie N este cerrada en todos los ejercicios del bloque y usa el `rest` mas alto (`maybeStartRest`)
 
 ### UI
 - Mobile-first, max-width 430px
@@ -102,6 +104,8 @@ Migracion automatica de v1 (flat program[]) a v2 (programs[]) en `migrateState()
 - Rama nueva antes de implementar: `git checkout -b feat/descripcion`
 - Mensajes en ingles: `feat:`, `fix:`, `refactor:`, `chore:`
 - No commitear a main directamente
+- El deploy solo corre con push a `main` (`.github/workflows/deploy.yml`) — una rama feature
+  commiteada **no** esta en produccion. Mergear a main antes de dar una fase por cerrada
 
 ---
 

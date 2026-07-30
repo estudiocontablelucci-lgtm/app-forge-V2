@@ -10,6 +10,9 @@ Estado actual del proyecto y decisiones tomadas.
 **Deploy**: https://estudiocontablelucci-lgtm.github.io/app-forge-V2/
 **Ultima actualizacion**: 2026-07-30
 
+> El deploy sale de `main` via GitHub Actions. Una feature no esta en produccion
+> hasta que su rama se mergea a `main` y se pushea — verificar antes de dar una fase por cerrada.
+
 ---
 
 ## Features implementadas
@@ -17,7 +20,7 @@ Estado actual del proyecto y decisiones tomadas.
 - [x] Programa seed editable (Ciclo 2 DUP, 33 ejercicios, 3 sesiones)
 - [x] Entrenamiento activo block-based (singles + superseries/tri-sets/giant sets)
 - [x] Inputs KG/REPS/RIR con prefill desde refKg
-- [x] Timer de descanso con vibracion
+- [x] Timer de descanso con vibracion (dispara al cerrar la vuelta)
 - [x] Health check pre-sesion (sueno/estres/energia 1-5)
 - [x] Semaforo de autorregulacion (verde/amarillo/rojo)
 - [x] Referencia semana anterior (e1RM inline)
@@ -80,6 +83,15 @@ Estado actual del proyecto y decisiones tomadas.
 ### 2026-07 — Import Excel client-side con SheetJS
 **Decision**: parseo de Excel 100% en el browser con `xlsx` (SheetJS). Wizard de 3 pasos.
 **Motivo**: funciona offline, no requiere backend. El server solo recibira JSON normalizado cuando se implemente sync.
+
+### 2026-07 — Timer de descanso: trigger explicito
+**Decision**: el descanso arranca cuando se escribe el primer caracter en REPS (transicion vacio -> con dato).
+En superserie no arranca hasta cerrar la serie N de **todos** los ejercicios del bloque; usa el `rest` mas
+alto del bloque.
+**Motivo**: el timer habia quedado huerfano tras el commit `8e10b6e` (simplify workout UX) — el state, el
+countdown y la barra seguian en el codigo pero nada llamaba a `setTimer` con una duracion. Se elige REPS
+como senal de cierre (no KG) porque es el ultimo dato significativo y funciona con BW y con unit `pasos`.
+Solo dispara en la transicion, asi editar una sesion vieja en modo revision no relanza el countdown.
 
 ### 2026-07 — Descripciones en ejercicios
 **Decision**: campo `description` (texto libre) en cada ejercicio. Visible como modal en entrenamiento (tap en nombre) y como badge `i` en programa.
