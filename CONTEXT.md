@@ -45,6 +45,9 @@ Estado actual del proyecto y decisiones tomadas.
 - [ ] Persistencia con Turso + auth NextAuth
 - [ ] Multi-device sync
 - [ ] Roles coach/athlete + dashboard trainer
+- [ ] Override de `ref_kg` por asignacion (bloqueante para el caso multi-alumno)
+- [ ] Consentimiento explicito de datos de salud (Ley 25.326) antes de alumnos reales
+- [ ] Plan / limite de alumnos por entrenador (patron `features` JSON, como Tesoreria)
 - [ ] PWA con service worker
 - [ ] Exportar programa a Excel (el historial ya se exporta)
 - [ ] Campo `tecnica` en ejercicio (DS / ASIM-IZQ) — hoy viven como texto en `description`
@@ -86,6 +89,25 @@ Estado actual del proyecto y decisiones tomadas.
 ### 2026-07 — Import Excel client-side con SheetJS
 **Decision**: parseo de Excel 100% en el browser con `xlsx` (SheetJS). Wizard de 3 pasos.
 **Motivo**: funciona offline, no requiere backend. El server solo recibira JSON normalizado cuando se implemente sync.
+
+### 2026-07 — FORGE deja de ser una herramienta personal: es un SaaS para entrenadores
+**Decision**: el producto apunta a entrenadores con muchos alumnos. El entrenador carga el programa,
+define las referencias por alumno y analiza las metricas; el alumno registra el entrenamiento.
+Agustin sigue siendo ademas usuario individual (atleta sin coach) — ese caso NO se bifurca:
+un atleta independiente es un usuario sin `coach_id`, como ya plantea `forge-arquitectura.md`.
+
+**Consecuencias que no estaban contempladas:**
+1. `ref_kg` NO puede vivir en la plantilla (`program_exercises`) — la referencia es por atleta.
+   Hace falta una tabla de override por asignacion. Ver propuesta en la seccion de schema.
+2. Pasan a almacenarse datos de salud de terceros (lesiones en campos de texto libre, hoy usados
+   para el protocolo L3-S1). Ley 25.326: dato sensible, requiere consentimiento expreso.
+   Decidir antes de onboardear alumnos reales, no despues.
+3. El entrenador es la unidad que paga y los alumnos son la metrica que se cobra → tiene que ser
+   entidad de primera clase en el schema, no un `coach_id` colgado de `users`.
+
+**Decision abierta (bloquea el arranque de Fase 4)**: `forge-arquitectura.md` dice FastAPI + Postgres
+en Hetzner; el CLAUDE.md raiz dice Turso. Recomendacion: Turso + Next.js, agregaciones en memoria
+(el volumen es chico), migrar a Postgres solo si el dashboard del coach lo pide.
 
 ### 2026-07 — Export a Excel si, API no (todavia)
 **Decision**: el historial se exporta a .xlsx desde el cliente (2 hojas: Sesiones y Series, una fila por set).
