@@ -9,9 +9,13 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "gen:programa": "node scripts/gen-programa-xlsx.mjs",
-    "verify:excel": "node scripts/verify-import.mjs && node scripts/verify-export.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "verify:excel": "node scripts/verify-import.mjs && node scripts/verify-export.mjs",
+    "verify:schema": "node scripts/verify-schema.mjs",
+    "verify": "npm run verify:excel && npm run verify:schema"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "xlsx": "^0.18.5"
