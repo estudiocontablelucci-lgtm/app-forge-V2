@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import * as XLSX from "xlsx";
 
 /* ============================================================
    FORGE — Tracking de entrenamiento (MVP v2)
    Superserie blocks (2-4 ex), health check, historial, semáforo.
    ============================================================ */
 
-const WEEKS = [1, 2, 3, 4, "DL"];
 const DEFAULT_SESSIONS = [
   { id: "A", name: "Volumen & Tempo" },
   { id: "B", name: "Moderada & Variación" },
@@ -14,39 +14,39 @@ const DEFAULT_SESSIONS = [
 
 /* ---------- Seed: Ciclo 2 ---------- */
 const SEED = [
-  { id: "a1",  session: "A", order: 1,  name: "Sentadilla pendular",       group: "Cuádriceps",    sets: 3, refKg: null,     repsMin: 8,  repsMax: 10, tempo: "3-1-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "a2",  session: "A", order: 2,  name: "Press Plano (barra)",       group: "Pecho",         sets: 3, refKg: 65,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "a3",  session: "A", order: 3,  name: "Remo T (soporte pect.)",    group: "Espalda",       sets: 3, refKg: 42.5,     repsMin: 8,  repsMax: 10, tempo: "2-0-1-1", rest: 150, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "a4",  session: "A", order: 4,  name: "Sillón de cuádriceps",      group: "Cuádriceps",    sets: 3, refKg: 60,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "2-3", superset: "a9",   unit: "reps" },
-  { id: "a5",  session: "A", order: 5,  name: "Vuelos laterales (DB)",     group: "Hombros",       sets: 3, refKg: 10,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps" },
-  { id: "a6",  session: "A", order: 6,  name: "Ext. tríceps overhead (DB)",group: "Tríceps",       sets: 3, refKg: 32.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps" },
-  { id: "a7",  session: "A", order: 7,  name: "Curl sentado (DB)",         group: "Bíceps",        sets: 3, refKg: 12.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps" },
-  { id: "a8",  session: "A", order: 8,  name: "Gemelo sentado",            group: "Gemelos",       sets: 3, refKg: 45,       repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps" },
-  { id: "a9",  session: "A", order: 9,  name: "Camilla isquios",           group: "Isquios",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "2-3", superset: "a4",   unit: "reps" },
-  { id: "a10", session: "A", order: 10, name: "Extensión lumbar",          group: "Core",          sets: 2, refKg: 30,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps" },
-  { id: "a11", session: "A", order: 11, name: "Shrugs DB",                 group: "Espalda",       sets: 3, refKg: 25,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps" },
-  { id: "a12", session: "A", order: 12, name: "Curl sentado brazo I (DB)", group: "Bíceps",        sets: 2, refKg: 12.5,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a13",  unit: "reps" },
-  { id: "a13", session: "A", order: 13, name: "Ext. overhead brazo I (DB)",group: "Tríceps",       sets: 2, refKg: null,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a12",  unit: "reps" },
-  { id: "b1",  session: "B", order: 1,  name: "Prensa 45°",               group: "Cuádriceps",    sets: 3, refKg: 120,      repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "b2",  session: "B", order: 2,  name: "Dominadas",                 group: "Espalda",       sets: 3, refKg: "BW",     repsMin: 4,  repsMax: 8,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "b3",  session: "B", order: 3,  name: "Camilla isquios",           group: "Isquios",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 120, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "b4",  session: "B", order: 4,  name: "Press inclinado (DB)",      group: "Pecho",         sets: 3, refKg: 25,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 120, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "b5",  session: "B", order: 5,  name: "Vuelos posteriores",        group: "Hombros",       sets: 3, refKg: null,     repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps" },
-  { id: "b6",  session: "B", order: 6,  name: "Face pulls",                group: "Espalda",       sets: 3, refKg: null,     repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps" },
-  { id: "b7",  session: "B", order: 7,  name: "Ext. tríceps (polea)",      group: "Tríceps",       sets: 3, refKg: null,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b8",   unit: "reps" },
-  { id: "b8",  session: "B", order: 8,  name: "Curl bíceps (polea)",       group: "Bíceps",        sets: 3, refKg: null,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b7",   unit: "reps" },
-  { id: "b9",  session: "B", order: 9,  name: "Gemelo prensa 45",          group: "Gemelos",       sets: 3, refKg: 180,      repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps" },
-  { id: "b10", session: "B", order: 10, name: "Caminata granjero",         group: "Core",          sets: 3, refKg: "25kg/m", repsMin: 40, repsMax: 60, tempo: "",         rest: 120, rir: "",    superset: null,   unit: "pasos" },
-  { id: "c1",  session: "C", order: 1,  name: "Prensa horizontal",         group: "Cuádriceps",    sets: 4, refKg: null,     repsMin: 6,  repsMax: 8,  tempo: "3-1-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "c2",  session: "C", order: 2,  name: "Press Plano (pesado)",      group: "Pecho",         sets: 4, refKg: 70,       repsMin: 4,  repsMax: 6,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "c3",  session: "C", order: 3,  name: "Remo T (prono)",            group: "Espalda",       sets: 3, refKg: 45,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "c4",  session: "C", order: 4,  name: "Peso Muerto Trap Bar",      group: "Isquios",       sets: 3, refKg: 115,      repsMin: 6,  repsMax: 8,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "c5",  session: "C", order: 5,  name: "Hip Thrust",                group: "Isquios/Glúteos",sets: 3,refKg: 60,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-1", rest: 120, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "c6",  session: "C", order: 6,  name: "Apertura máquina",          group: "Pecho",         sets: 3, refKg: 70,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps" },
-  { id: "c7",  session: "C", order: 7,  name: "Press francés",             group: "Tríceps",       sets: 2, refKg: 32.5,     repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "c8",   unit: "reps" },
-  { id: "c8",  session: "C", order: 8,  name: "Curl DB",                   group: "Bíceps",        sets: 2, refKg: 15,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "c7",   unit: "reps" },
-  { id: "c9",  session: "C", order: 9,  name: "Press máquina hombros",     group: "Hombros",       sets: 3, refKg: 35,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 120, rir: "2-3", superset: null,   unit: "reps" },
-  { id: "c10", session: "C", order: 10, name: "Extensión lumbar",          group: "Core",          sets: 2, refKg: 35,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps" },
+  { id: "a1",  session: "A", order: 1,  name: "Sentadilla pendular",       group: "Cuádriceps",    sets: 3, refKg: null,     repsMin: 8,  repsMax: 10, tempo: "3-1-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "a2",  session: "A", order: 2,  name: "Press Plano (barra)",       group: "Pecho",         sets: 3, refKg: 65,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "a3",  session: "A", order: 3,  name: "Remo T (soporte pect.)",    group: "Espalda",       sets: 3, refKg: 42.5,     repsMin: 8,  repsMax: 10, tempo: "2-0-1-1", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "a4",  session: "A", order: 4,  name: "Sillón de cuádriceps",      group: "Cuádriceps",    sets: 3, refKg: 60,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "2-3", superset: "a9",   unit: "reps", description: "" },
+  { id: "a5",  session: "A", order: 5,  name: "Vuelos laterales (DB)",     group: "Hombros",       sets: 3, refKg: 10,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "a6",  session: "A", order: 6,  name: "Ext. tríceps overhead (DB)",group: "Tríceps",       sets: 3, refKg: 32.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "a7",  session: "A", order: 7,  name: "Curl sentado (DB)",         group: "Bíceps",        sets: 3, refKg: 12.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "a8",  session: "A", order: 8,  name: "Gemelo sentado",            group: "Gemelos",       sets: 3, refKg: 45,       repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "a9",  session: "A", order: 9,  name: "Camilla isquios",           group: "Isquios",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "2-3", superset: "a4",   unit: "reps", description: "" },
+  { id: "a10", session: "A", order: 10, name: "Extensión lumbar",          group: "Core",          sets: 2, refKg: 30,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "a11", session: "A", order: 11, name: "Shrugs DB",                 group: "Espalda",       sets: 3, refKg: 25,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "a12", session: "A", order: 12, name: "Curl sentado brazo I (DB)", group: "Bíceps",        sets: 2, refKg: 12.5,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a13",  unit: "reps", description: "" },
+  { id: "a13", session: "A", order: 13, name: "Ext. overhead brazo I (DB)",group: "Tríceps",       sets: 2, refKg: null,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a12",  unit: "reps", description: "" },
+  { id: "b1",  session: "B", order: 1,  name: "Prensa 45°",               group: "Cuádriceps",    sets: 3, refKg: 120,      repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "b2",  session: "B", order: 2,  name: "Dominadas",                 group: "Espalda",       sets: 3, refKg: "BW",     repsMin: 4,  repsMax: 8,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "b3",  session: "B", order: 3,  name: "Camilla isquios",           group: "Isquios",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "b4",  session: "B", order: 4,  name: "Press inclinado (DB)",      group: "Pecho",         sets: 3, refKg: 25,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "b5",  session: "B", order: 5,  name: "Vuelos posteriores",        group: "Hombros",       sets: 3, refKg: null,     repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "b6",  session: "B", order: 6,  name: "Face pulls",                group: "Espalda",       sets: 3, refKg: null,     repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "b7",  session: "B", order: 7,  name: "Ext. tríceps (polea)",      group: "Tríceps",       sets: 3, refKg: null,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b8",   unit: "reps", description: "" },
+  { id: "b8",  session: "B", order: 8,  name: "Curl bíceps (polea)",       group: "Bíceps",        sets: 3, refKg: null,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b7",   unit: "reps", description: "" },
+  { id: "b9",  session: "B", order: 9,  name: "Gemelo prensa 45",          group: "Gemelos",       sets: 3, refKg: 180,      repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "b10", session: "B", order: 10, name: "Caminata granjero",         group: "Core",          sets: 3, refKg: "25kg/m", repsMin: 40, repsMax: 60, tempo: "",         rest: 120, rir: "",    superset: null,   unit: "pasos", description: "" },
+  { id: "c1",  session: "C", order: 1,  name: "Prensa horizontal",         group: "Cuádriceps",    sets: 4, refKg: null,     repsMin: 6,  repsMax: 8,  tempo: "3-1-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "c2",  session: "C", order: 2,  name: "Press Plano (pesado)",      group: "Pecho",         sets: 4, refKg: 70,       repsMin: 4,  repsMax: 6,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "c3",  session: "C", order: 3,  name: "Remo T (prono)",            group: "Espalda",       sets: 3, refKg: 45,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "c4",  session: "C", order: 4,  name: "Peso Muerto Trap Bar",      group: "Isquios",       sets: 3, refKg: 115,      repsMin: 6,  repsMax: 8,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "c5",  session: "C", order: 5,  name: "Hip Thrust",                group: "Isquios/Glúteos",sets: 3,refKg: 60,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-1", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "c6",  session: "C", order: 6,  name: "Apertura máquina",          group: "Pecho",         sets: 3, refKg: 70,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "c7",  session: "C", order: 7,  name: "Press francés",             group: "Tríceps",       sets: 2, refKg: 32.5,     repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "c8",   unit: "reps", description: "" },
+  { id: "c8",  session: "C", order: 8,  name: "Curl DB",                   group: "Bíceps",        sets: 2, refKg: 15,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "c7",   unit: "reps", description: "" },
+  { id: "c9",  session: "C", order: 9,  name: "Press máquina hombros",     group: "Hombros",       sets: 3, refKg: 35,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "c10", session: "C", order: 10, name: "Extensión lumbar",          group: "Core",          sets: 2, refKg: 35,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps", description: "" },
 ];
 
 /* ---------- Helpers ---------- */
@@ -116,8 +116,59 @@ function semaphore(exercise, logs, week) {
 const SEM_LABELS = { green: "Subir peso", yellow: "Mantener", red: "Revisar", gray: "" };
 const SEM_COLORS = { green: "#34C759", yellow: "#FF9500", red: "#FF3B30", gray: "#D1D1D6" };
 
+/* ---------- Program template ---------- */
+const SEED_PROGRAM = {
+  id: "seed-dup-c2",
+  name: "Mesociclo DUP · Ciclo 2",
+  weeks: 4,
+  hasDeload: true,
+  sessions: DEFAULT_SESSIONS,
+  exercises: SEED,
+  status: "active",
+  createdAt: 0,
+};
+
 /* ---------- Persistencia ---------- */
-function loadState() { try { const r = localStorage.getItem("forge-v2"); return r ? JSON.parse(r) : null; } catch { return null; } }
+function migrateState(raw) {
+  // v1 → v2: flat program[] + sessions[] → programs[] with activeProgramId
+  if (raw && raw.program && !raw.programs) {
+    const migrated = {
+      programs: [{
+        id: "seed-dup-c2",
+        name: "Mesociclo DUP · Ciclo 2",
+        weeks: 4,
+        hasDeload: true,
+        sessions: raw.sessions || DEFAULT_SESSIONS,
+        exercises: (raw.program || SEED).map((e) => ({ ...e, description: e.description ?? "" })),
+        status: "active",
+        createdAt: 0,
+      }],
+      activeProgramId: "seed-dup-c2",
+      logs: raw.logs || {},
+      history: (raw.history || []).map((h) => ({ ...h, programId: h.programId || "seed-dup-c2" })),
+    };
+    return migrated;
+  }
+  // Already v2 — ensure description field on exercises
+  if (raw && raw.programs) {
+    return {
+      ...raw,
+      programs: raw.programs.map((p) => ({
+        ...p,
+        exercises: (p.exercises || []).map((e) => ({ ...e, description: e.description ?? "" })),
+      })),
+    };
+  }
+  return null;
+}
+
+function loadState() {
+  try {
+    const r = localStorage.getItem("forge-v2");
+    if (!r) return null;
+    return migrateState(JSON.parse(r));
+  } catch { return null; }
+}
 let saveT = null;
 function saveState(s) { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem("forge-v2", JSON.stringify(s)); } catch {} }, 500); }
 
@@ -143,8 +194,8 @@ function ExSetRow({ ex, n, week, logs, onSetChange }) {
 
 /* ============================================================ */
 export default function ForgeApp() {
-  const [sessions, setSessions] = useState(DEFAULT_SESSIONS);
-  const [program, setProgram] = useState(SEED);
+  const [programs, setPrograms] = useState([{ ...SEED_PROGRAM, exercises: SEED.map((e) => ({ ...e })) }]);
+  const [activeProgramId, setActiveProgramId] = useState("seed-dup-c2");
   const [logs, setLogs] = useState({});
   const [history, setHistory] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -163,9 +214,32 @@ export default function ForgeApp() {
   const [expandedLog, setExpandedLog] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null); // "finish" | "exit" | null
   const [reentryChoice, setReentryChoice] = useState(null); // session id pending choice
+  const [descModal, setDescModal] = useState(null); // exercise object to show description
+  const [programListView, setProgramListView] = useState(false); // show program list vs active program
+  const [editingProgram, setEditingProgram] = useState(null); // program metadata editor
+  const [importWizard, setImportWizard] = useState(null); // { step, data, mapping, preview, name }
 
-  useEffect(() => { const s = loadState(); if (s) { setSessions(s.sessions || DEFAULT_SESSIONS); setProgram(s.program || SEED); setLogs(s.logs || {}); setHistory(s.history || []); } setLoaded(true); }, []);
-  useEffect(() => { if (loaded) saveState({ sessions, program, logs, history }); }, [sessions, program, logs, history, loaded]);
+  // Derived: active program, sessions, exercises
+  const activeProgram = programs.find((p) => p.id === activeProgramId) || programs[0];
+  const sessions = activeProgram?.sessions || DEFAULT_SESSIONS;
+  const program = activeProgram?.exercises || [];
+
+  // Helpers to update active program fields
+  const updateActiveProgram = (updater) => setPrograms((ps) => ps.map((p) => p.id === activeProgramId ? (typeof updater === "function" ? updater(p) : { ...p, ...updater }) : p));
+  const setSessions = (updater) => updateActiveProgram((p) => ({ ...p, sessions: typeof updater === "function" ? updater(p.sessions) : updater }));
+  const setProgram = (updater) => updateActiveProgram((p) => ({ ...p, exercises: typeof updater === "function" ? updater(p.exercises) : updater }));
+
+  useEffect(() => {
+    const s = loadState();
+    if (s) {
+      setPrograms(s.programs || [{ ...SEED_PROGRAM, exercises: SEED.map((e) => ({ ...e })) }]);
+      setActiveProgramId(s.activeProgramId || s.programs?.[0]?.id || "seed-dup-c2");
+      setLogs(s.logs || {});
+      setHistory(s.history || []);
+    }
+    setLoaded(true);
+  }, []);
+  useEffect(() => { if (loaded) saveState({ programs, activeProgramId, logs, history }); }, [programs, activeProgramId, logs, history, loaded]);
 
   useEffect(() => {
     if (!timer || timer.remaining <= 0) return;
@@ -179,6 +253,13 @@ export default function ForgeApp() {
     return () => clearInterval(iv);
   }, [timer?.id]);
 
+  const weeks = useMemo(() => {
+    const n = activeProgram?.weeks || 4;
+    const ws = Array.from({ length: n }, (_, i) => i + 1);
+    if (activeProgram?.hasDeload) ws.push("DL");
+    return ws;
+  }, [activeProgram?.weeks, activeProgram?.hasDeload]);
+
   const sessName = (id) => { const s = sessions.find((s) => s.id === id); return s ? s.name : id; };
   const activeProgSession = progSession || (sessions[0]?.id ?? "A");
   const sessionExs = useMemo(() => program.filter((e) => e.session === session).sort((a, b) => a.order - b.order), [program, session]);
@@ -188,18 +269,32 @@ export default function ForgeApp() {
   function countDone(exercise) { let n = 0; for (let i = 1; i <= setsFor(exercise, week); i++) if (isDone(logs[keyOf(week, exercise.id, i)])) n++; return n; }
   function blockDone(b) { return b.exercises.every((ex) => countDone(ex) >= setsFor(ex, week)); }
 
+  // Descanso: arranca cuando se completa la vuelta. En superserie, recién al
+  // cerrar la serie N de todos los ejercicios del bloque (ese es el punto de la SS).
+  function maybeStartRest(exercise, setN) {
+    const b = blocks.find((bl) => bl.exercises.some((e) => e.id === exercise.id));
+    const mates = b && b.type === "superset" ? b.exercises : [exercise];
+    const roundDone = mates.every((e) => e.id === exercise.id || setN > setsFor(e, week) || isDone(logs[keyOf(week, e.id, setN)]));
+    if (!roundDone) return;
+    const rest = Math.max(0, ...mates.map((e) => e.rest || 0));
+    if (!rest) return;
+    setTimer({ id: uid(), total: rest, remaining: rest });
+  }
+
   function onSetChange(exercise, setN, field, val) {
     const k = keyOf(week, exercise.id, setN);
+    const prev = logs[k] || {};
     setLogs((L) => {
-      const prev = L[k] || {};
-      const next = { ...prev, [field]: val };
+      const p = L[k] || {};
+      const next = { ...p, [field]: val };
       // Auto-mark done when has data
       next.done = isDone(next);
-      // Parse for storage
-      if (next.kg !== undefined && next.kg !== "") next.kg = next.kg;
-      if (next.reps !== undefined && next.reps !== "") next.reps = next.reps;
       return { ...L, [k]: next };
     });
+    // El primer dato en REPS marca la serie como hecha → dispara el descanso.
+    // Solo en la transición vacío → con dato, así editar una serie vieja no lo relanza.
+    const justLogged = field === "reps" && String(val).trim() !== "" && !String(prev.reps ?? "").trim();
+    if (justLogged) maybeStartRest(exercise, setN);
   }
 
   function prevWeekSummary(exercise) {
@@ -260,7 +355,7 @@ export default function ForgeApp() {
         for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
         return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
       });
-      const entry = { id: uid(), week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData };
+      const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData };
       // Replace existing entry for same week+session, or add new
       setHistory((H) => {
         const existing = H.findIndex((h) => h.week === week && h.session === session);
@@ -326,9 +421,9 @@ export default function ForgeApp() {
         {/* ======== ENTRENAR SELECTOR ======== */}
         {tab === "entrenar" && session === null && (
           <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Entrenar</h1></header>
+            <header className="top"><div className="brand">FORGE</div><h1>Entrenar</h1><p className="sub">{activeProgram?.name}</p></header>
             <div className="weekchips">
-              {WEEKS.map((w) => (<button key={w} className={`chip ${week === w ? "on" : ""} ${w === "DL" ? "dl" : ""}`} onClick={() => setWeek(w)}>{w === "DL" ? "Deload" : `S${w}`}</button>))}
+              {weeks.map((w) => (<button key={w} className={`chip ${week === w ? "on" : ""} ${w === "DL" ? "dl" : ""}`} onClick={() => setWeek(w)}>{w === "DL" ? "Deload" : `S${w}`}</button>))}
             </div>
             {week === "DL" && <div className="dlnote">Deload: series - 1, bajá la intensidad</div>}
             <div className="sessioncards">
@@ -378,7 +473,7 @@ export default function ForgeApp() {
                 <div className="excard-head">
                   <div>
                     <div className="eyebrow">{ex.group}{block.type === "superset" && <span className="ss-idx"> · {exI + 1}/{block.exercises.length}</span>}</div>
-                    <h2>{ex.name}</h2>
+                    <h2 className={ex.description ? "has-desc" : ""} onClick={() => ex.description && setDescModal(ex)}>{ex.name}{ex.description ? <span className="desc-hint">i</span> : null}</h2>
                   </div>
                   {(() => { const pv = prevWeekSummary(ex); return pv?.e1rm ? <span className="pv-mini mono" title={weekLabel(pv.pw)}>e1RM {pv.e1rm}</span> : null; })()}
                 </div>
@@ -412,10 +507,50 @@ export default function ForgeApp() {
           </div>
         )}
 
-        {/* ======== PROGRAMA ======== */}
-        {tab === "programa" && (
+        {/* ======== PROGRAMA — LIST VIEW ======== */}
+        {tab === "programa" && programListView && (
           <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Programa</h1><p className="sub">Mesociclo DUP · 4 sem + deload</p></header>
+            <header className="top"><div className="brand">FORGE</div><h1>Programas</h1><p className="sub">{programs.length} programa{programs.length !== 1 ? "s" : ""}</p></header>
+            <div className="prog-list">
+              {programs.map((p) => (
+                <button key={p.id} className={`prog-card ${p.id === activeProgramId ? "active" : ""}`} onClick={() => { setActiveProgramId(p.id); setProgSession(null); setProgramListView(false); }}>
+                  <div className="prog-card-main">
+                    <div className="prog-card-name">{p.name}</div>
+                    <div className="prog-card-meta">{p.sessions.length} sesiones · {p.exercises.length} ejercicios · {p.weeks} sem{p.hasDeload ? " + deload" : ""}</div>
+                  </div>
+                  {p.id === activeProgramId && <span className="prog-active-badge">Activo</span>}
+                </button>
+              ))}
+            </div>
+            <button className="addbtn" onClick={() => {
+              const id = uid();
+              setPrograms((ps) => [...ps, { id, name: "Nuevo programa", weeks: 4, hasDeload: true, sessions: [{ id: "A", name: "Sesion A" }], exercises: [], status: "draft", createdAt: Date.now() }]);
+              setActiveProgramId(id);
+              setProgSession(null);
+              setProgramListView(false);
+            }}>+ Crear programa</button>
+            <button className="addbtn" style={{ marginTop: 8 }} onClick={() => {
+              const id = uid();
+              setPrograms((ps) => [...ps, { ...SEED_PROGRAM, id, name: "Mesociclo DUP (copia)", exercises: SEED.map((e) => ({ ...e, id: uid() })), createdAt: Date.now() }]);
+              setActiveProgramId(id);
+              setProgSession(null);
+              setProgramListView(false);
+            }}>+ Desde plantilla predefinida</button>
+            <button className="addbtn import-btn" style={{ marginTop: 8 }} onClick={() => setImportWizard({ step: 1 })}>+ Importar Excel</button>
+          </div>
+        )}
+
+        {/* ======== PROGRAMA — ACTIVE PROGRAM DETAIL ======== */}
+        {tab === "programa" && !programListView && (
+          <div className="screen">
+            <header className="top">
+              <div className="brand">FORGE</div>
+              <div className="prog-header-row">
+                <h1>{activeProgram?.name || "Programa"}</h1>
+                <button className="prog-switch-btn" onClick={() => setProgramListView(true)}>&#9776;</button>
+              </div>
+              <p className="sub">{activeProgram?.weeks || 4} sem{activeProgram?.hasDeload ? " + deload" : ""} · {sessions.length} sesiones · {program.length} ejercicios {session === null && <button className="prog-edit-link" onClick={() => setEditingProgram({ ...activeProgram })}>Editar programa</button>}</p>
+            </header>
             <div className="weekchips">
               {sessions.map((s) => (<button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>{s.name}</button>))}
               {session === null && <button className="chip chip-edit" onClick={() => setEditingSessions(true)}>&#9998;</button>}
@@ -429,7 +564,7 @@ export default function ForgeApp() {
                       if (session !== null) { alert("Terminá o cancelá la sesión activa para editar el programa."); return; }
                       setEditing({ ...e });
                     }}>
-                      <div className="pmain"><div className="pname">{e.name}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}</div></div>
+                      <div className="pmain"><div className="pname">{e.name}{e.description && <span className="desc-hint-sm">i</span>}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}</div></div>
                       <div className="pnums mono">{e.sets}x{e.repsMin}-{e.repsMax} · {refLine(e).split(" ×")[0]}</div>
                     </button>
                   ))}
@@ -437,7 +572,7 @@ export default function ForgeApp() {
               ))}
             </div>
             {session === null && (
-              <button className="addbtn" onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps" })}>+ Agregar ejercicio</button>
+              <button className="addbtn" onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
             )}
           </div>
         )}
@@ -445,9 +580,9 @@ export default function ForgeApp() {
         {/* ======== HISTORIAL ======== */}
         {tab === "historial" && (
           <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Historial</h1><p className="sub">{history.length} sesiones registradas</p></header>
-            {history.length === 0 && <div className="empty">Completá tu primera sesión para verla acá.</div>}
-            {history.map((h) => (
+            <header className="top"><div className="brand">FORGE</div><h1>Historial</h1><p className="sub">{history.filter((h) => !h.programId || h.programId === activeProgramId).length} sesiones registradas</p></header>
+            {history.filter((h) => !h.programId || h.programId === activeProgramId).length === 0 && <div className="empty">Completá tu primera sesión para verla acá.</div>}
+            {history.filter((h) => !h.programId || h.programId === activeProgramId).map((h) => (
               <div key={h.id} className="hist-card">
                 <button className="hist-head" onClick={() => setExpandedLog(expandedLog === h.id ? null : h.id)}>
                   <div className="hist-left"><div className="hist-title">{weekLabel(h.week)} · {h.sessionName || sessName(h.session)}</div><div className="hist-meta">{fmtDate(h.date)}{h.duration ? ` · ${h.duration} min` : ""}</div></div>
@@ -475,18 +610,18 @@ export default function ForgeApp() {
             <header className="top"><div className="brand">FORGE</div><h1>Progreso</h1><p className="sub">e1RM (Brzycki) y tonelaje del ciclo</p></header>
             <div className="card">
               <div className="cardtitle">Tonelaje semanal</div>
-              {(() => { const vals = WEEKS.map((w) => metrics.tonnage[String(w)] || 0); const max = Math.max(...vals, 1);
-                return WEEKS.map((w, i) => { const v = vals[i]; const prev = i > 0 ? vals[i - 1] : 0; const delta = prev > 0 && v > 0 ? Math.round(((v - prev) / prev) * 100) : null;
+              {(() => { const vals = weeks.map((w) => metrics.tonnage[String(w)] || 0); const max = Math.max(...vals, 1);
+                return weeks.map((w, i) => { const v = vals[i]; const prev = i > 0 ? vals[i - 1] : 0; const delta = prev > 0 && v > 0 ? Math.round(((v - prev) / prev) * 100) : null;
                   return (<div key={w} className="tonrow"><span className="tonlbl">{w === "DL" ? "DL" : `S${w}`}</span><div className="tonbar"><div style={{ width: `${(v / max) * 100}%` }} /></div><span className="tonval mono">{v > 0 ? `${round1(v / 1000)}t` : "—"}</span><span className={`tondelta mono ${delta > 0 ? "up" : delta < 0 ? "dn" : ""}`}>{delta !== null ? `${delta > 0 ? "+" : ""}${delta}%` : ""}</span></div>);
                 }); })()}
             </div>
             <div className="card">
               <div className="cardtitle">e1RM por ejercicio</div>
-              <div className="e1head mono"><span></span><span>S1</span><span>S2</span><span>S3</span><span>S4</span></div>
+              <div className="e1head mono" style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span></span>{Array.from({ length: activeProgram?.weeks || 4 }, (_, i) => <span key={i}>S{i + 1}</span>)}</div>
               {program.filter((e) => metrics.e1rms[e.id]).map((e) => {
-                const row = [1, 2, 3, 4].map((w) => metrics.e1rms[e.id][String(w)]); const nums = row.filter(Boolean);
+                const row = Array.from({ length: activeProgram?.weeks || 4 }, (_, i) => metrics.e1rms[e.id][String(i + 1)]); const nums = row.filter(Boolean);
                 const trend = nums.length >= 2 ? (nums[nums.length - 1] > nums[0] ? "↗" : nums[nums.length - 1] < nums[0] ? "↘" : "→") : "";
-                return (<div key={e.id} className="e1row"><span className="e1name">{e.name} <span className={`tr ${trend === "↗" ? "up" : trend === "↘" ? "dn" : ""}`}>{trend}</span></span>{row.map((v, i) => <span key={i} className="mono e1v">{v ? Math.round(v) : "·"}</span>)}</div>);
+                return (<div key={e.id} className="e1row" style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span className="e1name">{e.name} <span className={`tr ${trend === "↗" ? "up" : trend === "↘" ? "dn" : ""}`}>{trend}</span></span>{row.map((v, i) => <span key={i} className="mono e1v">{v ? Math.round(v) : "·"}</span>)}</div>);
               })}
               {Object.keys(metrics.e1rms).length === 0 && <div className="empty">Registrá series con kg y reps para ver tu e1RM acá.</div>}
             </div>
@@ -519,6 +654,20 @@ export default function ForgeApp() {
                 </button>
               </div>
               <button className="confirm-cancel" style={{ width: "100%", marginTop: 10 }} onClick={() => setReentryChoice(null)}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {/* ======== DESCRIPTION MODAL ======== */}
+        {descModal && (
+          <div className="overlay centered" onClick={() => setDescModal(null)}>
+            <div className="confirm-box desc-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="desc-modal-head">
+                <div className="eyebrow">{descModal.group}</div>
+                <h3>{descModal.name}</h3>
+              </div>
+              <p className="desc-modal-body">{descModal.description}</p>
+              <button className="confirm-ok" style={{ width: "100%", marginTop: 12 }} onClick={() => setDescModal(null)}>OK</button>
             </div>
           </div>
         )}
@@ -571,6 +720,64 @@ export default function ForgeApp() {
 
         {editing && <ExerciseEditor draft={editing} setDraft={setEditing} siblings={program.filter((e) => e.session === editing.session && e.id !== editing.id)} onSave={saveExercise} onDelete={deleteExercise} isNew={!program.some((e) => e.id === editing.id)} />}
 
+        {/* ======== PROGRAM EDITOR MODAL ======== */}
+        {editingProgram && (
+          <div className="overlay" onClick={() => setEditingProgram(null)}>
+            <div className="sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="sheethead"><h3>Editar programa</h3><button className="x" onClick={() => setEditingProgram(null)}>&times;</button></div>
+              <div className="ed-form">
+                <label className="ed-full"><span>Nombre</span><input value={editingProgram.name} onChange={(e) => setEditingProgram((p) => ({ ...p, name: e.target.value }))} /></label>
+                <div className="ed-row2">
+                  <label><span>Semanas</span><input className="mono" inputMode="numeric" value={editingProgram.weeks} onChange={(e) => setEditingProgram((p) => ({ ...p, weeks: parseInt(e.target.value) || 0 }))} /></label>
+                  <label className="ed-check-label"><span>Deload</span><div className="ed-toggle-row"><button className={`ed-toggle ${editingProgram.hasDeload ? "on" : ""}`} onClick={() => setEditingProgram((p) => ({ ...p, hasDeload: !p.hasDeload }))}>{editingProgram.hasDeload ? "Si" : "No"}</button></div></label>
+                </div>
+              </div>
+              <div className="sheetactions" style={{ flexDirection: "column", gap: 8 }}>
+                <button className="save" onClick={() => { updateActiveProgram({ name: editingProgram.name, weeks: editingProgram.weeks, hasDeload: editingProgram.hasDeload }); setEditingProgram(null); }}>Guardar</button>
+                <button className="prog-dup-btn" onClick={() => {
+                  const id = uid();
+                  const dup = { ...activeProgram, id, name: activeProgram.name + " (copia)", exercises: activeProgram.exercises.map((e) => ({ ...e, id: uid() })), createdAt: Date.now() };
+                  setPrograms((ps) => [...ps, dup]);
+                  setActiveProgramId(id);
+                  setProgSession(null);
+                  setEditingProgram(null);
+                }}>Duplicar programa</button>
+                {programs.length > 1 && (
+                  <button className="del" style={{ width: "100%" }} onClick={() => {
+                    if (!window.confirm(`Eliminar "${activeProgram.name}"? Esta accion no se puede deshacer.`)) return;
+                    const remaining = programs.filter((p) => p.id !== activeProgramId);
+                    setPrograms(remaining);
+                    setActiveProgramId(remaining[0].id);
+                    setProgSession(null);
+                    setEditingProgram(null);
+                    setProgramListView(false);
+                  }}>Eliminar programa</button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======== IMPORT WIZARD ======== */}
+        {importWizard && <ImportWizard wizard={importWizard} setWizard={setImportWizard} onImport={(name, preview) => {
+          const id = uid();
+          const newProg = {
+            id,
+            name: name || "Programa importado",
+            weeks: 4,
+            hasDeload: true,
+            sessions: preview.sessions,
+            exercises: preview.exercises,
+            status: "draft",
+            createdAt: Date.now(),
+          };
+          setPrograms((ps) => [...ps, newProg]);
+          setActiveProgramId(id);
+          setProgSession(null);
+          setProgramListView(false);
+          setImportWizard(null);
+        }} />}
+
         <nav className="tabbar">
           {[["programa", "Programa", "▤"], ["entrenar", "Entrenar", "◉"], ["historial", "Historial", "☰"], ["progreso", "Progreso", "↗"]].map(([id, label, icon]) => (
             <button key={id} className={tab === id ? "on" : ""} onClick={() => { setTab(id); if (id !== "entrenar") setTimer(null); }}><span className="ticon">{icon}</span>{label}</button>
@@ -606,6 +813,7 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew }) 
             <label><span>Unidad</span><select value={draft.unit} onChange={(e) => set("unit", e.target.value)}><option value="reps">reps</option><option value="pasos">pasos</option></select></label>
           </div>
           <label className="ed-full"><span>Superserie con</span><select value={draft.superset ?? ""} onChange={(e) => set("superset", e.target.value || null)}><option value="">— sin superserie —</option>{siblings.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+          <label className="ed-full"><span>Notas / Descripcion</span><textarea className="ed-textarea" rows={3} value={draft.description ?? ""} onChange={(e) => set("description", e.target.value)} placeholder="Postura, agarre, indicaciones del entrenador..." /></label>
         </div>
         <div className="sheetactions">
           {!isNew && <button className="del" onClick={() => onDelete(draft.id)}>Eliminar</button>}
@@ -614,6 +822,269 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew }) 
       </div>
     </div>
   );
+}
+
+/* ---------- Excel import helpers ---------- */
+const FIELD_ALIASES = {
+  session:  ["sesion", "sesión", "dia", "día", "day", "session"],
+  name:     ["ejercicio", "exercise", "nombre", "name"],
+  group:    ["grupo", "grupo muscular", "muscle", "muscle group", "musclegroup"],
+  sets:     ["series", "sets"],
+  refKg:    ["ref kg", "peso", "kg", "ref", "carga", "weight", "refkg"],
+  repsMin:  ["reps min", "repsmin", "rep min", "min reps", "minreps"],
+  repsMax:  ["reps max", "repsmax", "rep max", "max reps", "maxreps"],
+  reps:     ["reps", "repeticiones"],
+  tempo:    ["tempo", "cadencia"],
+  rest:     ["descanso", "rest", "pausa"],
+  rir:      ["rir", "rpe"],
+  superset: ["superserie", "superset", "ss"],
+  order:    ["orden", "order", "#", "nro"],
+  description: ["descripcion", "descripción", "notas", "notes", "desc"],
+};
+
+function matchColumn(header) {
+  const h = header.toLowerCase().trim();
+  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+    if (aliases.some((a) => h === a || h.includes(a))) return field;
+  }
+  return null;
+}
+
+function parseRestValue(val) {
+  if (typeof val === "number") return val;
+  if (!val) return 90;
+  const s = String(val).trim();
+  // "2'30\"" or "2:30" → seconds
+  const m1 = s.match(/^(\d+)[':]\s*(\d+)/);
+  if (m1) return parseInt(m1[1]) * 60 + parseInt(m1[2]);
+  const n = parseInt(s);
+  return isNaN(n) ? 90 : n;
+}
+
+function parseReps(val) {
+  if (!val) return { min: 0, max: 0 };
+  const s = String(val).trim();
+  const m = s.match(/^(\d+)\s*[-–—]\s*(\d+)$/);
+  if (m) return { min: parseInt(m[1]), max: parseInt(m[2]) };
+  const n = parseInt(s);
+  return isNaN(n) ? { min: 0, max: 0 } : { min: n, max: n };
+}
+
+function parseRefKg(val) {
+  if (val === null || val === undefined || val === "") return null;
+  const s = String(val).trim().toUpperCase();
+  if (s === "BW" || s === "BODYWEIGHT") return "BW";
+  const n = parseFloat(s);
+  return isNaN(n) ? s : n;
+}
+
+function parseExcelData(rows, mapping) {
+  const exercises = [];
+  const sessionSet = new Set();
+  let order = 0;
+
+  for (const row of rows) {
+    const name = row[mapping.name];
+    if (!name || !String(name).trim()) continue;
+
+    const sessionRaw = mapping.session != null ? String(row[mapping.session] || "A").trim().toUpperCase() : "A";
+    const session = sessionRaw.charAt(0);
+    sessionSet.add(session);
+
+    let repsMin = 0, repsMax = 0;
+    if (mapping.repsMin != null && mapping.repsMax != null) {
+      repsMin = parseInt(row[mapping.repsMin]) || 0;
+      repsMax = parseInt(row[mapping.repsMax]) || 0;
+    } else if (mapping.reps != null) {
+      const parsed = parseReps(row[mapping.reps]);
+      repsMin = parsed.min;
+      repsMax = parsed.max;
+    }
+
+    order++;
+    exercises.push({
+      id: uid(),
+      session,
+      order: mapping.order != null ? (parseInt(row[mapping.order]) || order) : order,
+      name: String(name).trim(),
+      group: mapping.group != null ? String(row[mapping.group] || "").trim() : "",
+      sets: mapping.sets != null ? (parseInt(row[mapping.sets]) || 3) : 3,
+      refKg: mapping.refKg != null ? parseRefKg(row[mapping.refKg]) : null,
+      repsMin,
+      repsMax,
+      tempo: mapping.tempo != null ? String(row[mapping.tempo] || "").trim() : "",
+      rest: mapping.rest != null ? parseRestValue(row[mapping.rest]) : 90,
+      rir: mapping.rir != null ? String(row[mapping.rir] || "").trim() : "",
+      superset: mapping.superset != null ? String(row[mapping.superset] || "").trim() || null : null,
+      unit: "reps",
+      description: mapping.description != null ? String(row[mapping.description] || "").trim() : "",
+    });
+  }
+
+  // Resolve superset references by name → id
+  for (const ex of exercises) {
+    if (ex.superset && typeof ex.superset === "string") {
+      const partner = exercises.find((e) => e.name.toLowerCase() === ex.superset.toLowerCase() && e.session === ex.session && e.id !== ex.id);
+      ex.superset = partner ? partner.id : null;
+    }
+  }
+
+  const sessions = [...sessionSet].sort().map((id) => ({ id, name: `Sesion ${id}` }));
+  return { exercises, sessions };
+}
+
+function downloadTemplate() {
+  const header = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Descripcion"];
+  const examples = [
+    ["A", 1, "Sentadilla", "Cuadriceps", 4, 8, 10, 100, "2-0-1-0", "150", "2-3", "", "Barra alta, rodillas hacia afuera"],
+    ["A", 2, "Press plano", "Pecho", 3, 8, 10, 70, "2-0-1-0", "2'30\"", "2-3", "", ""],
+    ["A", 3, "Remo con barra", "Espalda", 3, 8, 10, 60, "2-0-1-1", "2'", "2-3", "", "Agarre prono, tirar al ombligo"],
+    ["A", 4, "Curl biceps", "Biceps", 3, 10, 12, 12.5, "2-0-1-0", "60", "1-2", "Extension triceps", ""],
+    ["A", 5, "Extension triceps", "Triceps", 3, 10, 12, "", "2-0-1-0", "60", "1-2", "Curl biceps", ""],
+    ["B", 1, "Peso muerto", "Isquios", 4, 6, 8, 120, "2-0-1-0", "3'", "2-3", "", "Convencional, espalda neutra"],
+    ["B", 2, "Dominadas", "Espalda", 3, 4, 8, "BW", "2-0-1-0", "180", "2-3", "", ""],
+    ["B", 3, "Press militar", "Hombros", 3, 8, 10, 40, "2-0-1-0", "120", "2-3", "", "De pie, core apretado"],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([header, ...examples]);
+  // Column widths
+  ws["!cols"] = [{ wch: 8 }, { wch: 6 }, { wch: 22 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 }, { wch: 35 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Programa");
+  XLSX.writeFile(wb, "forge-plantilla-programa.xlsx");
+}
+
+function ImportWizard({ wizard, setWizard, onImport }) {
+  const fileRef = useRef(null);
+
+  function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target.result, { type: "array" });
+      const sheetName = wb.SheetNames.find((n) => n.toLowerCase().includes("programa")) || wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      if (!rows.length) return;
+
+      // Auto-detect column mapping
+      const headers = Object.keys(rows[0]);
+      const mapping = {};
+      for (let i = 0; i < headers.length; i++) {
+        const field = matchColumn(headers[i]);
+        if (field && !(field in mapping)) mapping[field] = headers[i];
+      }
+
+      setWizard({ step: 2, rows, headers, mapping, name: file.name.replace(/\.(xlsx?|csv)$/i, ""), sheetName });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // Step 1: Upload
+  if (wizard.step === 1) {
+    return (
+      <div className="overlay" onClick={() => setWizard(null)}>
+        <div className="sheet" onClick={(e) => e.stopPropagation()}>
+          <div className="sheethead"><h3>Importar Excel</h3><button className="x" onClick={() => setWizard(null)}>&times;</button></div>
+          <div className="import-upload">
+            <p className="import-desc">Subi un archivo .xlsx o .csv con tu programa. Se detectaran las columnas automaticamente.</p>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: "none" }} />
+            <button className="save" style={{ width: "100%", marginTop: 12 }} onClick={() => fileRef.current?.click()}>Seleccionar archivo</button>
+            <div className="import-divider"><span>o</span></div>
+            <button className="prog-dup-btn" style={{ width: "100%" }} onClick={downloadTemplate}>Descargar plantilla Excel</button>
+            <p className="import-hint">Descarga la plantilla, completala con tus ejercicios y subila aca.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 2: Column mapping
+  if (wizard.step === 2) {
+    const fields = [
+      { key: "session", label: "Sesion", required: false },
+      { key: "name", label: "Ejercicio", required: true },
+      { key: "group", label: "Grupo muscular", required: false },
+      { key: "sets", label: "Series", required: false },
+      { key: "refKg", label: "Ref KG", required: false },
+      { key: "repsMin", label: "Reps min", required: false },
+      { key: "repsMax", label: "Reps max", required: false },
+      { key: "reps", label: "Reps (min-max)", required: false },
+      { key: "tempo", label: "Tempo", required: false },
+      { key: "rest", label: "Descanso", required: false },
+      { key: "rir", label: "RIR", required: false },
+      { key: "superset", label: "Superserie", required: false },
+      { key: "order", label: "Orden", required: false },
+      { key: "description", label: "Descripcion", required: false },
+    ];
+    const setMapping = (field, val) => setWizard((w) => ({ ...w, mapping: { ...w.mapping, [field]: val || undefined } }));
+    const canProceed = wizard.mapping.name;
+
+    return (
+      <div className="overlay" onClick={() => setWizard(null)}>
+        <div className="sheet" onClick={(e) => e.stopPropagation()}>
+          <div className="sheethead"><h3>Mapeo de columnas</h3><button className="x" onClick={() => setWizard(null)}>&times;</button></div>
+          <p className="import-desc">Hoja: <b>{wizard.sheetName}</b> · {wizard.rows.length} filas detectadas</p>
+          <div className="import-mapping">
+            {fields.map(({ key, label, required }) => (
+              <div key={key} className="import-map-row">
+                <span className="import-map-label">{label}{required && " *"}</span>
+                <select className="import-map-select" value={wizard.mapping[key] || ""} onChange={(e) => setMapping(key, e.target.value)}>
+                  <option value="">— ignorar —</option>
+                  {wizard.headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+          <label className="ed-full" style={{ marginTop: 12 }}><span>Nombre del programa</span><input value={wizard.name} onChange={(e) => setWizard((w) => ({ ...w, name: e.target.value }))} /></label>
+          <div className="navrow" style={{ marginTop: 16 }}>
+            <button className="navbtn" onClick={() => setWizard({ step: 1 })}>Atras</button>
+            <button className="navbtn pri" disabled={!canProceed} onClick={() => {
+              const { exercises, sessions } = parseExcelData(wizard.rows, wizard.mapping);
+              setWizard((w) => ({ ...w, step: 3, preview: { exercises, sessions } }));
+            }}>Vista previa</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 3: Preview & confirm
+  if (wizard.step === 3) {
+    const { exercises, sessions } = wizard.preview;
+    const groups = [...new Set(exercises.map((e) => e.group).filter(Boolean))];
+    return (
+      <div className="overlay" onClick={() => setWizard(null)}>
+        <div className="sheet" onClick={(e) => e.stopPropagation()}>
+          <div className="sheethead"><h3>Vista previa</h3><button className="x" onClick={() => setWizard(null)}>&times;</button></div>
+          <div className="import-summary">
+            <div className="import-stat"><span className="import-stat-n mono">{exercises.length}</span> ejercicios</div>
+            <div className="import-stat"><span className="import-stat-n mono">{sessions.length}</span> sesiones ({sessions.map((s) => s.id).join(", ")})</div>
+            {groups.length > 0 && <div className="import-stat"><span className="import-stat-n mono">{groups.length}</span> grupos musculares</div>}
+          </div>
+          <div className="import-preview-list">
+            {sessions.map((sess) => (
+              <div key={sess.id}>
+                <div className="import-sess-label">Sesion {sess.id} — {exercises.filter((e) => e.session === sess.id).length} ejercicios</div>
+                {exercises.filter((e) => e.session === sess.id).map((e) => (
+                  <div key={e.id} className="import-ex-row mono">
+                    <span>{e.name}</span>
+                    <span>{e.sets}x{e.repsMin}-{e.repsMax}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="navrow" style={{ marginTop: 16 }}>
+            <button className="navbtn" onClick={() => setWizard((w) => ({ ...w, step: 2, preview: null }))}>Atras</button>
+            <button className="navbtn pri" onClick={() => onImport(wizard.name, wizard.preview)}>Importar</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 const CSS = `
@@ -815,6 +1286,8 @@ const CSS = `
 .ed-form input.mono { font-family: 'DM Mono', monospace; }
 .ed-form input:focus, .ed-form select:focus { outline: none; border-color: #2C6BED; }
 .ed-form select { appearance: none; }
+.ed-textarea { height: auto; min-height: 70px; padding: 10px; font: 400 14px 'Inter'; resize: vertical; line-height: 1.5; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 10px; color: #1C1C1E; width: 100%; }
+.ed-textarea:focus { outline: none; border-color: #2C6BED; }
 .ed-full { width: 100%; }
 .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ed-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
@@ -826,5 +1299,47 @@ const CSS = `
 .prevbox { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding: 8px 12px; background: #F2F2F7; border: 1px dashed #AEAEB2; border-radius: 10px; font-size: 12px; color: #1C1C1E; }
 .pvlabel { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #636366; font-weight: 600; }
 .pve1 { margin-left: auto; color: #2C6BED; font-weight: 600; }
+/* Program list */
+.prog-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.prog-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 16px 18px; background: #FFF; border: 2px solid transparent; border-radius: 14px; cursor: pointer; color: inherit; transition: all .15s; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.prog-card:active { transform: scale(0.98); }
+.prog-card.active { border-color: #2C6BED; background: #EBF2FF; }
+.prog-card-name { font-weight: 600; font-size: 16px; color: #1C1C1E; }
+.prog-card-meta { font-size: 12px; color: #636366; margin-top: 3px; }
+.prog-active-badge { font-size: 11px; font-weight: 700; color: #2C6BED; background: #FFF; border: 1px solid #2C6BED; padding: 3px 10px; border-radius: 999px; flex-shrink: 0; }
+.prog-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.prog-header-row h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prog-switch-btn { width: 38px; height: 38px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #636366; font-size: 18px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.prog-edit-link { background: none; border: none; color: #2C6BED; font: 500 12px 'Inter'; cursor: pointer; padding: 0; margin-left: 4px; text-decoration: underline; }
+.prog-dup-btn { width: 100%; height: 46px; border-radius: 12px; border: 1px solid #D1D1D6; background: #FFF; color: #1C1C1E; font: 600 14px 'Inter'; cursor: pointer; }
+.ed-toggle-row { display: flex; }
+.ed-toggle { height: 42px; width: 100%; border-radius: 10px; border: 1.5px solid #D1D1D6; background: #F2F2F7; color: #636366; font: 600 14px 'Inter'; cursor: pointer; transition: all .15s; }
+.ed-toggle.on { background: #2C6BED; border-color: #2C6BED; color: #FFF; }
+.ed-check-label { display: flex; flex-direction: column; gap: 4px; }
+
+/* Description hint & modal */
+.has-desc { cursor: pointer; }
+.desc-hint { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #2C6BED; color: #FFF; font-size: 11px; font-weight: 700; font-style: italic; margin-left: 6px; vertical-align: middle; font-family: 'Inter', serif; }
+.desc-hint-sm { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: #2C6BED; color: #FFF; font-size: 9px; font-weight: 700; font-style: italic; margin-left: 5px; vertical-align: middle; font-family: 'Inter', serif; }
+.desc-modal { text-align: left; width: 340px; }
+.desc-modal-head { margin-bottom: 12px; }
+.desc-modal-head h3 { font-size: 18px; font-weight: 700; margin-top: 4px; }
+.desc-modal-body { font-size: 14px; color: #3A3A3C; line-height: 1.6; white-space: pre-wrap; }
+/* Import wizard */
+.import-desc { font-size: 14px; color: #636366; line-height: 1.5; margin-bottom: 8px; }
+.import-mapping { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.import-map-row { display: flex; align-items: center; gap: 10px; }
+.import-map-label { font-size: 13px; font-weight: 500; color: #1C1C1E; width: 110px; flex-shrink: 0; }
+.import-map-select { flex: 1; height: 36px; background: #F2F2F7; border: 1px solid #D1D1D6; border-radius: 8px; color: #1C1C1E; padding: 0 8px; font: 400 13px 'Inter'; }
+.import-summary { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.import-stat { font-size: 14px; color: #3A3A3C; }
+.import-stat-n { color: #2C6BED; font-weight: 700; font-size: 16px; margin-right: 4px; }
+.import-sess-label { font-size: 12px; font-weight: 700; color: #2C6BED; letter-spacing: .1em; text-transform: uppercase; padding: 10px 0 6px; }
+.import-preview-list { max-height: 45vh; overflow-y: auto; }
+.import-ex-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #F2F2F7; font-size: 13px; color: #3A3A3C; }
+.import-btn { border-color: #2C6BED; color: #2C6BED; border-style: dashed; }
+.import-divider { display: flex; align-items: center; gap: 12px; margin: 14px 0; color: #AEAEB2; font-size: 13px; }
+.import-divider::before, .import-divider::after { content: ''; flex: 1; height: 1px; background: #D1D1D6; }
+.import-hint { font-size: 12px; color: #AEAEB2; text-align: center; margin-top: 8px; }
 @media (prefers-reduced-motion: reduce) { .forge * { transition: none !important; } }
 `;
