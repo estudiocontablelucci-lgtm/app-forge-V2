@@ -37,14 +37,20 @@ Estado actual del proyecto y decisiones tomadas.
 - [x] Semanas y deload dinamicos por programa
 - [x] Historial y progreso filtrados por programa activo
 - [x] Migracion automatica de localStorage v1 a v2
+- [x] Export del historial a Excel (hoja Sesiones + hoja Series, una fila por set)
+- [x] Programa real del atleta (Ciclo 2) cargado en el SEED con refs post-24/06/2026
 
 ## Pendiente (futuro)
 
 - [ ] Persistencia con Turso + auth NextAuth
 - [ ] Multi-device sync
 - [ ] Roles coach/athlete + dashboard trainer
+- [ ] Override de `ref_kg` por asignacion (bloqueante para el caso multi-alumno)
+- [ ] Consentimiento explicito de datos de salud (Ley 25.326) antes de alumnos reales
+- [ ] Plan / limite de alumnos por entrenador (patron `features` JSON, como Tesoreria)
 - [ ] PWA con service worker
-- [ ] Exportar programa a Excel
+- [ ] Exportar programa a Excel (el historial ya se exporta)
+- [ ] Campo `tecnica` en ejercicio (DS / ASIM-IZQ) — hoy viven como texto en `description`
 - [ ] Prediccion de carga (regresion lineal e1RM)
 - [ ] Medidas corporales + proporciones McCallum
 
@@ -83,6 +89,42 @@ Estado actual del proyecto y decisiones tomadas.
 ### 2026-07 — Import Excel client-side con SheetJS
 **Decision**: parseo de Excel 100% en el browser con `xlsx` (SheetJS). Wizard de 3 pasos.
 **Motivo**: funciona offline, no requiere backend. El server solo recibira JSON normalizado cuando se implemente sync.
+
+### 2026-07 — FORGE deja de ser una herramienta personal: es un SaaS para entrenadores
+**Decision**: el producto apunta a entrenadores con muchos alumnos. El entrenador carga el programa,
+define las referencias por alumno y analiza las metricas; el alumno registra el entrenamiento.
+Agustin sigue siendo ademas usuario individual (atleta sin coach) — ese caso NO se bifurca:
+un atleta independiente es un usuario sin `coach_id`, como ya plantea `forge-arquitectura.md`.
+
+**Consecuencias que no estaban contempladas:**
+1. `ref_kg` NO puede vivir en la plantilla (`program_exercises`) — la referencia es por atleta.
+   Hace falta una tabla de override por asignacion. Ver propuesta en la seccion de schema.
+2. Pasan a almacenarse datos de salud de terceros (lesiones en campos de texto libre, hoy usados
+   para el protocolo L3-S1). Ley 25.326: dato sensible, requiere consentimiento expreso.
+   Decidir antes de onboardear alumnos reales, no despues.
+3. El entrenador es la unidad que paga y los alumnos son la metrica que se cobra → tiene que ser
+   entidad de primera clase en el schema, no un `coach_id` colgado de `users`.
+
+**Decision abierta (bloquea el arranque de Fase 4)**: `forge-arquitectura.md` dice FastAPI + Postgres
+en Hetzner; el CLAUDE.md raiz dice Turso. Recomendacion: Turso + Next.js, agregaciones en memoria
+(el volumen es chico), migrar a Postgres solo si el dashboard del coach lo pide.
+
+### 2026-07 — Export a Excel si, API no (todavia)
+**Decision**: el historial se exporta a .xlsx desde el cliente (2 hojas: Sesiones y Series, una fila por set).
+No se expone API.
+**Motivo**: FORGE v2 es una SPA estatica en GitHub Pages — no hay servidor desde el cual exponer nada.
+Una API real es exactamente el trabajo de Fase 4 (Turso + backend); construirla antes obligaria a levantar
+un backend solo para eso. El .xlsx cubre el caso de analisis externo hoy, sin infraestructura.
+
+### 2026-07 — Datos del atleta: fuente de verdad externa
+**Decision**: el SEED refleja el Ciclo 2 real (refs post-ajustes 24/06/2026). La fuente de verdad sigue
+siendo `OneDrive/.../Sistema cronobiologico/Claude/rutina_gym.md` + `programa_tecnicas_ciclo2.md`.
+**Motivo**: el SEED solo aplica a instalaciones nuevas — `migrateState()` conserva el localStorage
+existente. Para cargar el programa en un navegador con datos, se genera un .xlsx con
+`npm run gen:programa` y se importa por el wizard. El .xlsx queda en `data/` (gitignored: son datos
+personales de salud y el repo es publico).
+**Tecnicas (DS, ASIM-IZQ)**: no hay campo `tecnica` en el modelo — van como texto en `description`,
+visibles con el badge "i" durante el entrenamiento. Suficiente para operar; el campo propio queda pendiente.
 
 ### 2026-07 — Timer de descanso: trigger explicito
 **Decision**: el descanso arranca cuando se escribe el primer caracter en REPS (transicion vacio -> con dato).

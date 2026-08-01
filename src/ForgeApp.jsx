@@ -14,35 +14,35 @@ const DEFAULT_SESSIONS = [
 
 /* ---------- Seed: Ciclo 2 ---------- */
 const SEED = [
-  { id: "a1",  session: "A", order: 1,  name: "Sentadilla pendular",       group: "Cuádriceps",    sets: 3, refKg: null,     repsMin: 8,  repsMax: 10, tempo: "3-1-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "a1",  session: "A", order: 1,  name: "Sentadilla pendular",       group: "Cuádriceps",    sets: 3, refKg: null,     repsMin: 8,  repsMax: 10, tempo: "3-1-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "REVISAR ref. Reemplaza al belt squat (tope mecánico 120kg) — NO heredar esos kilos: la pendular mueve más por mecánica de la máquina, no por más fuerza. Arrancar RIR 3-4 y dejar que la autorregulación calibre en 1-2 sesiones. Su e1RM arranca como serie nueva, no continúa la del belt squat." },
   { id: "a2",  session: "A", order: 2,  name: "Press Plano (barra)",       group: "Pecho",         sets: 3, refKg: 65,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "a3",  session: "A", order: 3,  name: "Remo T (soporte pect.)",    group: "Espalda",       sets: 3, refKg: 42.5,     repsMin: 8,  repsMax: 10, tempo: "2-0-1-1", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "a4",  session: "A", order: 4,  name: "Sillón de cuádriceps",      group: "Cuádriceps",    sets: 3, refKg: 60,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "2-3", superset: "a9",   unit: "reps", description: "" },
-  { id: "a5",  session: "A", order: 5,  name: "Vuelos laterales (DB)",     group: "Hombros",       sets: 3, refKg: 10,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
-  { id: "a6",  session: "A", order: 6,  name: "Ext. tríceps overhead (DB)",group: "Tríceps",       sets: 3, refKg: 32.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
-  { id: "a7",  session: "A", order: 7,  name: "Curl sentado (DB)",         group: "Bíceps",        sets: 3, refKg: 12.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
-  { id: "a8",  session: "A", order: 8,  name: "Gemelo sentado",            group: "Gemelos",       sets: 3, refKg: 45,       repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "a5",  session: "A", order: 5,  name: "Vuelos laterales (DB)",     group: "Hombros",       sets: 3, refKg: 12,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "Subió de 10 a 12kg: estaba en tope de reps. Acá NO va dropset — se resuelve por progresión de carga." },
+  { id: "a6",  session: "A", order: 6,  name: "Ext. tríceps overhead (DB)",group: "Tríceps",       sets: 3, refKg: 32.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: "a7",   unit: "reps", description: "Puede con 35 pero molesta en muñecas — se queda en 32.5 hasta que deje de molestar." },
+  { id: "a7",  session: "A", order: 7,  name: "Curl sentado (DB)",         group: "Bíceps",        sets: 3, refKg: 12.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: "a6",   unit: "reps", description: "" },
+  { id: "a8",  session: "A", order: 8,  name: "Gemelo sentado",            group: "Gemelos",       sets: 3, refKg: 45,       repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "DS última serie: al llegar al fallo (RIR 0-1) bajar 20-25% la carga y seguir al fallo, 1-2 descuelgues. Grupo rezagado (pantorrilla 36 vs 39.5 target)." },
   { id: "a9",  session: "A", order: 9,  name: "Camilla isquios",           group: "Isquios",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "2-3", superset: "a4",   unit: "reps", description: "" },
   { id: "a10", session: "A", order: 10, name: "Extensión lumbar",          group: "Core",          sets: 2, refKg: 30,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "a11", session: "A", order: 11, name: "Shrugs DB",                 group: "Espalda",       sets: 3, refKg: 25,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "a12", session: "A", order: 12, name: "Curl sentado brazo I (DB)", group: "Bíceps",        sets: 2, refKg: 12.5,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a13",  unit: "reps", description: "" },
-  { id: "a13", session: "A", order: 13, name: "Ext. overhead brazo I (DB)",group: "Tríceps",       sets: 2, refKg: null,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a12",  unit: "reps", description: "" },
+  { id: "a12", session: "A", order: 12, name: "Curl sentado brazo I (DB)", group: "Bíceps",        sets: 2, refKg: 12.5,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a13",  unit: "reps", description: "ASIM-IZQ (brazo izq -4.8%): empezar siempre por el izquierdo, igualar las reps del derecho a lo que rindió el izquierdo, y 1 serie extra solo al izquierdo (izq 2 / der 1). No subir a +2." },
+  { id: "a13", session: "A", order: 13, name: "Ext. overhead brazo I (DB)",group: "Tríceps",       sets: 2, refKg: null,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a12",  unit: "reps", description: "ASIM-IZQ: mismo protocolo que el curl. Ref TBD — calibrar en la primera sesión." },
   { id: "b1",  session: "B", order: 1,  name: "Prensa 45°",               group: "Cuádriceps",    sets: 3, refKg: 120,      repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "b2",  session: "B", order: 2,  name: "Dominadas",                 group: "Espalda",       sets: 3, refKg: "BW",     repsMin: 4,  repsMax: 8,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "b3",  session: "B", order: 3,  name: "Camilla isquios",           group: "Isquios",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "b4",  session: "B", order: 4,  name: "Press inclinado (DB)",      group: "Pecho",         sets: 3, refKg: 25,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "b5",  session: "B", order: 5,  name: "Vuelos posteriores",        group: "Hombros",       sets: 3, refKg: null,     repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
-  { id: "b6",  session: "B", order: 6,  name: "Face pulls",                group: "Espalda",       sets: 3, refKg: null,     repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
-  { id: "b7",  session: "B", order: 7,  name: "Ext. tríceps (polea)",      group: "Tríceps",       sets: 3, refKg: null,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b8",   unit: "reps", description: "" },
-  { id: "b8",  session: "B", order: 8,  name: "Curl bíceps (polea)",       group: "Bíceps",        sets: 3, refKg: null,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b7",   unit: "reps", description: "" },
-  { id: "b9",  session: "B", order: 9,  name: "Gemelo prensa 45",          group: "Gemelos",       sets: 3, refKg: 180,      repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "b5",  session: "B", order: 5,  name: "Vuelos posteriores",        group: "Hombros",       sets: 3, refKg: 50,       repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "Subió de 45 a 50: 45x15 RIR 2, reps en tope." },
+  { id: "b6",  session: "B", order: 6,  name: "Face pulls",                group: "Espalda",       sets: 3, refKg: 50,       repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "Polea con cuerda. Deltoides posterior + rotadores externos + traps medios." },
+  { id: "b7",  session: "B", order: 7,  name: "Ext. tríceps (polea)",      group: "Tríceps",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b8",   unit: "reps", description: "" },
+  { id: "b8",  session: "B", order: 8,  name: "Curl bíceps (polea)",       group: "Bíceps",        sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b7",   unit: "reps", description: "Subió de 45 a 50: RIR 4 en la primera serie con 45." },
+  { id: "b9",  session: "B", order: 9,  name: "Gemelo prensa 45",          group: "Gemelos",       sets: 3, refKg: 180,      repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "DS última serie: al fallo (RIR 0-1), bajar 20-25% y seguir. Mismo criterio que el gemelo sentado — rezagado y periférico." },
   { id: "b10", session: "B", order: 10, name: "Caminata granjero",         group: "Core",          sets: 3, refKg: "25kg/m", repsMin: 40, repsMax: 60, tempo: "",         rest: 120, rir: "",    superset: null,   unit: "pasos", description: "" },
-  { id: "c1",  session: "C", order: 1,  name: "Prensa horizontal",         group: "Cuádriceps",    sets: 4, refKg: null,     repsMin: 6,  repsMax: 8,  tempo: "3-1-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
+  { id: "c1",  session: "C", order: 1,  name: "Prensa horizontal",         group: "Cuádriceps",    sets: 4, refKg: null,     repsMin: 6,  repsMax: 8,  tempo: "3-1-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "REVISAR ref. Reemplaza al belt squat pesado. Acostado, torso apoyado = cero carga axial. NO heredar los 120kg. Arrancar RIR 3-4. No compite con la Prensa 45 de Sesión B: ángulo y posición distintos." },
   { id: "c2",  session: "C", order: 2,  name: "Press Plano (pesado)",      group: "Pecho",         sets: 4, refKg: 70,       repsMin: 4,  repsMax: 6,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "c3",  session: "C", order: 3,  name: "Remo T (prono)",            group: "Espalda",       sets: 3, refKg: 45,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "c4",  session: "C", order: 4,  name: "Peso Muerto Trap Bar",      group: "Isquios",       sets: 3, refKg: 115,      repsMin: 6,  repsMax: 8,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
   { id: "c5",  session: "C", order: 5,  name: "Hip Thrust",                group: "Isquios/Glúteos",sets: 3,refKg: 60,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-1", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "c6",  session: "C", order: 6,  name: "Apertura máquina",          group: "Pecho",         sets: 3, refKg: 70,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "" },
+  { id: "c6",  session: "C", order: 6,  name: "Apertura máquina",          group: "Pecho",         sets: 3, refKg: 70,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "DS última serie: al fallo (RIR 0-1), bajar 20-25% y seguir. Es pecho esternal, no clavicular — el clavicular se ataca con la progresión de carga del inclinado DB en Sesión B." },
   { id: "c7",  session: "C", order: 7,  name: "Press francés",             group: "Tríceps",       sets: 2, refKg: 32.5,     repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "c8",   unit: "reps", description: "" },
   { id: "c8",  session: "C", order: 8,  name: "Curl DB",                   group: "Bíceps",        sets: 2, refKg: 15,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "c7",   unit: "reps", description: "" },
   { id: "c9",  session: "C", order: 9,  name: "Press máquina hombros",     group: "Hombros",       sets: 3, refKg: 35,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
@@ -578,11 +578,20 @@ export default function ForgeApp() {
         )}
 
         {/* ======== HISTORIAL ======== */}
-        {tab === "historial" && (
+        {tab === "historial" && (() => {
+          const histProg = history.filter((h) => !h.programId || h.programId === activeProgramId);
+          return (
           <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Historial</h1><p className="sub">{history.filter((h) => !h.programId || h.programId === activeProgramId).length} sesiones registradas</p></header>
-            {history.filter((h) => !h.programId || h.programId === activeProgramId).length === 0 && <div className="empty">Completá tu primera sesión para verla acá.</div>}
-            {history.filter((h) => !h.programId || h.programId === activeProgramId).map((h) => (
+            <header className="top">
+              <div className="brand">FORGE</div>
+              <div className="prog-header-row">
+                <h1>Historial</h1>
+                {histProg.length > 0 && <button className="export-btn" onClick={() => exportHistory(histProg, activeProgram?.name)}>↓ Excel</button>}
+              </div>
+              <p className="sub">{histProg.length} sesiones registradas</p>
+            </header>
+            {histProg.length === 0 && <div className="empty">Completá tu primera sesión para verla acá.</div>}
+            {histProg.map((h) => (
               <div key={h.id} className="hist-card">
                 <button className="hist-head" onClick={() => setExpandedLog(expandedLog === h.id ? null : h.id)}>
                   <div className="hist-left"><div className="hist-title">{weekLabel(h.week)} · {h.sessionName || sessName(h.session)}</div><div className="hist-meta">{fmtDate(h.date)}{h.duration ? ` · ${h.duration} min` : ""}</div></div>
@@ -602,7 +611,8 @@ export default function ForgeApp() {
               </div>
             ))}
           </div>
-        )}
+          );
+        })()}
 
         {/* ======== PROGRESO ======== */}
         {tab === "progreso" && (
@@ -839,6 +849,7 @@ const FIELD_ALIASES = {
   rir:      ["rir", "rpe"],
   superset: ["superserie", "superset", "ss"],
   order:    ["orden", "order", "#", "nro"],
+  unit:     ["unidad", "unit", "medida"],
   description: ["descripcion", "descripción", "notas", "notes", "desc"],
 };
 
@@ -872,10 +883,14 @@ function parseReps(val) {
 
 function parseRefKg(val) {
   if (val === null || val === undefined || val === "") return null;
-  const s = String(val).trim().toUpperCase();
-  if (s === "BW" || s === "BODYWEIGHT") return "BW";
+  const s = String(val).trim();
+  const up = s.toUpperCase();
+  if (up === "BW" || up === "BODYWEIGHT") return "BW";
   const n = parseFloat(s);
-  return isNaN(n) ? s : n;
+  // parseFloat es permisivo ("25kg/m" -> 25), asi que solo se toma como numero si
+  // la cadena ENTERA lo es. Mismo criterio que el input de Ref KG del editor.
+  // Solo se normaliza BW; el resto queda como lo escribio el usuario.
+  return !isNaN(n) && String(n) === s ? n : s;
 }
 
 function parseExcelData(rows, mapping) {
@@ -916,7 +931,7 @@ function parseExcelData(rows, mapping) {
       rest: mapping.rest != null ? parseRestValue(row[mapping.rest]) : 90,
       rir: mapping.rir != null ? String(row[mapping.rir] || "").trim() : "",
       superset: mapping.superset != null ? String(row[mapping.superset] || "").trim() || null : null,
-      unit: "reps",
+      unit: mapping.unit != null && String(row[mapping.unit] || "").trim().toLowerCase().startsWith("paso") ? "pasos" : "reps",
       description: mapping.description != null ? String(row[mapping.description] || "").trim() : "",
     });
   }
@@ -934,23 +949,62 @@ function parseExcelData(rows, mapping) {
 }
 
 function downloadTemplate() {
-  const header = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Descripcion"];
+  const header = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Unidad", "Descripcion"];
   const examples = [
-    ["A", 1, "Sentadilla", "Cuadriceps", 4, 8, 10, 100, "2-0-1-0", "150", "2-3", "", "Barra alta, rodillas hacia afuera"],
-    ["A", 2, "Press plano", "Pecho", 3, 8, 10, 70, "2-0-1-0", "2'30\"", "2-3", "", ""],
-    ["A", 3, "Remo con barra", "Espalda", 3, 8, 10, 60, "2-0-1-1", "2'", "2-3", "", "Agarre prono, tirar al ombligo"],
-    ["A", 4, "Curl biceps", "Biceps", 3, 10, 12, 12.5, "2-0-1-0", "60", "1-2", "Extension triceps", ""],
-    ["A", 5, "Extension triceps", "Triceps", 3, 10, 12, "", "2-0-1-0", "60", "1-2", "Curl biceps", ""],
-    ["B", 1, "Peso muerto", "Isquios", 4, 6, 8, 120, "2-0-1-0", "3'", "2-3", "", "Convencional, espalda neutra"],
-    ["B", 2, "Dominadas", "Espalda", 3, 4, 8, "BW", "2-0-1-0", "180", "2-3", "", ""],
-    ["B", 3, "Press militar", "Hombros", 3, 8, 10, 40, "2-0-1-0", "120", "2-3", "", "De pie, core apretado"],
+    ["A", 1, "Sentadilla", "Cuadriceps", 4, 8, 10, 100, "2-0-1-0", "150", "2-3", "", "reps", "Barra alta, rodillas hacia afuera"],
+    ["A", 2, "Press plano", "Pecho", 3, 8, 10, 70, "2-0-1-0", "2'30\"", "2-3", "", "reps", ""],
+    ["A", 3, "Remo con barra", "Espalda", 3, 8, 10, 60, "2-0-1-1", "2'", "2-3", "", "reps", "Agarre prono, tirar al ombligo"],
+    ["A", 4, "Curl biceps", "Biceps", 3, 10, 12, 12.5, "2-0-1-0", "60", "1-2", "Extension triceps", "reps", ""],
+    ["A", 5, "Extension triceps", "Triceps", 3, 10, 12, "", "2-0-1-0", "60", "1-2", "Curl biceps", "reps", ""],
+    ["B", 1, "Peso muerto", "Isquios", 4, 6, 8, 120, "2-0-1-0", "3'", "2-3", "", "reps", "Convencional, espalda neutra"],
+    ["B", 2, "Dominadas", "Espalda", 3, 4, 8, "BW", "2-0-1-0", "180", "2-3", "", "reps", ""],
+    ["B", 3, "Caminata granjero", "Core", 3, 40, 60, "25kg/m", "", "120", "", "", "pasos", "Unidad 'pasos' para medir distancia en vez de repeticiones"],
   ];
   const ws = XLSX.utils.aoa_to_sheet([header, ...examples]);
   // Column widths
-  ws["!cols"] = [{ wch: 8 }, { wch: 6 }, { wch: 22 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 }, { wch: 35 }];
+  ws["!cols"] = [{ wch: 8 }, { wch: 6 }, { wch: 22 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 }, { wch: 8 }, { wch: 35 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Programa");
   XLSX.writeFile(wb, "forge-plantilla-programa.xlsx");
+}
+
+/* ---------- Excel export: historial ---------- */
+// Dos hojas con grano distinto: "Sesiones" para leer el ciclo de un vistazo,
+// "Series" con una fila por set — que es el grano que sirve para tabla dinamica.
+function exportHistory(entries, programName) {
+  const stamp = (ts) => {
+    const d = new Date(ts);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+
+  const sesiones = [["Fecha", "Semana", "Sesion", "Nombre sesion", "Duracion (min)", "Sueno", "Estres", "Energia", "Ejercicios", "Series", "Tonelaje (kg)"]];
+  const series = [["Fecha", "Semana", "Sesion", "Ejercicio", "Grupo", "Serie", "KG", "Reps", "RIR", "e1RM", "Semaforo"]];
+
+  for (const h of [...entries].sort((a, b) => a.date - b.date)) {
+    const exs = (h.exercises || []).filter((e) => e.sets?.length);
+    let tonelaje = 0, nSeries = 0;
+    for (const e of exs) {
+      for (const s of e.sets) {
+        nSeries++;
+        if (isNum(s.kg) && isNum(s.reps)) tonelaje += s.kg * s.reps;
+        const e1 = isNum(s.kg) && isNum(s.reps) ? brzycki(s.kg, s.reps) : null;
+        series.push([stamp(h.date), h.week, h.session, e.name, e.group || "", s.setN, isNum(s.kg) ? s.kg : "BW", s.reps ?? "", isNum(s.rir) ? s.rir : "", e1 ? round1(e1) : "", SEM_LABELS[e.sem] || ""]);
+      }
+    }
+    sesiones.push([stamp(h.date), h.week, h.session, h.sessionName || "", h.duration ?? "", h.health?.sleep ?? "", h.health?.stress ?? "", h.health?.energy ?? "", exs.length, nSeries, round1(tonelaje)]);
+  }
+
+  const wb = XLSX.utils.book_new();
+  const wsS = XLSX.utils.aoa_to_sheet(sesiones);
+  wsS["!cols"] = [{ wch: 17 }, { wch: 8 }, { wch: 8 }, { wch: 24 }, { wch: 14 }, { wch: 7 }, { wch: 7 }, { wch: 8 }, { wch: 11 }, { wch: 8 }, { wch: 13 }];
+  XLSX.utils.book_append_sheet(wb, wsS, "Sesiones");
+  const wsD = XLSX.utils.aoa_to_sheet(series);
+  wsD["!cols"] = [{ wch: 17 }, { wch: 8 }, { wch: 8 }, { wch: 26 }, { wch: 16 }, { wch: 7 }, { wch: 8 }, { wch: 7 }, { wch: 6 }, { wch: 8 }, { wch: 13 }];
+  XLSX.utils.book_append_sheet(wb, wsD, "Series");
+
+  const slug = (programName || "programa").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+  XLSX.writeFile(wb, `forge-historial-${slug}-${stamp(Date.now()).slice(0, 10)}.xlsx`);
 }
 
 function ImportWizard({ wizard, setWizard, onImport }) {
@@ -1015,6 +1069,7 @@ function ImportWizard({ wizard, setWizard, onImport }) {
       { key: "rir", label: "RIR", required: false },
       { key: "superset", label: "Superserie", required: false },
       { key: "order", label: "Orden", required: false },
+      { key: "unit", label: "Unidad (reps/pasos)", required: false },
       { key: "description", label: "Descripcion", required: false },
     ];
     const setMapping = (field, val) => setWizard((w) => ({ ...w, mapping: { ...w.mapping, [field]: val || undefined } }));
@@ -1310,6 +1365,8 @@ const CSS = `
 .prog-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .prog-header-row h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prog-switch-btn { width: 38px; height: 38px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #636366; font-size: 18px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.export-btn { height: 38px; padding: 0 14px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; }
+.export-btn:active { background: #F2F2F7; }
 .prog-edit-link { background: none; border: none; color: #2C6BED; font: 500 12px 'Inter'; cursor: pointer; padding: 0; margin-left: 4px; text-decoration: underline; }
 .prog-dup-btn { width: 100%; height: 46px; border-radius: 12px; border: 1px solid #D1D1D6; background: #FFF; color: #1C1C1E; font: 600 14px 'Inter'; cursor: pointer; }
 .ed-toggle-row { display: flex; }

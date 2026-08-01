@@ -32,7 +32,14 @@ Distinción clave que en Sheets no existe: **el Programa es una plantilla reutil
 
 ## 2. Arquitectura general
 
-Coherente con tu stack acordado (Next.js en Vercel + FastAPI en Hetzner):
+> **Actualizado 2026-07-30 — decisión tomada: Turso, no FastAPI + Postgres.**
+> Menos infra que mantener mientras se valida si el producto se vende, y coherente
+> con el resto del ecosistema (Tesorería ya corre sobre `@libsql/client`).
+> El volumen no justifica Postgres: ~2.000 logs por ciclo por atleta, ≈60.000 para
+> un entrenador con 30 alumnos. Las agregaciones del dashboard se resuelven en
+> memoria. Si el dashboard del coach algún día pide queries analíticas de verdad,
+> se migra — el schema es SQL estándar y la mudanza es acotada.
+> El bloque de abajo refleja la decisión; el diagrama FastAPI original queda obsoleto.
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -44,13 +51,16 @@ Coherente con tu stack acordado (Next.js en Vercel + FastAPI en Hetzner):
 └──────────────┬──────────────────────────────┘
                │ HTTPS JSON (cuando hay red)
 ┌──────────────▼──────────────────────────────┐
-│  FastAPI — Hetzner VPS                      │
-│  ├── Auth (JWT + refresh, roles)            │
-│  ├── /sync (push/pull incremental)          │
-│  ├── /import/excel (parseo openpyxl)        │
-│  └── PostgreSQL (fuente de verdad remota)   │
+│  Route handlers Next.js — mismo deploy      │
+│  ├── NextAuth (JWT, roles)                  │
+│  ├── /api/sync (push/pull incremental)      │
+│  ├── /api/import/excel (SheetJS, ya existe) │
+│  └── Turso / libSQL (fuente de verdad)      │
 └─────────────────────────────────────────────┘
 ```
+
+El schema real está en `db/v01_init.sql` (aplicado con `npm run migrate`), no en la
+sección 3.2 de este documento, que quedó como referencia de diseño.
 
 Por qué IndexedDB vía Dexie y no SQLite/OPFS: Dexie es maduro, funciona en Safari iOS (crítico: la app se usa desde el celular en el gimnasio), tiene `dexie-observable` para reactividad y el bundle es chico. SQLite-WASM sobre OPFS es más potente para queries analíticas, pero el volumen de datos (150 filas de programa + ~2.000 logs por ciclo) no lo justifica. Las agregaciones del Dashboard se resuelven en memoria sin problema.
 
@@ -163,7 +173,19 @@ class ForgeDB extends Dexie {
 export const db = new ForgeDB();
 ```
 
-### 3.2 Remoto (PostgreSQL)
+### 3.2 Remoto (PostgreSQL) — SUPERSEDIDO por `db/v01_init.sql`
+
+> ⚠️ Esta sección quedó como referencia de diseño. El schema vigente es SQLite/libSQL
+> en `db/v01_init.sql`. Dos diferencias importantes respecto de lo que está acá abajo:
+>
+> 1. **`ref_kg` NO vive en `program_exercises`.** Tal como estaba, un programa asignado
+>    a 10 alumnos les imponía los mismos kilos — contradiciendo la propia línea 29 de
+>    este documento. La referencia es lo más personal que hay: sale de la autorregulación
+>    de *ese* atleta. Ahora hay `assignment_refs (assignment_id, program_exercise_id, week)`
+>    y la app resuelve `COALESCE(ref de la semana, ref general del alumno, ref de la plantilla)`.
+>    El `week` además habilita periodización real (subir refs en Sem 4) sin ensuciar la plantilla.
+> 2. **El entrenador es entidad de primera clase** (`coaches`), no un `coach_id` colgado
+>    de `users`: es la unidad que paga y a la que se le cuelga plan, límite de alumnos y features.
 
 Espejo del schema local más las tablas de identidad y asignación:
 
