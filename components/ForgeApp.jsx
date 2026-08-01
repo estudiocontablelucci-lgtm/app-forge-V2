@@ -1,5 +1,8 @@
+"use client";
+
 import { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
+import { brzycki, keyOf, isNum } from "@/lib/formulas";
 
 /* ============================================================
    FORGE — Tracking de entrenamiento (MVP v2)
@@ -51,13 +54,10 @@ const SEED = [
 
 /* ---------- Helpers ---------- */
 const uid = () => Math.random().toString(36).slice(2, 9);
-const brzycki = (kg, reps) => (reps > 0 && reps < 37 ? (kg * 36) / (37 - reps) : null);
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const fmtRest = (s) => (s % 60 === 0 ? `${s / 60}'` : `${Math.floor(s / 60)}'${s % 60}"`);
 const setsFor = (ex, week) => (week === "DL" ? Math.max(1, ex.sets - 1) : ex.sets);
-const keyOf = (week, exId, n) => `${week}|${exId}|${n}`;
 const weekLabel = (w) => (w === "DL" ? "Deload" : `Sem ${w}`);
-const isNum = (v) => typeof v === "number" && !isNaN(v);
 const round1 = (v) => Math.round(v * 10) / 10;
 const fmtDate = (ts) => new Date(ts).toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 function refLine(ex) {

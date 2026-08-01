@@ -5,7 +5,7 @@
  *
  *   node scripts/gen-programa-xlsx.mjs
  *
- * Lee el SEED directamente de src/ForgeApp.jsx para que no pueda divergir del codigo.
+ * Lee el SEED directamente de components/ForgeApp.jsx para que no pueda divergir del codigo.
  * Salida: data/ (gitignored — son datos personales del atleta, no van al repo publico).
  */
 import { readFileSync, mkdirSync } from "node:fs";
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const src = readFileSync(resolve(root, "src/ForgeApp.jsx"), "utf8");
+const src = readFileSync(resolve(root, "components/ForgeApp.jsx"), "utf8");
 
 /** Extrae un array literal top-level del fuente y lo evalua. */
 function extractArray(name) {
