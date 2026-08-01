@@ -13,7 +13,8 @@
     "verify:excel": "node scripts/verify-import.mjs && node scripts/verify-export.mjs",
     "verify:schema": "node scripts/verify-schema.mjs",
     "verify:repo": "node scripts/verify-repo.mjs",
-    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo"
+    "verify:sync": "node scripts/verify-sync.mjs",
+    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
