@@ -8,7 +8,5 @@ db/*.db
 db/verify.db
 
 # credenciales — nunca al repo (es publico)
-.env
-.env.local
-.env.*.local
+.env*
 .vercel
