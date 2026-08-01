@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const src = readFileSync(resolve(root, "src/ForgeApp.jsx"), "utf8");
+const src = readFileSync(resolve(root, "components/ForgeApp.jsx"), "utf8");
 
 function extractArray(name) {
   const open = src.indexOf("[", src.indexOf(`const ${name} = [`));

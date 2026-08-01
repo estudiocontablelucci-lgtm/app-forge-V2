@@ -6,12 +6,12 @@ Estado actual del proyecto y decisiones tomadas.
 
 ## Estado general
 
-**Fase**: Fase 3 completada (programas multiples + descripciones + import Excel)
-**Deploy**: https://estudiocontablelucci-lgtm.github.io/app-forge-V2/
-**Ultima actualizacion**: 2026-07-30
+**Fase**: Fase 4 en curso — infraestructura lista, la UI todavia escribe en localStorage
+**Deploy**: pendiente de conectar el repo a Vercel (GitHub Pages quedo atras con la migracion a Next.js)
+**Ultima actualizacion**: 2026-08-01
 
-> El deploy sale de `main` via GitHub Actions. Una feature no esta en produccion
-> hasta que su rama se mergea a `main` y se pushea — verificar antes de dar una fase por cerrada.
+> El deploy sale de `main`. Una feature no esta en produccion hasta que su rama se
+> mergea a `main` y se pushea — verificar antes de dar una fase por cerrada.
 
 ---
 
@@ -40,9 +40,22 @@ Estado actual del proyecto y decisiones tomadas.
 - [x] Export del historial a Excel (hoja Sesiones + hoja Series, una fila por set)
 - [x] Programa real del atleta (Ciclo 2) cargado en el SEED con refs post-24/06/2026
 
+## Fase 4 — lo que ya esta
+
+- [x] Shell migrado de Vite/GitHub Pages a Next.js 15 App Router
+- [x] Base `forge` creada en Turso (org `gabriellucci`, grupo `default`, aws-eu-west-1)
+- [x] Schema v01 + v02 aplicados en la base local y en la remota
+- [x] Capa de datos `lib/repo/*` (usuarios, programas, refs por atleta, logs) con 16 checks
+- [x] `assignment_refs` operativo: dos atletas con el mismo programa tienen kilos distintos
+- [x] NextAuth v4 con adapter propio sobre `users`, Google OAuth + magic link por Resend
+- [x] Pantalla de login mobile-first
+
 ## Pendiente (futuro)
 
-- [ ] Persistencia con Turso + auth NextAuth
+- [ ] `/api/sync` — push de la cola de mutaciones + pull incremental por `updated_at`
+- [ ] Cablear la UI a la capa de datos (hoy `ForgeApp.jsx` sigue leyendo y escribiendo localStorage)
+- [ ] Migrar el localStorage existente a la base la primera vez que el usuario entra
+- [ ] Credenciales de Google OAuth (hay que crearlas en Google Cloud Console)
 - [ ] Multi-device sync
 - [ ] Roles coach/athlete + dashboard trainer
 - [ ] Override de `ref_kg` por asignacion (bloqueante para el caso multi-alumno)
@@ -105,9 +118,10 @@ un atleta independiente es un usuario sin `coach_id`, como ya plantea `forge-arq
 3. El entrenador es la unidad que paga y los alumnos son la metrica que se cobra → tiene que ser
    entidad de primera clase en el schema, no un `coach_id` colgado de `users`.
 
-**Decision abierta (bloquea el arranque de Fase 4)**: `forge-arquitectura.md` dice FastAPI + Postgres
-en Hetzner; el CLAUDE.md raiz dice Turso. Recomendacion: Turso + Next.js, agregaciones en memoria
-(el volumen es chico), migrar a Postgres solo si el dashboard del coach lo pide.
+**Resuelto el 2026-07-30 en `forge-arquitectura.md` seccion 2**: Turso + Next.js, no FastAPI +
+Postgres. Menos infra que mantener mientras se valida si el producto se vende, y coherente con
+Tesoreria, que ya corre sobre `@libsql/client`. Agregaciones en memoria; migrar a Postgres solo
+si el dashboard del coach pide queries analiticas de verdad.
 
 ### 2026-07 — Export a Excel si, API no (todavia)
 **Decision**: el historial se exporta a .xlsx desde el cliente (2 hojas: Sesiones y Series, una fila por set).
@@ -139,6 +153,30 @@ Solo dispara en la transicion, asi editar una sesion vieja en modo revision no r
 **Decision**: campo `description` (texto libre) en cada ejercicio. Visible como modal en entrenamiento (tap en nombre) y como badge `i` en programa.
 **Motivo**: permite al entrenador agregar indicaciones de postura, agarre, etc. que el atleta consulta durante el entrenamiento.
 
+### 2026-08 — Next.js + Vercel, se abandona GitHub Pages
+**Decision**: migrar el shell de Vite a Next.js 15 (App Router) y el deploy a Vercel.
+**Motivo**: no es una preferencia de framework — GitHub Pages sirve archivos estaticos y no puede
+correr NextAuth ni `/api/sync`. Sin route handlers no hay fase 4. Se hace de una sola vez, al
+principio, para no escribir codigo que despues haya que reescribir al mudarlo.
+**Costo asumido**: se pierde la URL de GitHub Pages. El workflow `deploy.yml` se elimino porque
+corria `vite build` y habria fallado en el primer push a `main`.
+
+### 2026-08 — Las funciones se deployan en Dublin, no en Sao Paulo
+**Decision**: `vercel.json` fija `regions: ["dub1"]`.
+**Motivo**: la base quedo en `aws-eu-west-1` (el plan starter de Turso permite un solo grupo y ahi
+viven las otras bases). Una request resuelve varias queries, asi que la latencia funcion↔base pesa
+mas que la del usuario↔funcion, que se paga una sola vez. `gru1` estaria mas cerca de Argentina
+pero cada query cruzaria el Atlantico. Si algun dia la base se muda a `sa-east-1`, mover esto tambien.
+
+### 2026-08 — Adapter de NextAuth propio en vez de uno de libreria
+**Decision**: `lib/auth/adapter.js` escrito a mano sobre la tabla `users` del dominio.
+**Motivo**: los adapters genericos crean su propia tabla de usuarios. Tendriamos la identidad
+partida entre esa tabla y `users` (que ya tiene `role`, `body_weight_kg`, `deleted_at` y de la que
+cuelgan programas y logs). Sesion JWT: no hace falta tabla de sesiones.
+**Gotcha que costo encontrar**: next-auth v4 es CommonJS y bajo Next 15 llega con doble envoltura
+(`mod.default.default`). Importarlo derecho da "NextAuth is not a function", y lo mismo cada
+provider. Se desenvuelve en `lib/auth/nextauth-interop.js` — importar desde ahi, no de `next-auth`.
+
 ---
 
 ## Modelo de datos — estado actual
@@ -153,5 +191,13 @@ history[]           → array de sesiones completadas con programId
 Ejercicios incluyen campo `description` (texto libre).
 Migracion automatica de v1 en `migrateState()`.
 
-### Target futuro (Turso/Dexie)
-Ver `forge-arquitectura.md` para schema completo con cycles, assignments, body_measurements, outbox.
+### Remoto (Turso) — aplicado, todavia sin datos
+16 tablas: las 13 del dominio (v01) + `auth_accounts` y `auth_verification_tokens` (v02) +
+`schema_migrations`. El SQL vive en `db/`; la base es `forge` en la org `gabriellucci`.
+
+La traduccion entre las dos formas vive en `lib/repo/*` y en ningun otro lado.
+
+**Las dos no estan conectadas todavia**: la UI sigue leyendo y escribiendo localStorage. El puente
+(`/api/sync` + migracion inicial del localStorage existente) es lo que falta de la fase 4.
+
+Ver `forge-arquitectura.md` para el diseno del sync engine y el outbox.

@@ -1,0 +1,9 @@
+/* En Next.js el arbol de la app cuelga directo de <body>: lo que antes
+   dimensionaba #root ahora va aca. */
+body {
+  margin: 0;
+  padding: 0;
+  background: #F2F2F7;
+  width: 100%;
+  min-height: 100vh;
+}

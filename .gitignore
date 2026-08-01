@@ -1,6 +1,12 @@
 node_modules
+.next
+out
 dist
 .DS_Store
 data
 db/*.db
 db/verify.db
+
+# credenciales — nunca al repo (es publico)
+.env*
+.vercel
