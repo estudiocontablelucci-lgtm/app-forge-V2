@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
-import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } from "@/lib/sync/client";
+import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } from "@/lib/sync/client";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
 import ExercisePicker from "./ExercisePicker";
@@ -269,6 +269,35 @@ export default function ForgeApp() {
   const deloadCfg = { ...DELOAD_DEFAULT, ...activeProgram?.deload };
   // Programa que prescribio un entrenador: el alumno registra, no edita.
   const esAsignado = Boolean(activeProgram?.readOnly);
+
+  /**
+   * Programas separados por para quien son.
+   *
+   * Se deriva de los datos en vez de guardar un "tipo": el mismo programa puede
+   * ser el que entrenás vos y a la vez el que le prescribís a un alumno, y
+   * obligar a elegir una categoria al crearlo seria una decision falsa. Los
+   * grupos vacios no se muestran, asi que quien entrena solo ve una lista.
+   */
+  const gruposDeProgramas = useMemo(() => {
+    const asignadosAMi = programs.filter((p) => p.readOnly);
+    const mios = programs.filter((p) => !p.readOnly);
+    const grupos = [];
+    if (mios.length) {
+      grupos.push({
+        titulo: asignadosAMi.length ? "Mis programas" : "Programas",
+        ayuda: null,
+        lista: mios,
+      });
+    }
+    if (asignadosAMi.length) {
+      grupos.push({
+        titulo: "De mi entrenador",
+        ayuda: "Los registrás pero no se editan: la prescripción es de quien te entrena.",
+        lista: asignadosAMi,
+      });
+    }
+    return grupos.length ? grupos : [{ titulo: "Programas", ayuda: null, lista: [] }];
+  }, [programs]);
   const sessions = activeProgram?.sessions || DEFAULT_SESSIONS;
   // Los nombres se resuelven contra el catalogo, asi que corregir uno ahi se
   // propaga a todos los programas que lo usan. El resto del codigo sigue
@@ -344,6 +373,15 @@ export default function ForgeApp() {
       setLogs((L) => ({ ...reconstruidos, ...L }));
     }
 
+    // Los programas propios se suben siempre, hayan sido entrenados o no: uno
+    // recien creado tiene que existir en el servidor para poder asignarselo a
+    // un alumno. Los ajenos (asignados por un entrenador) no se tocan.
+    let programasSubidos = 0;
+    for (const p of programsRef.current.filter((x) => !x.readOnly)) {
+      const res = await pushProgram(p);
+      if (res.ok) programasSubidos++;
+    }
+
     const pendientes = sesionesPendientes(historyRef.current, histRemoto);
 
     let subidas = 0;
@@ -356,6 +394,7 @@ export default function ForgeApp() {
 
     const partes = [`${histRemoto.length} en la nube`];
     if (subidas) partes.push(`${subidas} subida${subidas === 1 ? "" : "s"} recién`);
+    if (programasSubidos) partes.push(`${programasSubidos} programa${programasSubidos === 1 ? "" : "s"}`);
     setSyncState(`Sincronizado · ${partes.join(" · ")}.`);
     setSyncing(false);
   };
@@ -788,17 +827,31 @@ export default function ForgeApp() {
         {tab === "programa" && programListView && (
           <div className="screen">
             <header className="top"><div className="brand">FORGE</div><h1>Programas</h1><p className="sub">{programs.length} programa{programs.length !== 1 ? "s" : ""}</p></header>
-            <div className="prog-list">
-              {programs.map((p) => (
-                <button key={p.id} className={`prog-card ${p.id === activeProgramId ? "active" : ""}`} onClick={() => { setActiveProgramId(p.id); setProgSession(null); setProgramListView(false); }}>
-                  <div className="prog-card-main">
-                    <div className="prog-card-name">{p.name}</div>
-                    <div className="prog-card-meta">{p.sessions.length} sesiones · {p.exercises.length} ejercicios · {p.weeks} sem{p.hasDeload ? " + deload" : ""}</div>
+            {/* Los grupos se derivan, no hay un campo "tipo de programa": uno
+                puede ser propio hoy y estar asignado manana sin cambiar de
+                naturaleza. Con un solo grupo no se muestran encabezados. */}
+            {gruposDeProgramas.map(({ titulo, ayuda, lista }) => (
+              <div key={titulo} className="prog-grupo">
+                {gruposDeProgramas.length > 1 && (
+                  <div className="prog-grupo-head">
+                    <span className="prog-grupo-t">{titulo}</span>
+                    <span className="prog-grupo-n">{lista.length}</span>
                   </div>
-                  {p.id === activeProgramId && <span className="prog-active-badge">Activo</span>}
-                </button>
-              ))}
-            </div>
+                )}
+                {ayuda && gruposDeProgramas.length > 1 && <p className="prog-grupo-ayuda">{ayuda}</p>}
+                <div className="prog-list">
+                  {lista.map((p) => (
+                    <button key={p.id} className={`prog-card ${p.id === activeProgramId ? "active" : ""}`} onClick={() => { setActiveProgramId(p.id); setProgSession(null); setProgramListView(false); }}>
+                      <div className="prog-card-main">
+                        <div className="prog-card-name">{p.name}</div>
+                        <div className="prog-card-meta">{p.sessions.length} sesiones · {p.exercises.length} ejercicios · {p.weeks} sem{p.hasDeload ? " + deload" : ""}</div>
+                      </div>
+                      {p.id === activeProgramId && <span className="prog-active-badge">Activo</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
             <button className="addbtn" onClick={() => {
               const id = uid();
               setPrograms((ps) => [...ps, { id, name: "Nuevo programa", weeks: 4, hasDeload: true, sessions: [{ id: "A", name: "Sesion A" }], exercises: [], status: "draft", createdAt: Date.now() }]);
@@ -1799,6 +1852,11 @@ const CSS = `
 .alumno-baja { padding: 6px 12px; border: 1px solid #E5E5EA; border-radius: 999px; background: #fff; color: #636366; font: 600 12px 'Inter'; cursor: pointer; }
 .alumno-baja.si { border-color: #D93025; color: #D93025; }
 .alumno-confirm { display: flex; gap: 6px; }
+.prog-grupo { margin-bottom: 6px; }
+.prog-grupo-head { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px; }
+.prog-grupo-t { font: 600 11px 'Inter'; letter-spacing: .12em; text-transform: uppercase; color: #636366; }
+.prog-grupo-n { padding: 1px 7px; border-radius: 999px; background: #F2F2F7; color: #8E8E93; font: 600 10px 'Inter'; }
+.prog-grupo-ayuda { margin: 0 0 8px; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; }
 .prog-coach { display: inline-block; margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 11px 'Inter'; }
 .alumno-abrir { flex: 1; padding: 0; background: none; border: 0; text-align: left; cursor: pointer; }
 .ref-alumno { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F2F2F7; }

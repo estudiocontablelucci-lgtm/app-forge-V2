@@ -14,7 +14,7 @@
  */
 import { getServerSession } from "@/lib/auth/nextauth-interop";
 import { authOptions } from "@/lib/auth/options";
-import { pushForUser, pullForUser } from "@/lib/sync/service.js";
+import { pushForUser, pullForUser, pushProgramForUser } from "@/lib/sync/service.js";
 
 async function requireUser() {
   const session = await getServerSession(authOptions);
@@ -33,11 +33,15 @@ export async function POST(request) {
   }
 
   const { program, entry } = body || {};
-  if (!program?.id || !entry?.session) {
-    return Response.json({ error: "faltan program o entry" }, { status: 400 });
-  }
+  if (!program?.id) return Response.json({ error: "falta el program" }, { status: 400 });
 
   try {
+    // Sin `entry` es solo el programa: lo usa el sync para que un programa
+    // recien creado exista del lado del servidor sin esperar a que se entrene.
+    if (!entry?.session) {
+      const r = await pushProgramForUser(userId, program);
+      return Response.json({ ok: r.ok, soloPrograma: true, motivo: r.motivo || null });
+    }
     const r = await pushForUser(userId, { program, entry });
     return Response.json({ ok: true, ...r });
   } catch (e) {
