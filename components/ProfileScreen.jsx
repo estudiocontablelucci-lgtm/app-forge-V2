@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import CoachScreen from "./CoachScreen";
 
 /**
  * Perfil: datos de la cuenta y lo poco que el usuario puede editar de si mismo.
@@ -18,7 +17,6 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
   const [peso, setPeso] = useState("");
   const [estado, setEstado] = useState("cargando"); // cargando | listo | guardando | error
   const [error, setError] = useState(null);
-  const [verCoach, setVerCoach] = useState(false);
 
   useEffect(() => {
     let vigente = true;
@@ -117,19 +115,11 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
             </p>
           </div>
 
-          {/* Entrenar a otros es opcional: la seccion se despliega a pedido para
-              no meterle una pantalla de alumnos a quien solo entrena solo. */}
-          <div className="card">
-            <div className="flabel">Entrenar a otros</div>
-            {verCoach
-              ? <CoachScreen />
-              : (
-                <>
-                  <p className="fhint">Invitá alumnos y seguí sus entrenamientos.</p>
-                  <button className="btn-secondary" onClick={() => setVerCoach(true)}>Abrir mi espacio</button>
-                </>
-              )}
-          </div>
+          {/* Un enlace, no una seccion. Entrenar a otros dejo de vivir adentro
+              del Perfil: tiene pantalla propia, con ancho de escritorio y un
+              selector de alumno. Aca queda solo la puerta, porque para invitar
+              al primero hace falta poder llegar. */}
+          <a className="btn-ghost" href="/entrenador">Entrenar a otros →</a>
 
           <button className="btn-ghost" onClick={() => signOut({ callbackUrl: "/" })}>Cerrar sesión</button>
         </>
