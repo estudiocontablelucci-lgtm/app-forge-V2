@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import AlumnoDetalle from "./AlumnoDetalle";
 
 /**
  * Espacio de entrenador: invitar, ver alumnos y dar de baja.
@@ -15,6 +16,7 @@ export default function CoachScreen() {
   const [aviso, setAviso] = useState(null);
   const [error, setError] = useState(null);
   const [confirmarBaja, setConfirmarBaja] = useState(null);
+  const [verAlumno, setVerAlumno] = useState(null);
 
   const cargar = async () => {
     try {
@@ -65,6 +67,8 @@ export default function CoachScreen() {
     await fetch(`/api/coach?invitacion=${encodeURIComponent(inv.id)}`, { method: "DELETE" });
     await cargar();
   };
+
+  if (verAlumno) return <AlumnoDetalle alumno={verAlumno} onVolver={() => { setVerAlumno(null); cargar(); }} />;
 
   if (estado === "cargando") return <div className="empty">Cargando…</div>;
   if (estado === "error") return <div className="empty">No pudimos cargar tu espacio. Revisá la conexión.</div>;
@@ -123,10 +127,10 @@ export default function CoachScreen() {
           <div className="cardtitle">Alumnos</div>
           {alumnos.map((a) => (
             <div key={a.id} className="alumno-row">
-              <div>
+              <button className="alumno-abrir" onClick={() => setVerAlumno(a)}>
                 <div className="alumno-name">{a.name}</div>
                 <div className="alumno-sub">{a.email}</div>
-              </div>
+              </button>
               {confirmarBaja === a.id
                 ? (
                   <span className="alumno-confirm">
