@@ -4,9 +4,11 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, DELOAD_DEFAULT } from "@/lib/formulas";
+import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo } from "@/lib/catalog";
 import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } from "@/lib/sync/client";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
+import ExercisePicker from "./ExercisePicker";
 
 /* ============================================================
    FORGE — Tracking de entrenamiento (MVP v2)
@@ -170,11 +172,28 @@ function migrateState(raw) {
   return null;
 }
 
+/**
+ * v3: los ejercicios pasan a referenciar el catalogo.
+ *
+ * Se corre despues de migrateState y es idempotente: los ejercicios que ya
+ * tienen `exerciseId` quedan como estan. Los nombres se deduplican por nombre
+ * normalizado, asi que dos formas de escribir el mismo ejercicio terminan
+ * apuntando a la misma entrada.
+ */
+function migrarCatalogo(state) {
+  if (!state) return state;
+  const faltaMigrar = (state.programs || []).some((p) => (p.exercises || []).some((e) => !e.exerciseId));
+  if (state.catalog && !faltaMigrar) return state;
+
+  const { catalog, programs } = migrarACatalogo(state.programs, state.catalog);
+  return { ...state, catalog, programs };
+}
+
 function loadState() {
   try {
     const r = localStorage.getItem("forge-v2");
     if (!r) return null;
-    return migrateState(JSON.parse(r));
+    return migrarCatalogo(migrateState(JSON.parse(r)));
   } catch { return null; }
 }
 let saveT = null;
@@ -202,7 +221,13 @@ function ExSetRow({ ex, n, week, logs, onSetChange, deload }) {
 
 /* ============================================================ */
 export default function ForgeApp() {
-  const [programs, setPrograms] = useState([{ ...SEED_PROGRAM, exercises: SEED.map((e) => ({ ...e })) }]);
+  // El SEED arranca ya migrado al catalogo: una instalacion nueva no deberia
+  // pasar por la migracion de datos viejos.
+  const [{ programs: programsIniciales, catalog: catalogoInicial }] = useState(() =>
+    migrarACatalogo([{ ...SEED_PROGRAM, exercises: SEED.map((e) => ({ ...e })) }]));
+
+  const [programs, setPrograms] = useState(programsIniciales);
+  const [catalog, setCatalog] = useState(catalogoInicial);
   const [activeProgramId, setActiveProgramId] = useState("seed-dup-c2");
   const [logs, setLogs] = useState({});
   const [history, setHistory] = useState([]);
@@ -240,7 +265,13 @@ export default function ForgeApp() {
   // existiera no la traen y caen al default (-40% por series, piso de 2).
   const deloadCfg = { ...DELOAD_DEFAULT, ...activeProgram?.deload };
   const sessions = activeProgram?.sessions || DEFAULT_SESSIONS;
-  const program = activeProgram?.exercises || [];
+  // Los nombres se resuelven contra el catalogo, asi que corregir uno ahi se
+  // propaga a todos los programas que lo usan. El resto del codigo sigue
+  // leyendo ex.name sin enterarse de que hay un catalogo detras.
+  const program = useMemo(
+    () => resolverEjercicios(activeProgram?.exercises || [], catalog),
+    [activeProgram, catalog],
+  );
 
   // Helpers to update active program fields
   const updateActiveProgram = (updater) => setPrograms((ps) => ps.map((p) => p.id === activeProgramId ? (typeof updater === "function" ? updater(p) : { ...p, ...updater }) : p));
@@ -252,12 +283,13 @@ export default function ForgeApp() {
     if (s) {
       setPrograms(s.programs || [{ ...SEED_PROGRAM, exercises: SEED.map((e) => ({ ...e })) }]);
       setActiveProgramId(s.activeProgramId || s.programs?.[0]?.id || "seed-dup-c2");
+      if (s.catalog) setCatalog(s.catalog);
       setLogs(s.logs || {});
       setHistory(s.history || []);
     }
     setLoaded(true);
   }, []);
-  useEffect(() => { if (loaded) saveState({ programs, activeProgramId, logs, history }); }, [programs, activeProgramId, logs, history, loaded]);
+  useEffect(() => { if (loaded) saveState({ programs, catalog, activeProgramId, logs, history }); }, [programs, catalog, activeProgramId, logs, history, loaded]);
 
   // El historial se lee dentro de sincronizar() sin que sea una dependencia:
   // asi el boton siempre ve el estado actual y la funcion no se recrea en cada
@@ -517,7 +549,54 @@ export default function ForgeApp() {
     return [...enPrograma, ...retirados];
   }, [program, metrics, exercisesFueraDelPrograma]);
 
-  function saveExercise(draft) { setProgram((P) => { const exists = P.some((e) => e.id === draft.id); return exists ? P.map((e) => (e.id === draft.id ? draft : e)) : [...P, draft]; }); setEditing(null); }
+  /** Alta en el catalogo desde el editor, sin salir a otra pantalla. */
+  function crearEjercicio(nombre) {
+    const { catalog: nuevo, entrada } = agregarAlCatalogo(catalog, { name: nombre, group: null, unit: "reps" });
+    setCatalog(nuevo);
+    return entrada;
+  }
+
+  /**
+   * Si el ejercicio que se esta editando ya tiene series registradas y se le
+   * cambio la referencia del catalogo, devuelve el nombre con el que se
+   * entreno. Es lo que permite avisar que esto es una sustitucion y no una
+   * correccion de nombre.
+   */
+  function nombreSustituido(draft) {
+    const original = activeProgram?.exercises?.find((e) => e.id === draft.id);
+    if (!original?.exerciseId || original.exerciseId === draft.exerciseId) return null;
+    const tieneSeries = Object.keys(logs).some((k) => k.split("|")[1] === draft.id);
+    if (!tieneSeries) return null;
+    return buscarEnCatalogo(catalog, original.exerciseId)?.name || original.name;
+  }
+
+  /**
+   * Guarda el ejercicio del programa.
+   *
+   * Si se cambio el ejercicio del catalogo y ya habia series registradas, esto
+   * es una SUSTITUCION y no una edicion: entra como un ejercicio nuevo, con id
+   * propio, y el anterior sale del programa. Los logs viejos siguen colgando
+   * del id viejo, asi que su historial y su e1RM quedan separados — encadenar
+   * las series de dos maquinas distintas es exactamente contra lo que advierte
+   * el SEED ("su e1RM arranca como serie nueva, no continua la del belt squat").
+   *
+   * Cambiar el ejercicio SIN series registradas es corregir lo que se cargo mal:
+   * ahi se edita en el lugar y no se parte nada.
+   */
+  function saveExercise(draft) {
+    const esSustitucion = Boolean(nombreSustituido(draft));
+    setProgram((P) => {
+      if (esSustitucion) {
+        const sustituto = { ...draft, id: uid() };
+        return P
+          .map((e) => (e.superset === draft.id ? { ...e, superset: sustituto.id } : e))
+          .map((e) => (e.id === draft.id ? sustituto : e));
+      }
+      const exists = P.some((e) => e.id === draft.id);
+      return exists ? P.map((e) => (e.id === draft.id ? draft : e)) : [...P, draft];
+    });
+    setEditing(null);
+  }
   function deleteExercise(id) { setProgram((P) => P.filter((e) => e.id !== id).map((e) => (e.superset === id ? { ...e, superset: null } : e))); setEditing(null); }
 
   // Blocks for Programa tab (must be before early return)
@@ -893,7 +972,17 @@ export default function ForgeApp() {
           </div>
         )}
 
-        {editing && <ExerciseEditor draft={editing} setDraft={setEditing} siblings={program.filter((e) => e.session === editing.session && e.id !== editing.id)} onSave={saveExercise} onDelete={deleteExercise} isNew={!program.some((e) => e.id === editing.id)} />}
+        {editing && <ExerciseEditor
+          draft={editing}
+          setDraft={setEditing}
+          siblings={program.filter((e) => e.session === editing.session && e.id !== editing.id)}
+          onSave={saveExercise}
+          onDelete={deleteExercise}
+          isNew={!program.some((e) => e.id === editing.id)}
+          catalog={catalog}
+          onCrearEjercicio={crearEjercicio}
+          sustituido={nombreSustituido(editing)}
+        />}
 
         {/* ======== PROGRAM EDITOR MODAL ======== */}
         {editingProgram && (
@@ -995,16 +1084,24 @@ export default function ForgeApp() {
   );
 }
 
-function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew }) {
+function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, catalog, onCrearEjercicio, sustituido }) {
   const set = (f, v) => setDraft((d) => ({ ...d, [f]: v }));
   const num = (v, int) => { const n = int ? parseInt(v) : parseFloat(v); return isNaN(n) ? "" : n; };
+  // Elegir otro ejercicio del catalogo es sustituir, no renombrar: el nombre y
+  // el grupo pasan a ser los del ejercicio nuevo.
+  const elegirDelCatalogo = (c) => setDraft((d) => ({ ...d, exerciseId: c.id, name: c.name, group: c.group || "", unit: c.unit || d.unit }));
   return (
     <div className="overlay" onClick={() => setDraft(null)}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheethead"><h3>{isNew ? "Nuevo ejercicio" : "Editar ejercicio"}</h3><button className="x" onClick={() => setDraft(null)}>×</button></div>
         <div className="ed-form">
-          <label className="ed-full"><span>Ejercicio</span><input value={draft.name} onChange={(e) => set("name", e.target.value)} placeholder="Belt Squat" /></label>
-          <label className="ed-full"><span>Grupo muscular</span><input value={draft.group} onChange={(e) => set("group", e.target.value)} placeholder="Cuádriceps" /></label>
+          <ExercisePicker catalog={catalog} value={draft.exerciseId} onChange={elegirDelCatalogo} onCreate={onCrearEjercicio} />
+          {sustituido && (
+            <p className="ed-warn">
+              Estás cambiando de ejercicio. Las series ya registradas quedan con
+              <strong> {sustituido}</strong> y su e1RM no se encadena con el nuevo.
+            </p>
+          )}
           <div className="ed-row3">
             <label><span>Series</span><input className="mono" inputMode="numeric" value={draft.sets} onChange={(e) => set("sets", num(e.target.value, true))} /></label>
             <label><span>Reps min</span><input className="mono" inputMode="numeric" value={draft.repsMin} onChange={(e) => set("repsMin", num(e.target.value, true))} /></label>
@@ -1570,6 +1667,21 @@ const CSS = `
 .ed-textarea { height: auto; min-height: 70px; padding: 10px; font: 400 14px 'Inter'; resize: vertical; line-height: 1.5; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 10px; color: #1C1C1E; width: 100%; }
 .ed-textarea:focus { outline: none; border-color: #2C6BED; }
 .ed-full { width: 100%; }
+.picker-btn { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid #E5E5EA; border-radius: 10px; background: #fff; cursor: pointer; text-align: left; }
+.picker-name { font: 500 14px 'Inter'; color: #1C1C1E; }
+.picker-grp { font: 500 11px 'Inter'; color: #2C6BED; background: #EEF3FE; padding: 2px 7px; border-radius: 999px; }
+.picker-ph { font: 400 14px 'Inter'; color: #A1A1AA; }
+.picker-open { display: flex; flex-direction: column; gap: 6px; }
+.picker-label { font: 600 11px 'Inter'; color: #636366; text-transform: uppercase; letter-spacing: .04em; }
+.picker-search { width: 100%; height: 42px; box-sizing: border-box; padding: 0 12px; font-size: 16px; border: 1px solid #2C6BED; border-radius: 10px; }
+.picker-list { max-height: 210px; overflow-y: auto; border: 1px solid #E5E5EA; border-radius: 10px; }
+.picker-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: none; border: 0; border-bottom: 1px solid #F2F2F7; cursor: pointer; text-align: left; }
+.picker-item:last-child { border-bottom: none; }
+.picker-item.on { background: #EEF3FE; }
+.picker-item.nuevo { color: #2C6BED; font: 500 14px 'Inter'; }
+.picker-empty { padding: 14px 12px; font: 400 13px 'Inter'; color: #8E8E93; }
+.picker-cancel { align-self: flex-start; padding: 6px 0; background: none; border: 0; color: #8E8E93; font: 500 13px 'Inter'; cursor: pointer; }
+.ed-warn { width: 100%; margin: 2px 0 0; padding: 10px 12px; border-radius: 10px; background: #FFF7E6; color: #8A5B00; font: 400 12.5px 'Inter'; line-height: 1.45; }
 .ed-hint { width: 100%; margin: 2px 0 0; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; }
 .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ed-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
