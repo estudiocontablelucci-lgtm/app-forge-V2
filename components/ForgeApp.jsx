@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
-import { brzycki, keyOf, isNum } from "@/lib/formulas";
+import { brzycki, keyOf, isNum, setsFor, repsFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } from "@/lib/sync/client";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
@@ -60,13 +60,15 @@ const SEED = [
 const uid = () => Math.random().toString(36).slice(2, 9);
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const fmtRest = (s) => (s % 60 === 0 ? `${s / 60}'` : `${Math.floor(s / 60)}'${s % 60}"`);
-const setsFor = (ex, week) => (week === "DL" ? Math.max(1, ex.sets - 1) : ex.sets);
 const weekLabel = (w) => (w === "DL" ? "Deload" : `Sem ${w}`);
 const round1 = (v) => Math.round(v * 10) / 10;
 const fmtDate = (ts) => new Date(ts).toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-function refLine(ex) {
+function refLine(ex, week, deload) {
   const kg = ex.refKg === null || ex.refKg === "" ? "máquina" : ex.refKg === "BW" ? "BW" : `${ex.refKg}${isNum(ex.refKg) ? "kg" : ""}`;
-  return `${kg} × ${ex.repsMin}-${ex.repsMax} ${ex.unit === "pasos" ? "pasos" : ""}`.trim();
+  // En deload por reps el rango baja: mostrar el original seria pedir el
+  // volumen de una semana normal.
+  const { min, max } = repsFor(ex, week, deload);
+  return `${kg} × ${min}-${max} ${ex.unit === "pasos" ? "pasos" : ""}`.trim();
 }
 
 /* ---------- Blocks: group exercises into singles + superset groups ---------- */
@@ -103,12 +105,14 @@ function getBlocks(exercises) {
 function isDone(log) { return log && ((log.kg !== undefined && log.kg !== "") || (log.reps !== undefined && log.reps !== "")); }
 
 /* ---------- Semáforo ---------- */
-function semaphore(exercise, logs, week) {
-  const n = setsFor(exercise, week);
+function semaphore(exercise, logs, week, deload) {
+  const n = setsFor(exercise, week, deload);
   const sets = [];
   for (let i = 1; i <= n; i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push(l); }
   if (!sets.length || exercise.unit === "pasos") return "gray";
-  const guideReps = exercise.repsMin;
+  // La guia de reps es la de la semana: en un deload por reps, exigir el rango
+  // normal pintaria de rojo una sesion que se hizo exactamente como se pidio.
+  const guideReps = repsFor(exercise, week, deload).min;
   const guideRir = parseFloat(exercise.rir) || 0;
   const repsOk = sets.every((s) => parseInt(s.reps) >= guideReps);
   const rirsValid = sets.filter((s) => isNum(parseFloat(s.rir)));
@@ -177,7 +181,7 @@ let saveT = null;
 function saveState(s) { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem("forge-v2", JSON.stringify(s)); } catch {} }, 500); }
 
 /* ---------- Mini components ---------- */
-function ExSetRow({ ex, n, week, logs, onSetChange }) {
+function ExSetRow({ ex, n, week, logs, onSetChange, deload }) {
   const k = keyOf(week, ex.id, n);
   const l = logs[k] || {};
   const handleChange = (field, val) => onSetChange(ex, n, field, val);
@@ -188,7 +192,7 @@ function ExSetRow({ ex, n, week, logs, onSetChange }) {
       <span className="setn mono">S{n}</span>
       <input className="nf mono" inputMode="decimal" placeholder={isNum(ex.refKg) ? String(ex.refKg) : ex.refKg === "BW" ? "0" : "—"}
         value={l.kg ?? ""} onFocus={prefillKg} onChange={(e) => handleChange("kg", e.target.value)} />
-      <input className="nf mono" inputMode="numeric" placeholder={`${ex.repsMax}`}
+      <input className="nf mono" inputMode="numeric" placeholder={String(repsFor(ex, week, deload).max)}
         value={l.reps ?? ""} onChange={(e) => handleChange("reps", e.target.value)} />
       <input className="nf mono" inputMode="decimal" placeholder={ex.rir || "—"}
         value={l.rir ?? ""} onChange={(e) => handleChange("rir", e.target.value)} />
@@ -232,6 +236,9 @@ export default function ForgeApp() {
 
   // Derived: active program, sessions, exercises
   const activeProgram = programs.find((p) => p.id === activeProgramId) || programs[0];
+  // Config de deload del programa. Los programas creados antes de que esto
+  // existiera no la traen y caen al default (-40% por series, piso de 2).
+  const deloadCfg = { ...DELOAD_DEFAULT, ...activeProgram?.deload };
   const sessions = activeProgram?.sessions || DEFAULT_SESSIONS;
   const program = activeProgram?.exercises || [];
 
@@ -341,15 +348,15 @@ export default function ForgeApp() {
   const blocks = useMemo(() => getBlocks(sessionExs), [sessionExs]);
   const block = blocks[blockIdx];
 
-  function countDone(exercise) { let n = 0; for (let i = 1; i <= setsFor(exercise, week); i++) if (isDone(logs[keyOf(week, exercise.id, i)])) n++; return n; }
-  function blockDone(b) { return b.exercises.every((ex) => countDone(ex) >= setsFor(ex, week)); }
+  function countDone(exercise) { let n = 0; for (let i = 1; i <= setsFor(exercise, week, deloadCfg); i++) if (isDone(logs[keyOf(week, exercise.id, i)])) n++; return n; }
+  function blockDone(b) { return b.exercises.every((ex) => countDone(ex) >= setsFor(ex, week, deloadCfg)); }
 
   // Descanso: arranca cuando se completa la vuelta. En superserie, recién al
   // cerrar la serie N de todos los ejercicios del bloque (ese es el punto de la SS).
   function maybeStartRest(exercise, setN) {
     const b = blocks.find((bl) => bl.exercises.some((e) => e.id === exercise.id));
     const mates = b && b.type === "superset" ? b.exercises : [exercise];
-    const roundDone = mates.every((e) => e.id === exercise.id || setN > setsFor(e, week) || isDone(logs[keyOf(week, e.id, setN)]));
+    const roundDone = mates.every((e) => e.id === exercise.id || setN > setsFor(e, week, deloadCfg) || isDone(logs[keyOf(week, e.id, setN)]));
     if (!roundDone) return;
     const rest = Math.max(0, ...mates.map((e) => e.rest || 0));
     if (!rest) return;
@@ -376,7 +383,7 @@ export default function ForgeApp() {
     const pw = week === "DL" ? 4 : week - 1;
     if (!pw || pw < 1) return null;
     const rows = [];
-    for (let i = 1; i <= setsFor(exercise, pw); i++) { const l = logs[keyOf(pw, exercise.id, i)]; if (l?.done) rows.push(l); }
+    for (let i = 1; i <= setsFor(exercise, pw, deloadCfg); i++) { const l = logs[keyOf(pw, exercise.id, i)]; if (l?.done) rows.push(l); }
     if (!rows.length) return null;
     // Los logs guardan lo que sale del input: strings. `isNum` exige un number,
     // asi que sin parsear esto daba 0 siempre y la referencia nunca aparecia.
@@ -389,7 +396,7 @@ export default function ForgeApp() {
 
   function hasSessionData(w, sessId) {
     return program.filter((e) => e.session === sessId).some((ex) => {
-      for (let i = 1; i <= setsFor(ex, w); i++) if (isDone(logs[keyOf(w, ex.id, i)])) return true;
+      for (let i = 1; i <= setsFor(ex, w, deloadCfg); i++) if (isDone(logs[keyOf(w, ex.id, i)])) return true;
       return false;
     });
   }
@@ -398,7 +405,7 @@ export default function ForgeApp() {
     setLogs((L) => {
       const next = { ...L };
       program.filter((e) => e.session === sessId).forEach((ex) => {
-        for (let i = 1; i <= setsFor(ex, w); i++) delete next[keyOf(w, ex.id, i)];
+        for (let i = 1; i <= setsFor(ex, w, deloadCfg); i++) delete next[keyOf(w, ex.id, i)];
       });
       return next;
     });
@@ -432,8 +439,8 @@ export default function ForgeApp() {
       const exs = program.filter((e) => e.session === session);
       const exerciseData = exs.map((exercise) => {
         const sets = [];
-        for (let i = 1; i <= setsFor(exercise, week); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
-        return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week) };
+        for (let i = 1; i <= setsFor(exercise, week, deloadCfg); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
+        return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week, deloadCfg) };
       });
       const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData };
       // Replace existing entry for same week+session, or add new
@@ -584,8 +591,8 @@ export default function ForgeApp() {
               {sessions.map((sess) => {
                 const exs = program.filter((e) => e.session === sess.id);
                 const groups = [...new Set(exs.map((e) => e.group))].slice(0, 3).join(" · ");
-                const total = exs.reduce((a, e) => a + setsFor(e, week), 0);
-                const done = exs.reduce((a, e) => { let n = 0; for (let i = 1; i <= setsFor(e, week); i++) if (logs[keyOf(week, e.id, i)]?.done) n++; return a + n; }, 0);
+                const total = exs.reduce((a, e) => a + setsFor(e, week, deloadCfg), 0);
+                const done = exs.reduce((a, e) => { let n = 0; for (let i = 1; i <= setsFor(e, week, deloadCfg); i++) if (logs[keyOf(week, e.id, i)]?.done) n++; return a + n; }, 0);
                 const allDone = done === total && total > 0;
                 return (
                   <button key={sess.id} className={`scard ${allDone ? "completed" : ""}`} onClick={() => startSession(sess.id)}>
@@ -632,19 +639,19 @@ export default function ForgeApp() {
                   {(() => { const pv = prevWeekSummary(ex); return pv?.e1rm ? <span className="pv-mini mono" title={weekLabel(pv.pw)}>e1RM {pv.e1rm}</span> : null; })()}
                 </div>
                 <div className="refline mono">
-                  Ref: {refLine(ex)}{ex.tempo ? <><span className="sep">|</span> T {ex.tempo}</> : null}<span className="sep">|</span> D {fmtRest(ex.rest)}{ex.rir ? <><span className="sep">|</span> RIR {ex.rir}</> : null}
+                  Ref: {refLine(ex, week, deloadCfg)}{ex.tempo ? <><span className="sep">|</span> T {ex.tempo}</> : null}<span className="sep">|</span> D {fmtRest(ex.rest)}{ex.rir ? <><span className="sep">|</span> RIR {ex.rir}</> : null}
                 </div>
 
                 <div className="sets">
                   <div className="setshead"><span></span><span>{ex.refKg === "BW" ? "+KG" : "KG"}</span><span>{ex.unit === "pasos" ? "PASOS" : "REPS"}</span><span>RIR</span></div>
-                  {Array.from({ length: setsFor(ex, week) }, (_, i) => i + 1).map((n) => (
-                    <ExSetRow key={n} ex={ex} n={n} week={week} logs={logs} onSetChange={onSetChange} />
+                  {Array.from({ length: setsFor(ex, week, deloadCfg) }, (_, i) => i + 1).map((n) => (
+                    <ExSetRow key={n} ex={ex} n={n} week={week} logs={logs} onSetChange={onSetChange} deload={deloadCfg} />
                   ))}
                 </div>
 
                 {(() => {
                   let best = 0;
-                  for (let i = 1; i <= setsFor(ex, week); i++) { const l = logs[keyOf(week, ex.id, i)]; if (isDone(l) && isNum(parseFloat(l.kg)) && parseInt(l.reps)) best = Math.max(best, brzycki(parseFloat(l.kg), parseInt(l.reps)) || 0); }
+                  for (let i = 1; i <= setsFor(ex, week, deloadCfg); i++) { const l = logs[keyOf(week, ex.id, i)]; if (isDone(l) && isNum(parseFloat(l.kg)) && parseInt(l.reps)) best = Math.max(best, brzycki(parseFloat(l.kg), parseInt(l.reps)) || 0); }
                   return best > 0 ? <div className="ex-footer"><span className="e1rmnow mono">e1RM: <b>{Math.round(best)}</b></span></div> : null;
                 })()}
               </div>
@@ -719,7 +726,7 @@ export default function ForgeApp() {
                       setEditing({ ...e });
                     }}>
                       <div className="pmain"><div className="pname">{e.name}{e.description && <span className="desc-hint-sm">i</span>}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}</div></div>
-                      <div className="pnums mono">{e.sets}x{e.repsMin}-{e.repsMax} · {refLine(e).split(" ×")[0]}</div>
+                      <div className="pnums mono">{e.sets}x{e.repsMin}-{e.repsMax} · {refLine(e, null, deloadCfg).split(" ×")[0]}</div>
                     </button>
                   ))}
                 </div>
@@ -899,9 +906,41 @@ export default function ForgeApp() {
                   <label><span>Semanas</span><input className="mono" inputMode="numeric" value={editingProgram.weeks} onChange={(e) => setEditingProgram((p) => ({ ...p, weeks: parseInt(e.target.value) || 0 }))} /></label>
                   <label className="ed-check-label"><span>Deload</span><div className="ed-toggle-row"><button className={`ed-toggle ${editingProgram.hasDeload ? "on" : ""}`} onClick={() => setEditingProgram((p) => ({ ...p, hasDeload: !p.hasDeload }))}>{editingProgram.hasDeload ? "Si" : "No"}</button></div></label>
                 </div>
+
+                {editingProgram.hasDeload && (() => {
+                  const d = { ...DELOAD_DEFAULT, ...editingProgram.deload };
+                  const setD = (campo, valor) => setEditingProgram((p) => ({ ...p, deload: { ...DELOAD_DEFAULT, ...p.deload, [campo]: valor } }));
+                  return (
+                    <>
+                      <div className="ed-row2">
+                        <label><span>Reducir</span>
+                          <input className="mono" inputMode="numeric" value={d.pct}
+                            onChange={(e) => setD("pct", Math.min(90, Math.max(0, parseInt(e.target.value) || 0)))} />
+                        </label>
+                        <label className="ed-check-label"><span>Quitando</span>
+                          <div className="ed-toggle-row">
+                            <button className={`ed-toggle ${d.method === "sets" ? "on" : ""}`} onClick={() => setD("method", "sets")}>Series</button>
+                            <button className={`ed-toggle ${d.method === "reps" ? "on" : ""}`} onClick={() => setD("method", "reps")}>Reps</button>
+                          </div>
+                        </label>
+                      </div>
+                      {d.method === "sets" && (
+                        <label className="ed-full"><span>Mínimo de series</span>
+                          <input className="mono" inputMode="numeric" value={d.minSets}
+                            onChange={(e) => setD("minSets", Math.max(1, parseInt(e.target.value) || 1))} />
+                        </label>
+                      )}
+                      <p className="ed-hint">
+                        {d.method === "sets"
+                          ? `Deload al ${100 - d.pct}% de las series, nunca menos de ${d.minSets}. Un ejercicio de 3 series pasa a ${setsFor({ sets: 3 }, "DL", d)}; uno de 2, a ${setsFor({ sets: 2 }, "DL", d)}.`
+                          : `Deload al ${100 - d.pct}% de las reps, con las mismas series. Un rango de 10-12 pasa a ${repsFor({ repsMin: 10, repsMax: 12 }, "DL", d).min}-${repsFor({ repsMin: 10, repsMax: 12 }, "DL", d).max}.`}
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
               <div className="sheetactions" style={{ flexDirection: "column", gap: 8 }}>
-                <button className="save" onClick={() => { updateActiveProgram({ name: editingProgram.name, weeks: editingProgram.weeks, hasDeload: editingProgram.hasDeload }); setEditingProgram(null); }}>Guardar</button>
+                <button className="save" onClick={() => { updateActiveProgram({ name: editingProgram.name, weeks: editingProgram.weeks, hasDeload: editingProgram.hasDeload, deload: { ...DELOAD_DEFAULT, ...editingProgram.deload } }); setEditingProgram(null); }}>Guardar</button>
                 <button className="prog-dup-btn" onClick={() => {
                   const id = uid();
                   const dup = { ...activeProgram, id, name: activeProgram.name + " (copia)", exercises: activeProgram.exercises.map((e) => ({ ...e, id: uid() })), createdAt: Date.now() };
@@ -1531,6 +1570,7 @@ const CSS = `
 .ed-textarea { height: auto; min-height: 70px; padding: 10px; font: 400 14px 'Inter'; resize: vertical; line-height: 1.5; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 10px; color: #1C1C1E; width: 100%; }
 .ed-textarea:focus { outline: none; border-color: #2C6BED; }
 .ed-full { width: 100%; }
+.ed-hint { width: 100%; margin: 2px 0 0; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; }
 .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ed-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
