@@ -117,6 +117,19 @@ identidad: entrar por Google o por magic link cae en el mismo `users.id`.
 bajo Next 15 llega con doble envoltura CJS/ESM. Sin eso: "X is not a function".
 Importar los providers y el handler **desde ahi**, no desde `next-auth` directo.
 
+### Dos gotchas de entorno que ya costaron tiempo
+
+**No correr `npm run build` con `next dev` levantado.** Comparten `.next/` y el
+manifest de client components queda desincronizado. Sintoma: *"Could not find the
+module ...#default in the React Client Manifest"* al navegar. Se arregla parando
+el server, borrando `.next` entero y levantando de nuevo.
+
+**Un puerto, un proyecto.** Los service workers se registran por **origen**, no por
+proyecto: si otra app PWA uso `localhost:3000`, su SW intercepta lo de FORGE y
+sirve assets cacheados ajenos — la app compila, responde 200 y se ve en blanco.
+FORGE se queda en el 3000 porque tiene el puerto atado a `NEXTAUTH_URL` y a los
+redirect URIs de Google; lo demas se mueve. `npm run verify:ui` detecta el sintoma.
+
 ### Dependencias
 - `xlsx` (SheetJS) — parseo client-side de Excel para import/export
 - `@libsql/client` — acceso a Turso
