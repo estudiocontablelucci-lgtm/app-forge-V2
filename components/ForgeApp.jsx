@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum } from "@/lib/formulas";
-import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory } from "@/lib/sync/client";
+import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } from "@/lib/sync/client";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
 
@@ -224,6 +224,7 @@ export default function ForgeApp() {
   const [importWizard, setImportWizard] = useState(null); // { step, data, mapping, preview, name }
   const [showProfile, setShowProfile] = useState(false);
   const [syncState, setSyncState] = useState(null); // texto para la pantalla de perfil
+  const [syncing, setSyncing] = useState(false);
 
   // Sesion: si hay, se sincroniza; si no, la app funciona igual solo con localStorage.
   const { data: authSession } = useSession();
@@ -251,26 +252,68 @@ export default function ForgeApp() {
   }, []);
   useEffect(() => { if (loaded) saveState({ programs, activeProgramId, logs, history }); }, [programs, activeProgramId, logs, history, loaded]);
 
-  // Pull al entrar, una sola vez por login. Lo remoto se suma a lo local sin
-  // pisarlo: el usuario puede estar a mitad de una sesion cuando esto resuelve.
+  // El historial se lee dentro de sincronizar() sin que sea una dependencia:
+  // asi el boton siempre ve el estado actual y la funcion no se recrea en cada
+  // serie que se registra.
+  const historyRef = useRef(history);
+  historyRef.current = history;
+  const programsRef = useRef(programs);
+  programsRef.current = programs;
+
+  /**
+   * Sincroniza en los dos sentidos: baja lo que hay en la nube y sube las
+   * sesiones locales que no llegaron.
+   *
+   * Lo segundo es el caso del gimnasio: si al terminar de entrenar no habia
+   * senal, el push quedo sin hacer y la sesion vive solo en el telefono. Sin
+   * esto habria que volver a registrarla a mano.
+   */
+  const sincronizar = async () => {
+    if (!signedIn || syncing) return;
+    setSyncing(true);
+    setSyncState("Sincronizando…");
+
+    const r = await pullAll();
+    if (!r.ok) {
+      setSyncState(r.motivo === "sin-red"
+        ? "Sin conexión. Lo tuyo está guardado en el teléfono."
+        : "No se pudo sincronizar. Reintentá en un rato.");
+      setSyncing(false);
+      return;
+    }
+
+    const { programs: remotos = [], history: histRemoto = [] } = r.data;
+    if (remotos.length) setPrograms((P) => mergePrograms(P, remotos));
+    if (histRemoto.length) {
+      setHistory((H) => mergeHistory(H, histRemoto));
+      // Lo local va segundo y por lo tanto gana: el usuario puede estar a
+      // mitad de una serie cuando esto resuelve y no se le pisa nada.
+      const reconstruidos = logsFromHistory(histRemoto);
+      setLogs((L) => ({ ...reconstruidos, ...L }));
+    }
+
+    const pendientes = sesionesPendientes(historyRef.current, histRemoto);
+
+    let subidas = 0;
+    for (const h of pendientes) {
+      const prog = programsRef.current.find((p) => p.id === h.programId) || programsRef.current[0];
+      if (!prog) continue;
+      const res = await pushSession({ program: prog, entry: h });
+      if (res.ok) subidas++;
+    }
+
+    const partes = [`${histRemoto.length} en la nube`];
+    if (subidas) partes.push(`${subidas} subida${subidas === 1 ? "" : "s"} recién`);
+    setSyncState(`Sincronizado · ${partes.join(" · ")}.`);
+    setSyncing(false);
+  };
+
+  // Pull automatico al entrar, una sola vez por login.
   const pulled = useRef(false);
   useEffect(() => {
     if (!loaded || !signedIn || pulled.current) return;
     pulled.current = true;
-    (async () => {
-      const r = await pullAll();
-      if (!r.ok) { setSyncState(r.motivo === "sin-red" ? "Sin conexión: trabajando local." : null); return; }
-      const { programs: remotos = [], history: histRemoto = [] } = r.data;
-      if (remotos.length) setPrograms((P) => mergePrograms(P, remotos));
-      if (histRemoto.length) {
-        setHistory((H) => mergeHistory(H, histRemoto));
-        // Lo local va segundo y por lo tanto gana: el usuario puede estar a
-        // mitad de una serie cuando esto resuelve y no se le pisa nada.
-        const reconstruidos = logsFromHistory(histRemoto);
-        setLogs((L) => ({ ...reconstruidos, ...L }));
-      }
-      setSyncState(`Sincronizado · ${histRemoto.length} sesión${histRemoto.length === 1 ? "" : "es"} en la nube.`);
-    })();
+    sincronizar();
   }, [loaded, signedIn]);
 
   useEffect(() => {
@@ -448,7 +491,12 @@ export default function ForgeApp() {
       <div className="forge">
         <style>{CSS}</style>
         <div className="phone">
-          <ProfileScreen onClose={() => setShowProfile(false)} syncState={syncState} />
+          <ProfileScreen
+            onClose={() => setShowProfile(false)}
+            syncState={syncState}
+            onSync={sincronizar}
+            syncing={syncing}
+          />
         </div>
       </div>
     );
@@ -1396,6 +1444,8 @@ const CSS = `
 .btn-primary { width: 100%; height: 50px; margin-top: 18px; border: 0; border-radius: 12px; background: #2C6BED; color: #fff; font: 600 16px 'Inter'; cursor: pointer; }
 .btn-primary:disabled { opacity: .45; cursor: default; }
 .btn-ghost { width: 100%; height: 50px; margin-top: 12px; border: 1px solid #E5E5EA; border-radius: 12px; background: #fff; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
+.btn-secondary { width: 100%; height: 46px; margin-top: 12px; border: 1px solid #2C6BED; border-radius: 12px; background: #fff; color: #2C6BED; font: 600 15px 'Inter'; cursor: pointer; }
+.btn-secondary:disabled { opacity: .5; cursor: default; }
 .ticon { font-size: 18px; line-height: 1; }
 /* Lock card */
 .lock-card { display: flex; align-items: center; gap: 14px; padding: 18px; background: #FFF; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
