@@ -29,7 +29,7 @@ for (const f of readdirSync(resolve(root, "db")).filter((f) => /^v\d+_.*\.sql$/.
 
 const users = await import("../lib/repo/users.js");
 const { pushForUser, pullForUser } = await import("../lib/sync/service.js");
-const { mergeHistory, mergePrograms, logsFromHistory } = await import("../lib/sync/client.js");
+const { mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } = await import("../lib/sync/client.js");
 
 const fallas = [];
 const check = async (label, fn) => {
@@ -172,6 +172,28 @@ await check("logsFromHistory reconstruye las series que alimentan el semaforo", 
   const todosString = Object.values(logs).every((l) =>
     typeof l.kg === "string" && typeof l.reps === "string" && typeof l.rir === "string");
   if (!todosString) return "hay valores que no son string";
+  return true;
+});
+
+await check("sesionesPendientes detecta lo que quedo sin subir", () => {
+  // El caso real: entrenaste sin senal, el push fallo y la sesion vive solo en
+  // el telefono. El boton "Sincronizar ahora" tiene que encontrarla.
+  const local = [
+    { programId: "p1", week: 1, session: "A", date: 100 },
+    { programId: "p1", week: 3, session: "B", date: 300 },   // no subio
+  ];
+  const remoto = [{ programId: "p1", week: 1, session: "A", date: 100 }];
+
+  const pend = sesionesPendientes(local, remoto);
+  if (pend.length !== 1) return `${pend.length} pendientes, esperaba 1`;
+  if (pend[0].week !== 3) return `detecto la semana ${pend[0].week} en vez de la 3`;
+
+  if (sesionesPendientes(local, local).length !== 0) return "marco pendientes cuando esta todo arriba";
+  if (sesionesPendientes([], remoto).length !== 0) return "invento pendientes con historial local vacio";
+
+  // Misma semana y sesion en OTRO programa no es la misma sesion.
+  const otroPrograma = sesionesPendientes([{ programId: "p2", week: 1, session: "A", date: 1 }], remoto);
+  if (otroPrograma.length !== 1) return "confundio dos programas distintos";
   return true;
 });
 

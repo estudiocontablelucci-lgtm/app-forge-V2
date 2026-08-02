@@ -10,7 +10,7 @@ import { useSession, signOut } from "next-auth/react";
  * ejercicios con `refKg: "BW"` (dominadas, fondos), que hoy quedan fuera del
  * progreso porque no hay con que multiplicar.
  */
-export default function ProfileScreen({ onClose, syncState }) {
+export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
   const { data: session } = useSession();
   const [user, setUser] = useState(null);
   const [nombre, setNombre] = useState("");
@@ -104,6 +104,15 @@ export default function ProfileScreen({ onClose, syncState }) {
           <div className="card">
             <div className="flabel">Sincronización</div>
             <p className="fhint">{syncState || "Los entrenamientos se suben al terminar cada sesión."}</p>
+            {onSync && (
+              <button className="btn-secondary" onClick={onSync} disabled={syncing}>
+                {syncing ? "Sincronizando…" : "Sincronizar ahora"}
+              </button>
+            )}
+            <p className="fhint">
+              Baja lo que esté en la nube y sube las sesiones que hayan quedado
+              en el teléfono por falta de señal.
+            </p>
           </div>
 
           <button className="btn-ghost" onClick={() => signOut({ callbackUrl: "/" })}>Cerrar sesión</button>
