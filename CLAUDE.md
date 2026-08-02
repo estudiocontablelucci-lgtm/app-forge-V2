@@ -52,7 +52,9 @@ app-forge-v2/
 │   ├── verify-import.mjs      # round-trip del import, contra los helpers reales
 │   ├── verify-export.mjs      # export del historial contra historial sintetico
 │   ├── verify-schema.mjs      # invariantes del schema sobre base descartable
-│   └── verify-repo.mjs        # capa de datos real sobre base descartable
+│   ├── verify-repo.mjs        # capa de datos real sobre base descartable
+│   ├── verify-sync.mjs        # aislamiento entre usuarios + merge del cliente
+│   └── check_ui.py            # headless: falla si una ruta no hidrata (requiere app levantada)
 ├── data/                  # .xlsx generados (gitignored — datos personales)
 ├── forge-arquitectura.md  # documento de diseno tecnico completo
 ├── forge-mvp.jsx          # version anterior de referencia

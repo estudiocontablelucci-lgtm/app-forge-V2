@@ -110,6 +110,16 @@ npm run verify          # corre todas las verificaciones
   por alumno y por semana, cascadas, constraints
 - `verify:repo` — la capa de datos real (`lib/repo/*`) sobre una base descartable: round-trip
   de programas, superseries, refs por atleta, reemplazo de sesiones, supervivencia del historial
+- `verify:sync` — aislamiento entre usuarios (dos cuentas con el mismo SEED de ids fijos),
+  round-trip de ids y merge del lado del cliente
+- `verify:ui` — abre la app en un navegador headless y falla si alguna ruta no hidrata o tira
+  errores de consola. Necesita el server levantado (`npm run dev`) y `playwright` en el Python
+  del sistema. No entra en `npm run verify` porque depende de que la app este corriendo.
+
+> `verify:ui` existe por un caso real: la app compilaba, respondia 200 y se veia en blanco. Era
+> un service worker de otro proyecto que habia quedado registrado en `localhost:3000` — los
+> service workers son por **origen**, no por proyecto. Si dos apps comparten puerto, una le
+> sirve assets cacheados a la otra. Levantar cada proyecto en su propio puerto.
 
 Los scripts de verificacion usan los helpers y los modulos **reales** (extraidos de
 `components/ForgeApp.jsx` o importados de `lib/`) en vez de copiarlos, asi que no pueden

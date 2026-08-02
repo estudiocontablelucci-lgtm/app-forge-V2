@@ -14,6 +14,7 @@
     "verify:schema": "node scripts/verify-schema.mjs",
     "verify:repo": "node scripts/verify-repo.mjs",
     "verify:sync": "node scripts/verify-sync.mjs",
+    "verify:ui": "python scripts/check_ui.py",
     "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync"
   },
   "dependencies": {
