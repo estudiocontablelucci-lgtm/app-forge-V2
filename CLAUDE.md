@@ -270,12 +270,25 @@ Tres reglas que valen mas que su implementacion:
 1. ~~MVP: programa seed, entrenamiento, timer, superseries, e1RM~~ Done
 2. ~~Health check, historial, semaforo, superset blocks~~ Done
 3. ~~Programas multiples: crear, predefinido, importar Excel, descripciones~~ Done
-4. **En curso** — Persistencia real (Turso) + auth + multi-device
-   - Hecho: shell Next.js, base `forge` en Turso, schema v01+v02, capa de datos, NextAuth
-   - Falta: `/api/sync`, cablear la UI a la capa de datos, migrar el localStorage existente
+4. ~~Persistencia real (Turso) + auth + multi-device: `/api/sync`, UI cableada,
+   merge con el localStorage existente~~ Done
 5. ~~Roles coach/atleta: invitaciones, asignacion y seccion de entrenador con
    metricas (E1-E4)~~ Done
 6. PWA offline
+
+### Deuda conocida
+
+- **El catalogo de ejercicios no tiene schema SQL.** Vive en el cliente; el pull
+  lo mantiene al dia con `absorberDeProgramas()`, pero un `exerciseId` no
+  sobrevive el viaje al servidor (`program_exercises` no tiene esa columna). Un
+  programa creado del lado del servidor se ve bien pero cae al nombre
+  denormalizado.
+- **Un ejercicio borrado no viaja por el pull.** `saveProgram` borra con DELETE
+  duro y el pull no lo propaga: hay que resolverlo cuando entre el sync
+  incremental. Ver el comentario en `lib/repo/programs.js`.
+- **`health_consents` se graba pero no hay UI que lo pida ni que lo revoque.**
+- **Adaptar un programa se hace en la pestana Programa del atleta**, no en la
+  seccion de entrenador.
 
 ---
 
