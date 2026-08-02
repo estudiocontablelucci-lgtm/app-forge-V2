@@ -461,11 +461,32 @@ export default function ForgeApp() {
     setConfirmAction(null);
   }
 
+  /**
+   * Datos de un ejercicio que ya no esta en el programa (lo sustituyeron o lo
+   * borraron). El historial guarda el nombre con el que se entreno, asi que sus
+   * series siguen siendo atribuibles.
+   */
+  const exercisesFueraDelPrograma = useMemo(() => {
+    const enPrograma = new Set(program.map((e) => e.id));
+    const fuera = new Map();
+    for (const h of history) {
+      for (const ex of h.exercises || []) {
+        if (enPrograma.has(ex.id) || fuera.has(ex.id)) continue;
+        fuera.set(ex.id, { id: ex.id, name: ex.name, group: ex.group, session: h.session, unit: "reps", retirado: true });
+      }
+    }
+    return fuera;
+  }, [program, history]);
+
   const metrics = useMemo(() => {
     const tonnage = {}; const e1rms = {};
     for (const [k, l] of Object.entries(logs)) {
       if (!l.done) continue; const [w, exId] = k.split("|");
-      const exercise = program.find((e) => e.id === exId);
+      // Un ejercicio sustituido o borrado sale del programa, pero sus series se
+      // hicieron igual: si se descartaran, el tonelaje de una semana ya
+      // entrenada bajaria retroactivamente. Se busca primero en el programa y
+      // despues entre los retirados, que salen del historial.
+      const exercise = program.find((e) => e.id === exId) || exercisesFueraDelPrograma.get(exId);
       if (!exercise || exercise.unit === "pasos") continue;
       // Mismo motivo que en prevWeekSummary: `logs` guarda strings. Sin parsear,
       // `isNum` era false para todo y la pantalla de Progreso quedaba vacia
@@ -475,7 +496,19 @@ export default function ForgeApp() {
       if (isNum(kg) && reps) { tonnage[w] = (tonnage[w] || 0) + kg * reps; const e1 = brzycki(kg, reps); if (e1) { e1rms[exId] = e1rms[exId] || {}; e1rms[exId][w] = Math.max(e1rms[exId][w] || 0, e1); } }
     }
     return { tonnage, e1rms };
-  }, [logs, program]);
+  }, [logs, program, exercisesFueraDelPrograma]);
+
+  /**
+   * Filas de la tabla de e1RM: los del programa primero, y despues los
+   * retirados, marcados. Se recorren las metricas y no el programa — al reves
+   * de como estaba, que hacia desaparecer de la pantalla a todo ejercicio que
+   * saliera del programa, con sus semanas ya entrenadas incluidas.
+   */
+  const filasE1rm = useMemo(() => {
+    const enPrograma = program.filter((e) => metrics.e1rms[e.id]);
+    const retirados = [...exercisesFueraDelPrograma.values()].filter((e) => metrics.e1rms[e.id]);
+    return [...enPrograma, ...retirados];
+  }, [program, metrics, exercisesFueraDelPrograma]);
 
   function saveExercise(draft) { setProgram((P) => { const exists = P.some((e) => e.id === draft.id); return exists ? P.map((e) => (e.id === draft.id ? draft : e)) : [...P, draft]; }); setEditing(null); }
   function deleteExercise(id) { setProgram((P) => P.filter((e) => e.id !== id).map((e) => (e.superset === id ? { ...e, superset: null } : e))); setEditing(null); }
@@ -749,14 +782,14 @@ export default function ForgeApp() {
             <div className="card">
               <div className="cardtitle">e1RM por ejercicio</div>
               <div className="e1head mono" style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span></span>{Array.from({ length: activeProgram?.weeks || 4 }, (_, i) => <span key={i}>S{i + 1}</span>)}</div>
-              {program.filter((e) => metrics.e1rms[e.id]).map((e) => {
+              {filasE1rm.map((e) => {
                 const row = Array.from({ length: activeProgram?.weeks || 4 }, (_, i) => metrics.e1rms[e.id][String(i + 1)]); const nums = row.filter(Boolean);
                 const trend = nums.length >= 2 ? (nums[nums.length - 1] > nums[0] ? "↗" : nums[nums.length - 1] < nums[0] ? "↘" : "→") : "";
                 // El mismo ejercicio puede estar en dos sesiones (o quedar con
                 // nombre repetido tras una edicion). Se agrupa por id, asi que
                 // serian dos filas identicas: la sesion las distingue.
-                const repetido = program.filter((o) => o.name === e.name).length > 1;
-                return (<div key={e.id} className="e1row" style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span className="e1name">{e.name}{repetido && <span className="e1sess">{e.session}</span>} <span className={`tr ${trend === "↗" ? "up" : trend === "↘" ? "dn" : ""}`}>{trend}</span></span>{row.map((v, i) => <span key={i} className="mono e1v">{v ? Math.round(v) : "·"}</span>)}</div>);
+                const repetido = filasE1rm.filter((o) => o.name === e.name).length > 1;
+                return (<div key={e.id} className={`e1row ${e.retirado ? "retirado" : ""}`} style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span className="e1name"><span className="txt">{e.name}</span>{repetido && <span className="e1sess">{e.session}</span>}{e.retirado && <span className="e1out" title="Ya no está en el programa">fuera</span>}<span className={`tr ${trend === "↗" ? "up" : trend === "↘" ? "dn" : ""}`}>{trend}</span></span>{row.map((v, i) => <span key={i} className="mono e1v">{v ? Math.round(v) : "·"}</span>)}</div>);
               })}
               {Object.keys(metrics.e1rms).length === 0 && <div className="empty">Registrá series con kg y reps para ver tu e1RM acá.</div>}
             </div>
@@ -1421,7 +1454,11 @@ const CSS = `
 .e1head span { text-align: right; } .e1head span:first-child { text-align: left; }
 .e1row { display: grid; grid-template-columns: 1fr repeat(4, 42px); gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid #F2F2F7; }
 .e1row:last-child { border-bottom: none; }
-.e1name { font-size: 14px; font-weight: 500; color: #1C1C1E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Flex para que el badge de sesion o de "fuera" no se lo coma la elipsis:
+   se encoge el nombre, no la etiqueta que explica de que fila se trata. */
+.e1name { display: flex; align-items: center; gap: 2px; min-width: 0; font-size: 14px; font-weight: 500; color: #1C1C1E; }
+.e1name > .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.e1name > .e1sess, .e1name > .e1out, .e1name > .tr { flex: 0 0 auto; }
 .tr { font-size: 13px; } .tr.up { color: #34C759; } .tr.dn { color: #FF3B30; }
 .e1v { font-size: 13px; text-align: right; color: #3A3A3C; }
 .empty { color: #636366; font-size: 14px; padding: 10px 0; }
@@ -1449,6 +1486,8 @@ const CSS = `
 .btn-primary:disabled { opacity: .45; cursor: default; }
 .btn-ghost { width: 100%; height: 50px; margin-top: 12px; border: 1px solid #E5E5EA; border-radius: 12px; background: #fff; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
 .e1sess { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 10px 'Inter'; vertical-align: middle; }
+.e1out { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #F2F2F7; color: #8E8E93; font: 600 10px 'Inter'; vertical-align: middle; }
+.e1row.retirado .e1name { color: #8E8E93; }
 .btn-secondary { width: 100%; height: 46px; margin-top: 12px; border: 1px solid #2C6BED; border-radius: 12px; background: #fff; color: #2C6BED; font: 600 15px 'Inter'; cursor: pointer; }
 .btn-secondary:disabled { opacity: .5; cursor: default; }
 .ticon { font-size: 18px; line-height: 1; }
