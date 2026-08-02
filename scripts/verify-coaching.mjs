@@ -198,6 +198,132 @@ await check("un entrenador no ve alumnos de otro", async () => {
   return true;
 });
 
+/* ---------- asignar programas ---------- */
+
+const { pushForUser, pullForUser } = await import("../lib/sync/service.js");
+const { asignarPrograma, setRef, ensureAssignment } = await import("../lib/repo/training.js");
+const { scope } = await import("../lib/sync/ids.js");
+
+const PROGRAMA_COACH = {
+  id: "prog-fuerza", name: "Fuerza base", weeks: 4, hasDeload: true,
+  sessions: [{ id: "A", name: "Full A" }],
+  exercises: [
+    { id: "e1", session: "A", order: 1, name: "Press banca", group: "Pecho", sets: 3, refKg: 60, repsMin: 8, repsMax: 10, unit: "reps" },
+    { id: "e2", session: "A", order: 2, name: "Remo", group: "Espalda", sets: 3, refKg: 50, repsMin: 8, repsMax: 10, unit: "reps" },
+  ],
+};
+
+let idRemotoPrograma = null;
+let asignacionAna = null;
+
+await check("el entrenador sube su programa y se lo asigna al alumno", async () => {
+  await pushForUser(entrenador.id, {
+    program: PROGRAMA_COACH,
+    entry: { week: 1, session: "A", sessionName: "Full A", date: Date.now(), exercises: [] },
+  });
+  idRemotoPrograma = scope(entrenador.id, "prog-fuerza");
+
+  const coach = await co.getCoachDe(entrenador.id);
+  const r = await asignarPrograma({
+    programId: idRemotoPrograma, athleteId: ana.id,
+    coachUserId: entrenador.id, coachId: coach.id,
+  });
+  if (!r.ok) return `no asigno: ${r.motivo}`;
+  asignacionAna = r.assignmentId;
+  return true;
+});
+
+await check("no se puede asignar un programa ajeno ni a un no-alumno", async () => {
+  const coach = await co.getCoachDe(entrenador.id);
+  const ajeno = await asignarPrograma({
+    programId: scope(ana.id, "algo-de-ana"), athleteId: ana.id,
+    coachUserId: entrenador.id, coachId: coach.id,
+  });
+  if (ajeno.ok) return "dejo asignar un programa que no es suyo";
+
+  const extrano = await users.findOrCreate({ email: "extrano@example.com", displayName: "Extrano" });
+  const r = await asignarPrograma({
+    programId: idRemotoPrograma, athleteId: extrano.id,
+    coachUserId: entrenador.id, coachId: coach.id,
+  });
+  if (r.ok) return "dejo asignarle un programa a alguien que no es su alumno";
+  return true;
+});
+
+await check("el alumno recibe el programa asignado, en modo lectura", async () => {
+  const { programs } = await pullForUser(ana.id);
+  const asignado = programs.find((p) => p.readOnly);
+  if (!asignado) return `no le llego (ve ${programs.length} programas)`;
+  if (asignado.name !== "Fuerza base") return `nombre ${asignado.name}`;
+  if (!asignado.coachName) return "no dice de quien es";
+  if (asignado.exercises.length !== 2) return `${asignado.exercises.length} ejercicios`;
+  return true;
+});
+
+await check("los ids del programa asignado NO se re-prefijan", async () => {
+  // Sin esto el alumno generaria `ana~coach~e1` y sus series quedarian
+  // colgando de un ejercicio distinto al que el entrenador prescribio.
+  const { programs } = await pullForUser(ana.id);
+  const asignado = programs.find((p) => p.readOnly);
+  if (asignado.id !== idRemotoPrograma) return `id ${asignado.id}, esperaba ${idRemotoPrograma}`;
+
+  const scoped = scope(ana.id, asignado.exercises[0].id);
+  if (scoped !== asignado.exercises[0].id) return `scope lo volvio a prefijar: ${scoped}`;
+  return true;
+});
+
+await check("cada alumno ve SUS kilos en el mismo programa", async () => {
+  const coach = await co.getCoachDe(entrenador.id);
+  await asignarPrograma({ programId: idRemotoPrograma, athleteId: beto.id, coachUserId: entrenador.id, coachId: coach.id });
+  const asigBeto = await ensureAssignment({ programId: idRemotoPrograma, athleteId: beto.id });
+
+  const idEjercicio = scope(entrenador.id, "e1");
+  await setRef({ assignmentId: asignacionAna, programExerciseId: idEjercicio, refKg: 40 });
+  await setRef({ assignmentId: asigBeto, programExerciseId: idEjercicio, refKg: 90 });
+
+  const deAna = (await pullForUser(ana.id)).programs.find((p) => p.readOnly);
+  const deBeto = (await pullForUser(beto.id)).programs.find((p) => p.readOnly);
+  const refAna = deAna.exercises.find((e) => e.id === idEjercicio)?.refKg;
+  const refBeto = deBeto.exercises.find((e) => e.id === idEjercicio)?.refKg;
+
+  if (String(refAna) !== "40") return `Ana ve ${refAna}, esperaba 40`;
+  if (String(refBeto) !== "90") return `Beto ve ${refBeto}, esperaba 90`;
+  return true;
+});
+
+await check("el alumno entrena el programa asignado sin pisar la plantilla", async () => {
+  const asignado = (await pullForUser(ana.id)).programs.find((p) => p.readOnly);
+  await pushForUser(ana.id, {
+    program: asignado,
+    entry: {
+      week: 1, session: "A", sessionName: "Full A", date: Date.now(),
+      exercises: [{ id: asignado.exercises[0].id, name: "Press banca", sets: [{ setN: 1, kg: 40, reps: 10, rir: 2 }] }],
+    },
+  });
+
+  // La plantilla del entrenador queda como estaba: su ref general sigue en 60,
+  // aunque Ana entrene con 40.
+  const delCoach = (await pullForUser(entrenador.id)).programs.find((p) => p.id === "prog-fuerza");
+  if (!delCoach) return "el entrenador perdio su programa";
+  if (String(delCoach.exercises.find((e) => e.id === "e1").refKg) !== "60") {
+    return `la ref de la plantilla quedo en ${delCoach.exercises.find((e) => e.id === "e1").refKg}`;
+  }
+
+  // Y la serie de Ana quedo atada al ejercicio del entrenador.
+  const hist = (await pullForUser(ana.id)).history;
+  const sesion = hist.find((h) => h.session === "A");
+  if (!sesion) return "no quedo registrada la sesion";
+  if (sesion.exercises[0].sets[0].kg !== 40) return "no guardo los kilos de Ana";
+  return true;
+});
+
+await check("el alumno no genera un programa duplicado al entrenar", async () => {
+  const { programs } = await pullForUser(ana.id);
+  const propios = programs.filter((p) => !p.readOnly);
+  if (propios.length) return `aparecieron ${propios.length} programas propios que no creo`;
+  return true;
+});
+
 if (fallas.length) {
   console.error(`\nFALLO  ${fallas.length} verificacion(es):`);
   for (const f of fallas) console.error(`  - ${f}`);

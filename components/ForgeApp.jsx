@@ -267,6 +267,8 @@ export default function ForgeApp() {
   // Config de deload del programa. Los programas creados antes de que esto
   // existiera no la traen y caen al default (-40% por series, piso de 2).
   const deloadCfg = { ...DELOAD_DEFAULT, ...activeProgram?.deload };
+  // Programa que prescribio un entrenador: el alumno registra, no edita.
+  const esAsignado = Boolean(activeProgram?.readOnly);
   const sessions = activeProgram?.sessions || DEFAULT_SESSIONS;
   // Los nombres se resuelven contra el catalogo, asi que corregir uno ahi se
   // propaga a todos los programas que lo usan. El resto del codigo sigue
@@ -824,7 +826,7 @@ export default function ForgeApp() {
                 <h1>{activeProgram?.name || "Programa"}</h1>
                 <button className="prog-switch-btn" onClick={() => setProgramListView(true)}>&#9776;</button>
               </div>
-              <p className="sub">{activeProgram?.weeks || 4} sem{activeProgram?.hasDeload ? " + deload" : ""} · {sessions.length} sesiones · {program.length} ejercicios {session === null && <button className="prog-edit-link" onClick={() => setEditingProgram({ ...activeProgram })}>Editar programa</button>}</p>
+              <p className="sub">{esAsignado && <span className="prog-coach">de {activeProgram.coachName}</span>}{activeProgram?.weeks || 4} sem{activeProgram?.hasDeload ? " + deload" : ""} · {sessions.length} sesiones · {program.length} ejercicios {session === null && !esAsignado && <button className="prog-edit-link" onClick={() => setEditingProgram({ ...activeProgram })}>Editar programa</button>}</p>
             </header>
             <div className="weekchips">
               {sessions.map((s) => (<button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>{s.name}</button>))}
@@ -837,6 +839,7 @@ export default function ForgeApp() {
                   {b.exercises.map((e) => (
                     <button key={e.id} className={`prow ${b.type === "superset" ? "in-ss" : ""}`} onClick={() => {
                       if (session !== null) { alert("Terminá o cancelá la sesión activa para editar el programa."); return; }
+                      if (esAsignado) { setDescModal(e); return; }
                       setEditing({ ...e });
                     }}>
                       <div className="pmain"><div className="pname">{e.name}{e.description && <span className="desc-hint-sm">i</span>}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}</div></div>
@@ -847,7 +850,7 @@ export default function ForgeApp() {
               ))}
             </div>
             {session === null && (
-              <button className="addbtn" onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
+              <button className="addbtn" hidden={esAsignado} onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
             )}
           </div>
         )}
@@ -1796,6 +1799,12 @@ const CSS = `
 .alumno-baja { padding: 6px 12px; border: 1px solid #E5E5EA; border-radius: 999px; background: #fff; color: #636366; font: 600 12px 'Inter'; cursor: pointer; }
 .alumno-baja.si { border-color: #D93025; color: #D93025; }
 .alumno-confirm { display: flex; gap: 6px; }
+.prog-coach { display: inline-block; margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 11px 'Inter'; }
+.alumno-abrir { flex: 1; padding: 0; background: none; border: 0; text-align: left; cursor: pointer; }
+.ref-alumno { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F2F2F7; }
+.ref-alumno:last-child { border-bottom: none; }
+.ref-input { width: 84px; height: 40px; margin: 0; text-align: center; }
+.ref-ok { color: #2C6BED; font: 600 12px 'Inter'; }
 .aviso { color: #1F7A3D; }
 .invite-banner { position: absolute; top: 62px; left: 16px; right: 16px; z-index: 25; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #EEF3FE; border: 1px solid #B9CDF5; font: 400 13px 'Inter'; color: #1F4B99; line-height: 1.4; }
 .invite-acciones { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
