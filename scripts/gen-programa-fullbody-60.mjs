@@ -4,29 +4,43 @@
  *   node scripts/gen-programa-fullbody-60.mjs                  # .xlsx para el wizard
  *   node scripts/gen-programa-fullbody-60.mjs --cuenta <email> # lo carga en esa cuenta
  *
- * Para quien: adulto mayor que arranca a entrenar contra la sarcopenia, con
- * antecedente de CIRUGIA CERVICAL ya dada de alta. Tres dias, una hora tope.
+ * Para quien: mujer de 68 que arranca a entrenar contra la sarcopenia, operada
+ * hace muchos anios de una ARTROSIS CERVICAL que deformo las vertebras y
+ * comprimia la medula. Sin secuelas. Tres dias, una hora tope.
  *
- * La seleccion de ejercicios no es generica: esta condicionada por el cuello.
- * Todo lo que aparece abajo evita cuatro cosas, y por eso faltan ejercicios que
- * en cualquier otro programa serian obvios:
+ * Que la compresion haya sido MEDULAR y no de una raiz es lo que ordena todo lo
+ * de abajo. El canal quedo territorio comprometido de por vida aunque no queden
+ * sintomas, asi que la consigna no es solo "no cargar el cuello" sino tampoco
+ * moverlo rapido ni llevarlo a rango final. Por eso faltan ejercicios que en
+ * cualquier otro programa serian obvios:
  *
  *   1. Carga axial sobre la columna — no hay sentadilla con barra ni press
  *      militar de pie. Lo que baja por la barra pasa por las cervicales.
  *   2. Trabajo por encima de la cabeza — el press overhead mete extension de
- *      cuello bajo carga. Se reemplaza por press inclinado.
+ *      cuello bajo carga, y la extension es la posicion que mas cierra el canal.
  *   3. Flexion/extension cervical repetida — no hay abdominales clasicos ni
  *      nada en prono con la cabeza levantada. El core se entrena en anti-
  *      rotacion, que es como se usa de verdad.
  *   4. Traccion del cuello — sin dominadas ni colgarse de la barra.
+ *   5. NADA BRUSCO. Todos los tempos son controlados y la potencia se entrena
+ *      sentada con la cabeza apoyada, no de pie con el tronco en movimiento.
  *
  * Y agrega dos cosas que en un programa de hipertrofia no estarian:
  *
- *   - POTENCIA (sesion C). La velocidad de produccion de fuerza se pierde antes
- *     que la fuerza maxima y es la que evita las caidas. Es sentarse y pararse
- *     rapido, sin carga: el gesto que predice independencia funcional.
- *   - EQUILIBRIO Y AGARRE. La marcha en tandem entrena lo primero; la caminata
- *     granjero, lo segundo — la fuerza de agarre es marcador de sarcopenia.
+ *   - POTENCIA (sesion C), pero en maquina. La velocidad de produccion de fuerza
+ *     se pierde antes que la fuerza maxima y es la que evita que un tropezon
+ *     termine en caida. La version clasica —pararse rapido de una silla— queda
+ *     descartada: acelera la cabeza. Se entrena empujando rapido en la prensa,
+ *     con espalda y nuca apoyadas.
+ *   - EQUILIBRIO Y AGARRE. La marcha en tandem entrena lo primero (SIEMPRE con
+ *     la mano en la baranda: una caida con ese antecedente no es una caida
+ *     cualquiera); la caminata granjero, lo segundo — la fuerza de agarre es
+ *     marcador de sarcopenia.
+ *
+ * SEnALES PARA PARAR Y CONSULTAR, no negociables: hormigueo o adormecimiento en
+ * manos o brazos, torpeza para manipular objetos chicos (abotonarse, agarrar
+ * monedas), o cambios en la forma de caminar. Son los signos con los que se
+ * manifiesta una compresion medular y no son "agujetas".
  *
  * Progresion: la sarcopenia se revierte con carga PROGRESIVA, no con repetir
  * el mismo peso. Semana 1 es de calibracion (RIR 4, encontrar los kilos),
@@ -64,9 +78,11 @@ export const EJERCICIOS = [
     session: "A", order: 1, name: "Prensa horizontal", group: "Cuádriceps",
     sets: 3, repsMin: 10, repsMax: 12, rest: 120, rir: "3",
     description:
+      "REGLA DE TODA LA RUTINA, y este es el primer ejercicio así que va acá: el cuello se mueve despacio y nunca a rango final. Nada de mirar al techo ni girar rápido la cabeza, ni siquiera entre series. " +
       "Respaldo alto, cabeza apoyada y en línea con la espalda. NO empujar con la nuca contra el respaldo — es el error más común y carga justo lo operado. " +
       "Exhalar al empujar: nada de aguantar el aire (sube la presión arterial y tensiona el cuello). " +
-      "Semana 1 es para encontrar el peso: buscar un kilaje que deje 4 reps en reserva y anotarlo.",
+      "Semana 1 es para encontrar el peso: buscar un kilaje que deje 4 reps en reserva y anotarlo. " +
+      "Si aparece hormigueo en manos o brazos, torpeza para agarrar cosas chicas o cambios al caminar: parar y consultar al médico. No son agujetas.",
   }),
   ex({
     session: "A", order: 2, name: "Remo sentado (agarre neutro)", group: "Espalda",
@@ -83,11 +99,11 @@ export const EJERCICIOS = [
       "Respaldo vertical, cabeza apoyada. No bajar más allá de donde los hombros queden cómodos.",
   }),
   ex({
-    session: "A", order: 4, name: "Puente de glúteo", group: "Isquios",
+    session: "A", order: 4, name: "Puente de glúteo (en el piso)", group: "Isquios",
     sets: 3, repsMin: 12, repsMax: 15, rest: 60, rir: "3",
     description:
-      "Apoyar los OMÓPLATOS en el banco, nunca la cabeza ni el cuello. Si se usa barra, con almohadilla y liviana; si molesta, sin carga: el peso corporal alcanza para empezar. " +
-      "Subir hasta alinear cadera con rodillas y hombros, sin arquear la zona lumbar.",
+      "EN EL PISO, no en banco. La versión de banco apoya los omóplatos y deja la cabeza colgando: eso es extensión de cuello sostenida con el tronco cargado, justo lo que hay que evitar. En el piso la cabeza queda apoyada y neutra las tres series. " +
+      "Subir hasta alinear cadera con rodillas y hombros, sin arquear la zona lumbar y sin empujar con la nuca contra el piso. Carga: peso corporal, y más adelante un disco sobre la cadera.",
   }),
   ex({
     session: "A", order: 5, name: "Gemelo sentado", group: "Gemelos",
@@ -120,11 +136,11 @@ export const EJERCICIOS = [
       "Tirar sin echar la cabeza hacia atrás para acompañar. Si aparece hormigueo en brazos o manos, cortar la serie y avisar.",
   }),
   ex({
-    session: "B", order: 3, name: "Peso muerto rumano (DB, rango corto)", group: "Isquios",
-    sets: 3, repsMin: 10, repsMax: 12, rest: 90, rir: "3-4",
+    session: "B", order: 3, name: "Extensión de cadera en polea (de pie)", group: "Isquios",
+    sets: 3, repsMin: 12, repsMax: 15, rest: 90, rir: "3",
     description:
-      "Con mancuernas y rango corto: bajar solo hasta media canilla, nunca al piso. No hay peso muerto convencional en este programa. " +
-      "Espalda neutra y mirada al piso a dos metros — mirar al espejo al frente obliga a extender el cuello justo cuando la espalda está horizontal.",
+      "Reemplaza al peso muerto rumano a propósito. El rumano deja el tronco horizontal y la cabeza en voladizo: sostenerla ahí durante 12 repeticiones es carga sostenida sobre lo operado, aunque el peso esté en las manos. " +
+      "Acá el tronco queda VERTICAL y el cuello neutro toda la serie. De pie, tomada del soporte, llevar la pierna hacia atrás desde la cadera sin arquear la lumbar. 12-15 por pierna.",
   }),
   ex({
     session: "B", order: 4, name: "Press inclinado (DB)", group: "Pecho",
@@ -137,25 +153,28 @@ export const EJERCICIOS = [
     session: "B", order: 5, name: "Marcha en tándem (talón-punta)", group: "Core",
     sets: 3, repsMin: 20, repsMax: 30, rest: 45, rir: "2", unit: "pasos",
     description:
-      "Equilibrio: caminar en línea recta apoyando el talón contra la punta del otro pie. Con una mano cerca de la pared las primeras semanas. " +
-      "No es relleno — el entrenamiento de fuerza solo no baja las caídas, la fuerza más el equilibrio sí.",
+      "Equilibrio: caminar en línea recta apoyando el talón contra la punta del otro pie. SIEMPRE con una mano en la baranda o la pared, no solo las primeras semanas — una caída con su antecedente cervical no es una caída cualquiera. " +
+      "Mirada al frente y fija: nada de girar la cabeza mientras camina, que es la progresión habitual de este ejercicio y acá queda descartada. " +
+      "No es relleno — la fuerza sola no baja las caídas, la fuerza más el equilibrio sí.",
   }),
   ex({
     session: "B", order: 6, name: "Caminata granjero", group: "Core",
     sets: 2, repsMin: 20, repsMax: 30, rest: 60, rir: "2", unit: "pasos",
     description:
-      "Mancuernas livianas al costado, 20-30 pasos. La fuerza de agarre es uno de los marcadores de sarcopenia y se entrena así. " +
-      "Hombros abajo y relajados, sin encogerlos hacia las orejas. Si aparece hormigueo en las manos, bajar el peso.",
+      "Mancuernas livianas al costado, 20-30 pasos en línea recta y con el camino despejado. La fuerza de agarre es uno de los marcadores de sarcopenia y se entrena así. " +
+      "Hombros abajo y relajados, sin encogerlos hacia las orejas. Sin giros de cabeza mientras camina cargada, y sin apurar el paso. " +
+      "Si aparece hormigueo o adormecimiento en las manos, soltar el peso y avisar: con su antecedente eso no se deja pasar.",
   }),
 
   /* ---------- C · Potencia y accesorios ---------- */
   ex({
-    session: "C", order: 1, name: "Sentarse y pararse rápido (potencia)", group: "Cuádriceps",
+    session: "C", order: 1, name: "Prensa horizontal (potencia)", group: "Cuádriceps",
     sets: 3, repsMin: 6, repsMax: 8, rest: 120, rir: "4", tempo: "3-0-1-0",
     description:
-      "SUBIR RÁPIDO, bajar lento en 3 segundos. La intención de velocidad es el estímulo, no el peso. " +
-      "La potencia (fuerza por velocidad) se pierde antes que la fuerza máxima y es la que evita que una pérdida de equilibrio termine en caída. " +
-      "Sin carga hasta que el gesto salga limpio y sin dolor. Parar la serie apenas la subida se pone lenta: es potencia, no resistencia.",
+      "EMPUJAR RÁPIDO, volver lento en 3 segundos. La intención de velocidad es el estímulo, no el peso: carga liviana (más o menos la mitad de lo que usa en la sesión A). " +
+      "La potencia se pierde antes que la fuerza máxima y es la que evita que un tropezón termine en caída. " +
+      "Va en máquina y NO parándose rápido de una silla, que es la versión clásica: pararse rápido acelera la cabeza, y con su antecedente eso es justo lo que no queremos. Acá la espalda y la nuca quedan apoyadas todo el tiempo. " +
+      "Parar la serie apenas el empuje se pone lento: es potencia, no resistencia. Sin trabar las rodillas al final.",
   }),
   ex({
     session: "C", order: 2, name: "Sillón de cuádriceps", group: "Cuádriceps",
