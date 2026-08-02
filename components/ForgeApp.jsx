@@ -9,6 +9,7 @@ import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory, ses
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
 import ExercisePicker from "./ExercisePicker";
+import AvisoInvitacion from "./AvisoInvitacion";
 
 /* ============================================================
    FORGE — Tracking de entrenamiento (MVP v2)
@@ -647,7 +648,10 @@ export default function ForgeApp() {
 
         {/* Cuenta: se esconde durante el entrenamiento activo, que usa toda la pantalla */}
         {!(tab === "entrenar" && session !== null) && (
-          <AccountButton onOpenProfile={() => setShowProfile(true)} />
+          <>
+            <AccountButton onOpenProfile={() => setShowProfile(true)} />
+            <AvisoInvitacion />
+          </>
         )}
 
         {/* ======== HEALTH CHECK ======== */}
@@ -1785,6 +1789,25 @@ const CSS = `
 .testnote { font-size: 13px; color: #1F4B99; background: #EEF3FE; border: 1px solid #B9CDF5; padding: 8px 14px; border-radius: 10px; margin-bottom: 12px; font-weight: 500; line-height: 1.45; }
 .testbadge { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 10px 'Inter'; vertical-align: middle; text-transform: uppercase; letter-spacing: .06em; }
 .ed-hint2 { width: 100%; margin: 2px 0 0; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; text-transform: none; letter-spacing: 0; }
+.alumno-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid #F2F2F7; }
+.alumno-row:last-child { border-bottom: none; }
+.alumno-name { font: 500 14px 'Inter'; color: #1C1C1E; }
+.alumno-sub { font: 400 12.5px 'Inter'; color: #8E8E93; margin-top: 2px; }
+.alumno-baja { padding: 6px 12px; border: 1px solid #E5E5EA; border-radius: 999px; background: #fff; color: #636366; font: 600 12px 'Inter'; cursor: pointer; }
+.alumno-baja.si { border-color: #D93025; color: #D93025; }
+.alumno-confirm { display: flex; gap: 6px; }
+.aviso { color: #1F7A3D; }
+.invite-banner { position: absolute; top: 62px; left: 16px; right: 16px; z-index: 25; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #EEF3FE; border: 1px solid #B9CDF5; font: 400 13px 'Inter'; color: #1F4B99; line-height: 1.4; }
+.invite-acciones { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.invite-ver { color: #2C6BED; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.invite-x { background: none; border: 0; color: #7A93C4; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.consent { margin: 4px 0 16px; padding: 14px; border-radius: 12px; background: #FAFAFC; border: 1px solid #E5E5EA; }
+.consent-t { margin: 0 0 8px; font: 400 13.5px 'Inter'; color: #444; line-height: 1.5; }
+.consent ul { margin: 0 0 10px; padding-left: 18px; }
+.consent li { font: 400 13.5px 'Inter'; color: #444; line-height: 1.6; }
+.consent-check { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 16px; cursor: pointer; }
+.consent-check input { margin-top: 2px; width: 18px; height: 18px; flex: 0 0 auto; }
+.consent-check span { font: 500 14px 'Inter'; color: #1C1C1E; }
 .ref-toggle { width: 100%; padding: 8px 0; background: none; border: 0; text-align: left; color: #2C6BED; font: 600 12.5px 'Inter'; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .ref-count { padding: 1px 7px; border-radius: 999px; background: #EEF3FE; font: 600 10px 'Inter'; }
 .ref-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 4px; }

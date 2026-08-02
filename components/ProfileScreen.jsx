@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
+import CoachScreen from "./CoachScreen";
 
 /**
  * Perfil: datos de la cuenta y lo poco que el usuario puede editar de si mismo.
@@ -17,6 +18,7 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
   const [peso, setPeso] = useState("");
   const [estado, setEstado] = useState("cargando"); // cargando | listo | guardando | error
   const [error, setError] = useState(null);
+  const [verCoach, setVerCoach] = useState(false);
 
   useEffect(() => {
     let vigente = true;
@@ -113,6 +115,20 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
               Baja lo que esté en la nube y sube las sesiones que hayan quedado
               en el teléfono por falta de señal.
             </p>
+          </div>
+
+          {/* Entrenar a otros es opcional: la seccion se despliega a pedido para
+              no meterle una pantalla de alumnos a quien solo entrena solo. */}
+          <div className="card">
+            <div className="flabel">Entrenar a otros</div>
+            {verCoach
+              ? <CoachScreen />
+              : (
+                <>
+                  <p className="fhint">Invitá alumnos y seguí sus entrenamientos.</p>
+                  <button className="btn-secondary" onClick={() => setVerCoach(true)}>Abrir mi espacio</button>
+                </>
+              )}
           </div>
 
           <button className="btn-ghost" onClick={() => signOut({ callbackUrl: "/" })}>Cerrar sesión</button>

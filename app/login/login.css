@@ -100,3 +100,59 @@
   font-size: 14px;
   color: #D93025;
 }
+
+/* Consentimiento de datos de salud. Lo usa /invitacion, que comparte la
+   estetica del login por ser una pantalla previa a entrar a la app. */
+.login .consent {
+  margin: 4px 0 16px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #FAFAFC;
+  border: 1px solid #E5E5EA;
+}
+
+.login .consent-t {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #444;
+}
+
+.login .consent ul {
+  margin: 0 0 10px;
+  padding-left: 18px;
+}
+
+.login .consent li {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #444;
+}
+
+.login .consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+
+.login .consent-check input {
+  margin-top: 2px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.login .consent-check span {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1C1C1E;
+}
+
+.login a.btn {
+  display: block;
+  box-sizing: border-box;
+  line-height: 50px;
+  text-decoration: none;
+}
