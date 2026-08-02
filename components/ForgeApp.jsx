@@ -1668,9 +1668,13 @@ const CSS = `
 .ed-textarea:focus { outline: none; border-color: #2C6BED; }
 .ed-full { width: 100%; }
 .picker-btn { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid #E5E5EA; border-radius: 10px; background: #fff; cursor: pointer; text-align: left; }
-.picker-name { font: 500 14px 'Inter'; color: #1C1C1E; }
-.picker-grp { font: 500 11px 'Inter'; color: #2C6BED; background: #EEF3FE; padding: 2px 7px; border-radius: 999px; }
-.picker-ph { font: 400 14px 'Inter'; color: #A1A1AA; }
+/* La regla .ed-form span pone todo en mayusculas para los labels del
+   formulario; el contenido del selector son nombres de ejercicio y tienen que
+   leerse tal cual. (Ojo: esta constante es un template string — nada de
+   backticks ni de dollar-llave adentro.) */
+.ed-form .picker-name, .picker-name { font: 500 14px 'Inter'; color: #1C1C1E; text-transform: none; letter-spacing: 0; }
+.ed-form .picker-grp, .picker-grp { font: 500 11px 'Inter'; color: #2C6BED; background: #EEF3FE; padding: 2px 7px; border-radius: 999px; text-transform: none; letter-spacing: 0; }
+.ed-form .picker-ph, .picker-ph { font: 400 14px 'Inter'; color: #A1A1AA; text-transform: none; letter-spacing: 0; }
 .picker-open { display: flex; flex-direction: column; gap: 6px; }
 .picker-label { font: 600 11px 'Inter'; color: #636366; text-transform: uppercase; letter-spacing: .04em; }
 .picker-search { width: 100%; height: 42px; box-sizing: border-box; padding: 0 12px; font-size: 16px; border: 1px solid #2C6BED; border-radius: 10px; }
@@ -1678,7 +1682,8 @@ const CSS = `
 .picker-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: none; border: 0; border-bottom: 1px solid #F2F2F7; cursor: pointer; text-align: left; }
 .picker-item:last-child { border-bottom: none; }
 .picker-item.on { background: #EEF3FE; }
-.picker-item.nuevo { color: #2C6BED; font: 500 14px 'Inter'; }
+.picker-item.nuevo { justify-content: flex-start; gap: 4px; color: #2C6BED; font: 500 14px 'Inter'; text-transform: none; letter-spacing: 0; }
+.picker-item.nuevo strong { color: #2C6BED; font-weight: 600; }
 .picker-empty { padding: 14px 12px; font: 400 13px 'Inter'; color: #8E8E93; }
 .picker-cancel { align-self: flex-start; padding: 6px 0; background: none; border: 0; color: #8E8E93; font: 500 13px 'Inter'; cursor: pointer; }
 .ed-warn { width: 100%; margin: 2px 0 0; padding: 10px 12px; border-radius: 10px; background: #FFF7E6; color: #8A5B00; font: 400 12.5px 'Inter'; line-height: 1.45; }
