@@ -55,7 +55,9 @@ Estado actual del proyecto y decisiones tomadas.
 - [ ] `/api/sync` — push de la cola de mutaciones + pull incremental por `updated_at`
 - [ ] Cablear la UI a la capa de datos (hoy `ForgeApp.jsx` sigue leyendo y escribiendo localStorage)
 - [ ] Migrar el localStorage existente a la base la primera vez que el usuario entra
-- [ ] Credenciales de Google OAuth (hay que crearlas en Google Cloud Console)
+- [ ] **Sustituir ejercicio** como operacion distinta de renombrar — ver decision de 2026-08.
+      Bloquea el rol entrenador: un coach editando el mesociclo en marcha reescribe el historial
+      de sus alumnos sin darse cuenta
 - [ ] Multi-device sync
 - [ ] Roles coach/athlete + dashboard trainer
 - [ ] Override de `ref_kg` por asignacion (bloqueante para el caso multi-alumno)
@@ -167,6 +169,37 @@ corria `vite build` y habria fallado en el primer push a `main`.
 viven las otras bases). Una request resuelve varias queries, asi que la latencia funcion↔base pesa
 mas que la del usuario↔funcion, que se paga una sola vez. `gru1` estaria mas cerca de Argentina
 pero cada query cruzaria el Atlantico. Si algun dia la base se muda a `sa-east-1`, mover esto tambien.
+
+### 2026-08 — Renombrar un ejercicio reescribe el pasado (PENDIENTE, bloquea fase 5)
+**Detectado en uso real**: el programa traia "Prensa horizontal" en la sesion C. Al probarla no
+convencio y se hizo Prensa 45° en su lugar. Se edito el **nombre** del ejercicio y aparecieron dos
+filas "Prensa 45°" en Progreso — una por cada id, porque Progreso agrupa por id y muestra el nombre.
+
+**El sintoma visible ya esta corregido** (la fila lleva un badge con la sesion cuando el nombre se
+repite). **El problema de fondo no**: editar el nombre lo cambia tambien en las semanas ya
+entrenadas. El historial pasa a decir que se hizo Prensa 45° en las semanas 1 y 2, cuando se hizo
+Prensa horizontal. Se reescribe el pasado.
+
+**La causa es que hoy hay una sola operacion para dos cosas distintas:**
+- *Corregir* el nombre (un typo) → tiene que aplicar hacia atras. Es lo que hace hoy.
+- *Sustituir* el ejercicio (cambie la maquina) → es un ejercicio nuevo desde esa fecha. El
+  historial anterior pertenece al viejo y **el e1RM no se hereda**.
+
+Lo segundo no es una opinion: el propio SEED lo dice en la descripcion de la Sentadilla pendular
+—"Reemplaza al belt squat (tope mecanico 120kg). NO heredar esos kilos: la pendular mueve mas por
+mecanica de la maquina, no por mas fuerza. Su e1RM arranca como serie nueva"—. La regla de negocio
+ya esta escrita en el programa; la app todavia no la implementa.
+
+**Diseno propuesto** (fase 5, antes del rol entrenador):
+- "Sustituir ejercicio" como operacion propia, distinta de editar el nombre. Crea un id nuevo y
+  archiva el anterior con su historial intacto.
+- El schema ya lo soporta: `program_exercises.deleted_at`, `set_logs.exercise_name` desnormalizado
+  y FK `ON DELETE SET NULL` — el log sobrevive (verificado en verify-repo).
+- Falta una columna `replaced_by` para que el entrenador vea la cadena de sustituciones.
+- Progreso muestra las dos series por separado, sin encadenar e1RM entre ejercicios distintos.
+
+**Urgencia**: con un solo atleta es molesto. Con entrenadores editando el mesociclo en marcha de
+varios alumnos, corrompe el historial de todos en silencio.
 
 ### 2026-08 — Adapter de NextAuth propio en vez de uno de libreria
 **Decision**: `lib/auth/adapter.js` escrito a mano sobre la tabla `users` del dominio.
