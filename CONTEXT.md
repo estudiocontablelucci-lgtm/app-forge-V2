@@ -225,6 +225,19 @@ Schema: tabla `exercises` (catalogo, global + por coach) y `program_exercises.ex
 `set_logs` ya guarda el snapshot del nombre, asi que el historial sigue anclado a lo que se hizo.
 Migracion: los nombres actuales se vuelcan al catalogo deduplicando por nombre normalizado.
 
+**Requisito que hay que arreglar con esto — verificado en el navegador:** un ejercicio que sale del
+programa desaparece de Progreso **con sus metricas**, aunque sus series sigan registradas.
+`metrics` hace `program.find(...)` y si no lo encuentra descarta el log. Medido: dos ejercicios con
+series en la semana 1 (720 kg + 650 kg = 1.4t); al sacar uno, esa semana pasa a mostrar 0.7t.
+
+O sea que sustituir un ejercicio en la semana 3 **baja el tonelaje de las semanas 1 y 2**, que ya
+estaban entrenadas. Los datos estan, la metrica miente.
+
+Lo correcto es lo que pide Agustin: el ejercicio anterior sigue figurando en Progreso con las
+semanas que efectivamente se hizo, aunque sea una sola, y sin encadenarse con el que lo reemplazo.
+Implica que Progreso itere sobre las metricas y no sobre el programa, resolviendo el nombre desde
+el programa si el ejercicio sigue ahi y desde el snapshot del historial si ya no.
+
 **Urgencia**: con un solo atleta es una molestia que se corrige a mano. Con entrenadores editando
 el mesociclo en marcha de varios alumnos, las metricas de todos dejan de significar lo que dicen.
 
