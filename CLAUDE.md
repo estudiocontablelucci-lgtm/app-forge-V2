@@ -211,7 +211,14 @@ redirect URIs de Google; lo demas se mueve. `npm run verify:ui` detecta el sinto
 
 ## Datos del atleta
 
-El SEED es el programa real (Ciclo 2, fullbody 3x DUP). Fuente de verdad **externa** al repo:
+Una cuenta nueva arranca **sin ningun programa**. Hasta el 2026-08-02 se instalaba
+el Ciclo 2 de Agustin en toda instalacion, asi que cualquiera que entraba veia el
+mesociclo de otro —con sus kilos y sus notas de lesion— sin forma de saber que no
+era suyo. Ahora la pantalla vacia ofrece: sincronizar (por si un entrenador ya le
+asigno uno), crear, cargar un `lib/programa-basico.js` neutro, o importar Excel.
+
+El Ciclo 2 vive en `lib/seed-ciclo2.js` y solo alimenta `npm run gen:programa`.
+Fuente de verdad **externa** al repo:
 `OneDrive/Documentos/Organizacion Personal/Salud/Sistema cronobiologico/Claude/rutina_gym.md`
 y `programa_tecnicas_ciclo2 sin belt quat.md`. Antes de tocar refs o ejercicios, leer esos archivos.
 
@@ -276,6 +283,23 @@ Tres reglas que valen mas que su implementacion:
    metricas (E1-E4)~~ Done
 6. PWA offline
 
+### Dos cosas del sync que ya rompieron
+
+**Un programa asignado se REEMPLAZA en el pull; uno propio nunca se pisa.** Es
+la distincion que hace `mergePrograms`. Un programa propio puede estar
+editandose mientras corre el pull, asi que lo local gana. Uno asignado es
+`readOnly` y el alumno no pudo haberlo tocado — y no reemplazarlo significaba
+que una correccion del entrenador no llegaba nunca, con los dos lados
+convencidos de mirar lo mismo. Es tambien lo que hace viajar los borrados.
+
+**Los emails se comparan CANONICAMENTE, no como texto.** En Gmail los puntos del
+nombre de usuario no cuentan: invitar a `abc@gmail.com` y registrarse como
+`a.bc@gmail.com` es la misma persona y el mail llega igual. Ver `lib/email-id.js`.
+La canonicalizacion es por dominio a proposito: sacar los puntos en un dominio
+cualquiera uniria a dos personas distintas. **No aplica a `users`**: la identidad
+de la cuenta sigue siendo el email exacto, asi que alguien que entre con dos
+grafias distintas todavia puede terminar con dos cuentas. Eso es deuda de auth.
+
 ### Deuda conocida
 
 - **El catalogo de ejercicios no tiene schema SQL.** Vive en el cliente; el pull
@@ -287,8 +311,12 @@ Tres reglas que valen mas que su implementacion:
   duro y el pull no lo propaga: hay que resolverlo cuando entre el sync
   incremental. Ver el comentario en `lib/repo/programs.js`.
 - **`health_consents` se graba pero no hay UI que lo pida ni que lo revoque.**
+  Postergado por decision explicita (2026-08-02): el trato con los alumnos es
+  personal y la app es una herramienta, no el vinculo.
 - **Adaptar un programa se hace en la pestana Programa del atleta**, no en la
   seccion de entrenador.
+- **La identidad de `users` es el email exacto.** Dos grafias del mismo Gmail
+  crean dos cuentas. Las invitaciones ya no se ven afectadas, el login si.
 
 ---
 
