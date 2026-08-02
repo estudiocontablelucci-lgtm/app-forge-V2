@@ -29,7 +29,7 @@ for (const f of readdirSync(resolve(root, "db")).filter((f) => /^v\d+_.*\.sql$/.
 
 const users = await import("../lib/repo/users.js");
 const { pushForUser, pullForUser } = await import("../lib/sync/service.js");
-const { mergeHistory, mergePrograms } = await import("../lib/sync/client.js");
+const { mergeHistory, mergePrograms, logsFromHistory } = await import("../lib/sync/client.js");
 
 const fallas = [];
 const check = async (label, fn) => {
@@ -150,6 +150,28 @@ await check("mergeHistory deja ganar al remoto cuando es mas nuevo", () => {
   );
   if (out.length !== 1) return `${out.length} entradas`;
   if (out[0].date !== 999) return "gano el local siendo mas viejo";
+  return true;
+});
+
+await check("logsFromHistory reconstruye las series que alimentan el semaforo", async () => {
+  // Sin esto un dispositivo nuevo baja el historial y ve Progreso en cero: la
+  // pantalla no lee `history`, lee `logs`.
+  const { history } = await pullForUser(ana.id);
+  const logs = logsFromHistory(history);
+  const claves = Object.keys(logs);
+  if (!claves.length) return "no reconstruyo ninguna serie";
+
+  const k = "1|a4|1";
+  if (!logs[k]) return `falta la clave ${k} — claves: ${claves.slice(0, 3).join(", ")}`;
+  if (logs[k].kg !== "65") return `kg deberia ser el string "65" y es ${JSON.stringify(logs[k].kg)}`;
+  if (logs[k].reps !== "10") return `reps deberia ser "10" y es ${JSON.stringify(logs[k].reps)}`;
+  if (logs[k].done !== true) return "la serie no quedo marcada como hecha";
+
+  // Los valores tienen que ser string: es lo que produce el input y lo que
+  // espera el resto del componente.
+  const todosString = Object.values(logs).every((l) =>
+    typeof l.kg === "string" && typeof l.reps === "string" && typeof l.rir === "string");
+  if (!todosString) return "hay valores que no son string";
   return true;
 });
 

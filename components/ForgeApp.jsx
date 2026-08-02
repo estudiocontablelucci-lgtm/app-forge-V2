@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum } from "@/lib/formulas";
-import { pushSession, pullAll, mergeHistory, mergePrograms } from "@/lib/sync/client";
+import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory } from "@/lib/sync/client";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
 
@@ -262,7 +262,13 @@ export default function ForgeApp() {
       if (!r.ok) { setSyncState(r.motivo === "sin-red" ? "Sin conexión: trabajando local." : null); return; }
       const { programs: remotos = [], history: histRemoto = [] } = r.data;
       if (remotos.length) setPrograms((P) => mergePrograms(P, remotos));
-      if (histRemoto.length) setHistory((H) => mergeHistory(H, histRemoto));
+      if (histRemoto.length) {
+        setHistory((H) => mergeHistory(H, histRemoto));
+        // Lo local va segundo y por lo tanto gana: el usuario puede estar a
+        // mitad de una serie cuando esto resuelve y no se le pisa nada.
+        const reconstruidos = logsFromHistory(histRemoto);
+        setLogs((L) => ({ ...reconstruidos, ...L }));
+      }
       setSyncState(`Sincronizado · ${histRemoto.length} sesión${histRemoto.length === 1 ? "" : "es"} en la nube.`);
     })();
   }, [loaded, signedIn]);
@@ -329,7 +335,12 @@ export default function ForgeApp() {
     const rows = [];
     for (let i = 1; i <= setsFor(exercise, pw); i++) { const l = logs[keyOf(pw, exercise.id, i)]; if (l?.done) rows.push(l); }
     if (!rows.length) return null;
-    const best = Math.max(...rows.map((r) => (isNum(r.kg) && r.reps ? brzycki(r.kg, r.reps) || 0 : 0)));
+    // Los logs guardan lo que sale del input: strings. `isNum` exige un number,
+    // asi que sin parsear esto daba 0 siempre y la referencia nunca aparecia.
+    const best = Math.max(...rows.map((r) => {
+      const kg = parseFloat(r.kg), reps = parseInt(r.reps);
+      return isNum(kg) && reps ? brzycki(kg, reps) || 0 : 0;
+    }));
     return { pw, rows, e1rm: best > 0 ? Math.round(best) : null };
   }
 
@@ -413,7 +424,12 @@ export default function ForgeApp() {
       if (!l.done) continue; const [w, exId] = k.split("|");
       const exercise = program.find((e) => e.id === exId);
       if (!exercise || exercise.unit === "pasos") continue;
-      if (isNum(l.kg) && l.reps) { tonnage[w] = (tonnage[w] || 0) + l.kg * l.reps; const e1 = brzycki(l.kg, l.reps); if (e1) { e1rms[exId] = e1rms[exId] || {}; e1rms[exId][w] = Math.max(e1rms[exId][w] || 0, e1); } }
+      // Mismo motivo que en prevWeekSummary: `logs` guarda strings. Sin parsear,
+      // `isNum` era false para todo y la pantalla de Progreso quedaba vacia
+      // aunque hubiera series cargadas. "BW" da NaN y queda fuera del tonelaje,
+      // que es lo correcto: no hay carga externa que sumar.
+      const kg = parseFloat(l.kg), reps = parseInt(l.reps);
+      if (isNum(kg) && reps) { tonnage[w] = (tonnage[w] || 0) + kg * reps; const e1 = brzycki(kg, reps); if (e1) { e1rms[exId] = e1rms[exId] || {}; e1rms[exId][w] = Math.max(e1rms[exId][w] || 0, e1); } }
     }
     return { tonnage, e1rms };
   }, [logs, program]);
