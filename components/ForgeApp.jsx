@@ -249,6 +249,7 @@ export default function ForgeApp() {
   const [sessionStart, setSessionStart] = useState(null);
   const [expandedLog, setExpandedLog] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null); // "finish" | "exit" | null
+  const [sessionNote, setSessionNote] = useState(""); // nota que el alumno deja al cerrar
   const [reentryChoice, setReentryChoice] = useState(null); // session id pending choice
   const [descModal, setDescModal] = useState(null); // exercise object to show description
   const [programListView, setProgramListView] = useState(false); // show program list vs active program
@@ -536,7 +537,7 @@ export default function ForgeApp() {
         for (let i = 1; i <= setsFor(exercise, week, deloadCfg); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
         return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week, deloadCfg) };
       });
-      const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, exercises: exerciseData };
+      const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, note: sessionNote.trim() || null, exercises: exerciseData };
       // Replace existing entry for same week+session, or add new
       setHistory((H) => {
         const existing = H.findIndex((h) => h.week === week && h.session === session);
@@ -559,6 +560,7 @@ export default function ForgeApp() {
       }
     }
     setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null);
+    setSessionNote("");
     setConfirmAction(null);
   }
 
@@ -1032,6 +1034,20 @@ export default function ForgeApp() {
           <div className="overlay centered" onClick={() => setConfirmAction(null)}>
             <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
               <p className="confirm-msg">{confirmAction === "finish" ? "Terminar la sesión y guardar al historial?" : "Salir sin guardar?"}</p>
+              {/* La nota es el unico canal de vuelta hacia el entrenador: el alumno
+                  no edita la prescripcion, pero si cuenta como le fue. */}
+              {confirmAction === "finish" && (
+                <>
+                  <textarea className="note-input" rows={3} maxLength={500}
+                    placeholder={esAsignado ? `Nota para ${activeProgram?.coachName || "tu entrenador"} (opcional)` : "Cómo te fue (opcional)"}
+                    value={sessionNote} onChange={(e) => setSessionNote(e.target.value)} />
+                  <p className="note-hint">
+                    {esAsignado
+                      ? "La lee quien te entrena. Molestias, cargas que quedaron cortas, lo que sea."
+                      : "Queda en tu historial."}
+                  </p>
+                </>
+              )}
               <div className="confirm-actions">
                 <button className="confirm-cancel" onClick={() => setConfirmAction(null)}>Cancelar</button>
                 <button className="confirm-ok" onClick={handleConfirmOk}>OK</button>
@@ -1804,6 +1820,9 @@ const CSS = `
 .confirm-box { background: #FFF; border-radius: 16px; padding: 24px 20px 16px; width: 300px; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.15); }
 .confirm-msg { font-size: 16px; font-weight: 600; color: #1C1C1E; margin-bottom: 20px; line-height: 1.4; }
 .confirm-actions { display: flex; gap: 10px; }
+.note-input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1.5px solid #D1D1D6; background: #F2F2F7; font: 400 14px 'Inter'; color: #1C1C1E; resize: vertical; text-align: left; }
+.note-input:focus { outline: none; border-color: #2C6BED; background: #FFF; }
+.note-hint { font-size: 11px; color: #8E8E93; text-align: left; margin: 6px 0 14px; line-height: 1.4; }
 .confirm-cancel { flex: 1; height: 44px; border-radius: 10px; border: 1px solid #D1D1D6; background: #FFF; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
 .confirm-ok { flex: 1; height: 44px; border-radius: 10px; border: none; background: #2C6BED; color: #FFF; font: 600 15px 'Inter'; cursor: pointer; }
 
@@ -1855,14 +1874,6 @@ const CSS = `
 .testnote { font-size: 13px; color: #1F4B99; background: #EEF3FE; border: 1px solid #B9CDF5; padding: 8px 14px; border-radius: 10px; margin-bottom: 12px; font-weight: 500; line-height: 1.45; }
 .testbadge { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 10px 'Inter'; vertical-align: middle; text-transform: uppercase; letter-spacing: .06em; }
 .ed-hint2 { width: 100%; margin: 2px 0 0; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; text-transform: none; letter-spacing: 0; }
-.alumno-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid #F2F2F7; }
-.alumno-row:last-child { border-bottom: none; }
-.alumno-name { font: 500 14px 'Inter'; color: #1C1C1E; }
-.alumno-sub { font: 400 12.5px 'Inter'; color: #8E8E93; margin-top: 2px; }
-.alumno-baja { padding: 6px 12px; border: 1px solid #E5E5EA; border-radius: 999px; background: #fff; color: #636366; font: 600 12px 'Inter'; cursor: pointer; }
-.alumno-baja.si { border-color: #D93025; color: #D93025; }
-.alumno-confirm { display: flex; gap: 6px; }
-.alumno-mas { padding: 4px 10px; background: none; border: 0; color: #8E8E93; font-size: 18px; line-height: 1; cursor: pointer; }
 .btn-peligro { width: 100%; height: 50px; margin-top: 16px; border: 0; border-radius: 12px; background: #D93025; color: #fff; font: 600 15px 'Inter'; cursor: pointer; }
 .prog-grupo { margin-bottom: 6px; }
 .prog-grupo-head { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px; }
@@ -1870,12 +1881,9 @@ const CSS = `
 .prog-grupo-n { padding: 1px 7px; border-radius: 999px; background: #F2F2F7; color: #8E8E93; font: 600 10px 'Inter'; }
 .prog-grupo-ayuda { margin: 0 0 8px; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; }
 .prog-coach { display: inline-block; margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 11px 'Inter'; }
-.alumno-abrir { flex: 1; padding: 0; background: none; border: 0; text-align: left; cursor: pointer; }
-.ref-alumno { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F2F2F7; }
-.ref-alumno:last-child { border-bottom: none; }
-.ref-input { width: 84px; height: 40px; margin: 0; text-align: center; }
-.ref-ok { color: #2C6BED; font: 600 12px 'Inter'; }
 .aviso { color: #1F7A3D; }
+/* El mismo boton, pero como enlace: la puerta a la seccion de entrenador. */
+a.btn-ghost { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 .invite-banner { position: absolute; top: 62px; left: 16px; right: 16px; z-index: 25; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #EEF3FE; border: 1px solid #B9CDF5; font: 400 13px 'Inter'; color: #1F4B99; line-height: 1.4; }
 .invite-acciones { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .invite-ver { color: #2C6BED; font-weight: 600; text-decoration: none; white-space: nowrap; }

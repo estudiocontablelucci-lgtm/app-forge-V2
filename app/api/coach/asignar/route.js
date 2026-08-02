@@ -12,8 +12,11 @@
 import { getServerSession } from "@/lib/auth/nextauth-interop";
 import { authOptions } from "@/lib/auth/options";
 import { getCoachDe, puedeVer } from "@/lib/repo/coaching.js";
-import { listByOwner, getProgram } from "@/lib/repo/programs.js";
-import { asignarPrograma, programasAsignados, ensureAssignment, resolveRefs, setRef } from "@/lib/repo/training.js";
+import { listByOwner, getProgram, duplicarPrograma } from "@/lib/repo/programs.js";
+import {
+  asignarPrograma, programasAsignados, asignacionDeMiAlumno, asignacionesDeMisProgramas,
+  ensureAssignment, resolveRefs, setRef,
+} from "@/lib/repo/training.js";
 import { scope, unscopeProgram } from "@/lib/sync/ids.js";
 
 async function contexto() {
@@ -34,9 +37,15 @@ export async function GET(request) {
     return Response.json({ error: "no es tu alumno" }, { status: 403 });
   }
 
-  const propios = await listByOwner(ctx.user.id);
-  const asignados = await programasAsignados(alumno);
-  const asignado = asignados[0] || null;
+  const [propios, repartidos] = await Promise.all([
+    listByOwner(ctx.user.id),
+    asignacionesDeMisProgramas(ctx.user.id),
+  ]);
+  // A quien mas le toca cada programa. Es lo que permite avisar antes de
+  // asignar que ese ya lo esta entrenando otra persona, y ofrecer duplicar.
+  const programas = propios.map((p) => ({ ...p, asignadoA: repartidos[p.id] || [] }));
+
+  const asignado = await asignacionDeMiAlumno({ athleteId: alumno, coachUserId: ctx.user.id });
 
   let detalle = null;
   if (asignado) {
@@ -57,7 +66,7 @@ export async function GET(request) {
     };
   }
 
-  return Response.json({ programas: propios, asignado: detalle });
+  return Response.json({ programas, asignado: detalle });
 }
 
 export async function POST(request) {
@@ -66,11 +75,21 @@ export async function POST(request) {
 
   let body;
   try { body = await request.json(); } catch { return Response.json({ error: "body invalido" }, { status: 400 }); }
-  const { alumno, programa } = body || {};
+  const { alumno, programa, duplicar = false, nombre } = body || {};
   if (!alumno || !programa) return Response.json({ error: "faltan alumno o programa" }, { status: 400 });
 
+  // Duplicar y asignar es un solo movimiento: asignar el mismo programa a dos
+  // alumnos los deja compartiendo la prescripcion, y adaptarsela a uno se la
+  // cambia al otro sin aviso.
+  let programId = programa;
+  if (duplicar) {
+    const copia = await duplicarPrograma({ programId: programa, ownerUserId: ctx.user.id, nombre });
+    if (!copia.ok) return Response.json({ error: "Ese programa no es tuyo." }, { status: 400 });
+    programId = copia.programa.id;
+  }
+
   const r = await asignarPrograma({
-    programId: programa, athleteId: alumno,
+    programId, athleteId: alumno,
     coachUserId: ctx.user.id, coachId: ctx.coach.id,
   });
   if (!r.ok) {
