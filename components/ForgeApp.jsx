@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
-import { brzycki, keyOf, isNum, setsFor, repsFor, DELOAD_DEFAULT } from "@/lib/formulas";
+import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo } from "@/lib/catalog";
 import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } from "@/lib/sync/client";
 import AccountButton from "./AccountButton";
@@ -66,7 +66,8 @@ const weekLabel = (w) => (w === "DL" ? "Deload" : `Sem ${w}`);
 const round1 = (v) => Math.round(v * 10) / 10;
 const fmtDate = (ts) => new Date(ts).toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 function refLine(ex, week, deload) {
-  const kg = ex.refKg === null || ex.refKg === "" ? "máquina" : ex.refKg === "BW" ? "BW" : `${ex.refKg}${isNum(ex.refKg) ? "kg" : ""}`;
+  const ref = refFor(ex, week);
+  const kg = ref === null || ref === "" ? "máquina" : ref === "BW" ? "BW" : `${ref}${isNum(ref) ? "kg" : ""}`;
   // En deload por reps el rango baja: mostrar el original seria pedir el
   // volumen de una semana normal.
   const { min, max } = repsFor(ex, week, deload);
@@ -205,11 +206,12 @@ function ExSetRow({ ex, n, week, logs, onSetChange, deload }) {
   const l = logs[k] || {};
   const handleChange = (field, val) => onSetChange(ex, n, field, val);
   // Pre-fill KG with refKg on first focus if empty
-  const prefillKg = () => { if ((l.kg === undefined || l.kg === "") && isNum(ex.refKg)) handleChange("kg", String(ex.refKg)); };
+  const refSemana = refFor(ex, week);
+  const prefillKg = () => { if ((l.kg === undefined || l.kg === "") && isNum(refSemana)) handleChange("kg", String(refSemana)); };
   return (
     <div className={`setrow ${l.done ? "done" : ""}`}>
       <span className="setn mono">S{n}</span>
-      <input className="nf mono" inputMode="decimal" placeholder={isNum(ex.refKg) ? String(ex.refKg) : ex.refKg === "BW" ? "0" : "—"}
+      <input className="nf mono" inputMode="decimal" placeholder={isNum(refSemana) ? String(refSemana) : refSemana === "BW" ? "0" : "—"}
         value={l.kg ?? ""} onFocus={prefillKg} onChange={(e) => handleChange("kg", e.target.value)} />
       <input className="nf mono" inputMode="numeric" placeholder={String(repsFor(ex, week, deload).max)}
         value={l.reps ?? ""} onChange={(e) => handleChange("reps", e.target.value)} />
@@ -549,6 +551,14 @@ export default function ForgeApp() {
     return [...enPrograma, ...retirados];
   }, [program, metrics, exercisesFueraDelPrograma]);
 
+  /**
+   * El programa puede marcar una semana y sesion como test de maximos — en el
+   * Ciclo 2 es "Semana 4, Sesion C = Test de maximos para evaluar progresion
+   * del ciclo". Es una sesion que no se autorregula: se va a buscar el tope.
+   */
+  const esSemanaDeTest = (w) => Boolean(activeProgram?.maxTest) && String(activeProgram.maxTest.week) === String(w);
+  const esSesionDeTest = (w, sessId) => esSemanaDeTest(w) && activeProgram.maxTest.session === sessId;
+
   /** Alta en el catalogo desde el editor, sin salir a otra pantalla. */
   function crearEjercicio(nombre) {
     const { catalog: nuevo, entrada } = agregarAlCatalogo(catalog, { name: nombre, group: null, unit: "reps" });
@@ -665,7 +675,19 @@ export default function ForgeApp() {
             <div className="weekchips">
               {weeks.map((w) => (<button key={w} className={`chip ${week === w ? "on" : ""} ${w === "DL" ? "dl" : ""}`} onClick={() => setWeek(w)}>{w === "DL" ? "Deload" : `S${w}`}</button>))}
             </div>
-            {week === "DL" && <div className="dlnote">Deload: series - 1, bajá la intensidad</div>}
+            {week === "DL" && (
+              <div className="dlnote">
+                Deload: {deloadCfg.method === "reps"
+                  ? `reps al ${100 - deloadCfg.pct}%, mismas series`
+                  : `series al ${100 - deloadCfg.pct}% (mínimo ${deloadCfg.minSets})`}, misma intensidad
+              </div>
+            )}
+            {esSemanaDeTest(week) && (
+              <div className="testnote">
+                Semana de test de máximos en la sesión {activeProgram.maxTest.session}: cierra el ciclo
+                y define las referencias del próximo. No la uses para autorregular.
+              </div>
+            )}
             <div className="sessioncards">
               {sessions.map((sess) => {
                 const exs = program.filter((e) => e.session === sess.id);
@@ -676,7 +698,7 @@ export default function ForgeApp() {
                 return (
                   <button key={sess.id} className={`scard ${allDone ? "completed" : ""}`} onClick={() => startSession(sess.id)}>
                     <div className="sletter">{sess.id}</div>
-                    <div className="sinfo"><div className="sname">{sess.name}</div><div className="sgroups">{groups}</div><div className="sbar"><div style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} /></div></div>
+                    <div className="sinfo"><div className="sname">{sess.name}{esSesionDeTest(week, sess.id) && <span className="testbadge">test</span>}</div><div className="sgroups">{groups}</div><div className="sbar"><div style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} /></div></div>
                     <div className="sright"><span className="spct mono">{allDone ? "Done" : `${done}/${total}`}</span></div>
                   </button>
                 );
@@ -982,6 +1004,7 @@ export default function ForgeApp() {
           catalog={catalog}
           onCrearEjercicio={crearEjercicio}
           sustituido={nombreSustituido(editing)}
+          semanasDelPrograma={weeks}
         />}
 
         {/* ======== PROGRAM EDITOR MODAL ======== */}
@@ -1019,7 +1042,7 @@ export default function ForgeApp() {
                             onChange={(e) => setD("minSets", Math.max(1, parseInt(e.target.value) || 1))} />
                         </label>
                       )}
-                      <p className="ed-hint">
+                      <p className="ed-hint2">
                         {d.method === "sets"
                           ? `Deload al ${100 - d.pct}% de las series, nunca menos de ${d.minSets}. Un ejercicio de 3 series pasa a ${setsFor({ sets: 3 }, "DL", d)}; uno de 2, a ${setsFor({ sets: 2 }, "DL", d)}.`
                           : `Deload al ${100 - d.pct}% de las reps, con las mismas series. Un rango de 10-12 pasa a ${repsFor({ repsMin: 10, repsMax: 12 }, "DL", d).min}-${repsFor({ repsMin: 10, repsMax: 12 }, "DL", d).max}.`}
@@ -1027,9 +1050,30 @@ export default function ForgeApp() {
                     </>
                   );
                 })()}
+
+                {/* Test de maximos: una sesion del ciclo que no se autorregula
+                    sino que va a buscar el tope para calibrar el ciclo siguiente. */}
+                <div className="ed-row2">
+                  <label><span>Test de máximos · semana</span>
+                    <input className="mono" inputMode="numeric" placeholder="—"
+                      value={editingProgram.maxTest?.week ?? ""}
+                      onChange={(e) => {
+                        const w = parseInt(e.target.value);
+                        setEditingProgram((p) => ({ ...p, maxTest: isNaN(w) ? null : { week: w, session: p.maxTest?.session || "C" } }));
+                      }} />
+                  </label>
+                  <label><span>Sesión</span>
+                    <select value={editingProgram.maxTest?.session || ""}
+                      disabled={!editingProgram.maxTest}
+                      onChange={(e) => setEditingProgram((p) => ({ ...p, maxTest: { ...p.maxTest, session: e.target.value } }))}>
+                      {(activeProgram?.sessions || []).map((s) => <option key={s.id} value={s.id}>{s.id}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <p className="ed-hint2">Semana vacía = el programa no tiene test.</p>
               </div>
               <div className="sheetactions" style={{ flexDirection: "column", gap: 8 }}>
-                <button className="save" onClick={() => { updateActiveProgram({ name: editingProgram.name, weeks: editingProgram.weeks, hasDeload: editingProgram.hasDeload, deload: { ...DELOAD_DEFAULT, ...editingProgram.deload } }); setEditingProgram(null); }}>Guardar</button>
+                <button className="save" onClick={() => { updateActiveProgram({ name: editingProgram.name, weeks: editingProgram.weeks, hasDeload: editingProgram.hasDeload, deload: { ...DELOAD_DEFAULT, ...editingProgram.deload }, maxTest: editingProgram.maxTest || null }); setEditingProgram(null); }}>Guardar</button>
                 <button className="prog-dup-btn" onClick={() => {
                   const id = uid();
                   const dup = { ...activeProgram, id, name: activeProgram.name + " (copia)", exercises: activeProgram.exercises.map((e) => ({ ...e, id: uid() })), createdAt: Date.now() };
@@ -1084,9 +1128,15 @@ export default function ForgeApp() {
   );
 }
 
-function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, catalog, onCrearEjercicio, sustituido }) {
+/** Cuantas semanas tienen una referencia propia. */
+const contarRefs = (ex) => Object.keys(ex?.refsByWeek || {}).length;
+
+function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, catalog, onCrearEjercicio, sustituido, semanasDelPrograma }) {
   const set = (f, v) => setDraft((d) => ({ ...d, [f]: v }));
   const num = (v, int) => { const n = int ? parseInt(v) : parseFloat(v); return isNaN(n) ? "" : n; };
+  // Se abre solo si ya hay refs cargadas: para la mayoria de los ejercicios la
+  // referencia general alcanza y esto seria ruido.
+  const [verRefs, setVerRefs] = useState(contarRefs(draft) > 0);
   // Elegir otro ejercicio del catalogo es sustituir, no renombrar: el nombre y
   // el grupo pasan a ser los del ejercicio nuevo.
   const elegirDelCatalogo = (c) => setDraft((d) => ({ ...d, exerciseId: c.id, name: c.name, group: c.group || "", unit: c.unit || d.unit }));
@@ -1111,6 +1161,42 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
             <label><span>Ref KG</span><input className="mono" value={draft.refKg ?? ""} onChange={(e) => { const v = e.target.value.trim(); const n = parseFloat(v); set("refKg", v === "" ? null : !isNaN(n) && String(n) === v ? n : v); }} placeholder="120" /></label>
             <label><span>Tempo</span><input className="mono" value={draft.tempo} onChange={(e) => set("tempo", e.target.value)} placeholder="2-0-1-0" /></label>
             <label><span>RIR</span><input className="mono" value={draft.rir} onChange={(e) => set("rir", e.target.value)} placeholder="2-3" /></label>
+          </div>
+
+          {/* Refs por semana: la progresion de este programa es autorregulada,
+              asi que subir la ref en la semana 4 no puede cambiar la de las
+              semanas que ya se entrenaron. Vacio = usa la referencia general. */}
+          <div className="ed-full">
+            <button type="button" className="ref-toggle" onClick={() => setVerRefs((v) => !v)}>
+              {verRefs ? "▾" : "▸"} Referencias por semana
+              {contarRefs(draft) > 0 && <span className="ref-count">{contarRefs(draft)}</span>}
+            </button>
+            {verRefs && (
+              <>
+                <div className="ref-grid">
+                  {semanasDelPrograma.map((w) => (
+                    <label key={w} className="ref-cell">
+                      <span>{w === "DL" ? "DL" : `S${w}`}</span>
+                      <input className="mono" inputMode="decimal"
+                        value={draft.refsByWeek?.[String(w)] ?? ""}
+                        placeholder={draft.refKg ?? "—"}
+                        onChange={(e) => {
+                          const v = e.target.value.trim();
+                          const n = parseFloat(v);
+                          const valor = v === "" ? undefined : (!isNaN(n) && String(n) === v ? n : v);
+                          setDraft((d) => {
+                            const refs = { ...d.refsByWeek };
+                            if (valor === undefined) delete refs[String(w)];
+                            else refs[String(w)] = valor;
+                            return { ...d, refsByWeek: Object.keys(refs).length ? refs : undefined };
+                          });
+                        }} />
+                    </label>
+                  ))}
+                </div>
+                <p className="ed-hint">Vacío usa la referencia general ({draft.refKg ?? "sin definir"}). Sirve para subir la carga a mitad de ciclo sin tocar lo ya entrenado.</p>
+              </>
+            )}
           </div>
           <div className="ed-row2">
             <label><span>Descanso (seg)</span><input className="mono" inputMode="numeric" value={draft.rest} onChange={(e) => set("rest", num(e.target.value, true))} /></label>
@@ -1687,6 +1773,14 @@ const CSS = `
 .picker-empty { padding: 14px 12px; font: 400 13px 'Inter'; color: #8E8E93; }
 .picker-cancel { align-self: flex-start; padding: 6px 0; background: none; border: 0; color: #8E8E93; font: 500 13px 'Inter'; cursor: pointer; }
 .ed-warn { width: 100%; margin: 2px 0 0; padding: 10px 12px; border-radius: 10px; background: #FFF7E6; color: #8A5B00; font: 400 12.5px 'Inter'; line-height: 1.45; }
+.testnote { font-size: 13px; color: #1F4B99; background: #EEF3FE; border: 1px solid #B9CDF5; padding: 8px 14px; border-radius: 10px; margin-bottom: 12px; font-weight: 500; line-height: 1.45; }
+.testbadge { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 10px 'Inter'; vertical-align: middle; text-transform: uppercase; letter-spacing: .06em; }
+.ed-hint2 { width: 100%; margin: 2px 0 0; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; text-transform: none; letter-spacing: 0; }
+.ref-toggle { width: 100%; padding: 8px 0; background: none; border: 0; text-align: left; color: #2C6BED; font: 600 12.5px 'Inter'; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.ref-count { padding: 1px 7px; border-radius: 999px; background: #EEF3FE; font: 600 10px 'Inter'; }
+.ref-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 4px; }
+.ref-cell { display: flex; flex-direction: column; gap: 3px; }
+.ref-cell input { width: 100%; box-sizing: border-box; text-align: center; padding: 8px 2px; }
 .ed-hint { width: 100%; margin: 2px 0 0; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; }
 .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ed-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
