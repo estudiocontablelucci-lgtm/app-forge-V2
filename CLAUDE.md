@@ -92,6 +92,17 @@ Todo vive en `ForgeApp.jsx`:
 ```
 Migracion automatica de v1 (flat program[]) a v2 (programs[]) en `migrateState()`.
 
+### Catalogo de ejercicios
+El nombre no es texto libre: `program.exercises[].exerciseId` referencia a `lib/catalog.js`
+(base de solo lectura + propios). Los nombres se **resuelven** contra el catalogo al derivar
+`program`, asi que el resto del componente sigue leyendo `ex.name` sin enterarse.
+
+Cambiar `exerciseId` en un ejercicio **con series registradas es una sustitucion**: `saveExercise`
+le da un id nuevo y saca el anterior del programa, para que los e1RM no se encadenen. Sin series
+registradas, edita en el lugar. Esa distincion es el motivo de que exista el catalogo.
+
+Vive solo en el cliente: falta el schema SQL y el sync.
+
 ### Capa de datos (Turso) — existe, la UI todavia no la usa
 `lib/repo/*` traduce entre la forma que usa la UI (la de arriba) y el schema SQL.
 Ese mapeo vive solo ahi: la UI no conoce el schema y el schema no conoce los
@@ -157,7 +168,10 @@ redirect URIs de Google; lo demas se mueve. `npm run verify:ui` detecta el sinto
 - Viven en `lib/formulas.js`, importadas tanto por la UI como por el server —
   el e1RM que se persiste en `set_logs` tiene que ser el mismo que muestra la pantalla
 - e1RM: Brzycki `kg * 36 / (37 - reps)`
-- Deload: `sets - 1` automatico
+- Deload: configurable por programa (`{pct, method, minSets}`), default -40% por series con
+  piso de 2. El piso protege al protocolo ASIM-IZQ, que corrige asimetria con series de mas
+- Ref de kilos: `refFor(ex, week)` — `refsByWeek` pisa a `refKg`. Subir la ref a mitad de
+  ciclo no puede cambiar las semanas ya entrenadas
 - Semaforo: verde (subir) / amarillo (mantener) / rojo (revisar) basado en reps vs guia y RIR
 - Descanso: dispara en la transicion vacio -> con dato del campo REPS. En superserie espera a que la
   serie N este cerrada en todos los ejercicios del bloque y usa el `rest` mas alto (`maybeStartRest`)

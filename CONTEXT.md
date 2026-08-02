@@ -40,6 +40,29 @@ Estado actual del proyecto y decisiones tomadas.
 - [x] Export del historial a Excel (hoja Sesiones + hoja Series, una fila por set)
 - [x] Programa real del atleta (Ciclo 2) cargado en el SEED con refs post-24/06/2026
 
+## Fidelidad con el programa real (2026-08-02)
+
+Seis diferencias entre lo que hacia la app y lo que dice `rutina_gym.md`, todas cerradas:
+
+- [x] **Progreso conservaba solo lo del programa actual.** Un ejercicio sustituido desaparecia
+      con sus metricas y bajaba el tonelaje de semanas ya entrenadas. Ahora se recorren las
+      metricas y los retirados se recuperan del snapshot del historial.
+- [x] **Deload configurable** (`{pct, method, minSets}`, default -40% por series con piso de 2).
+      `sets - 1` recortaba entre 25% y 50% segun el ejercicio y dejaba en 1 serie a los 6 que
+      tienen 2 — incluido el protocolo ASIM-IZQ, que corrige asimetria con series de mas.
+- [x] **Catalogo de ejercicios**: base de solo lectura + propios, con selector y alta al vuelo.
+- [x] **Sustituir != renombrar**: cambiar el ejercicio con series registradas crea uno nuevo y
+      archiva el anterior; sin series, edita en el lugar.
+- [x] **Referencias por semana** (`refsByWeek`): subir la ref para Sem 4 ya no cambia las
+      semanas entrenadas. Mapea sobre `assignment_refs.week`, que ya existia en el schema.
+- [x] **Test de maximos** (`maxTest: {week, session}`): la Sem 4 · Sesion C es una sesion que
+      no se autorregula y ahora esta marcada como tal.
+
+**Lo que el programa NO tiene, y esta bien que no tenga**: progresion de carga prescrita de S1 a
+S4. Es DUP — la ondulacion es entre sesiones (A volumen 8-15 RIR 2-3, B moderada, C intensidad
+4-8 RIR 1-2), no entre semanas. En la Sheet 28 de 31 ejercicios tienen la misma referencia en las
+cuatro semanas. La progresion sale de la autorregulacion, que es lo que hace el semaforo.
+
 ## Fase 4 — lo que ya esta
 
 - [x] Shell migrado de Vite/GitHub Pages a Next.js 15 App Router
@@ -170,7 +193,17 @@ viven las otras bases). Una request resuelve varias queries, asi que la latencia
 mas que la del usuario↔funcion, que se paga una sola vez. `gru1` estaria mas cerca de Argentina
 pero cada query cruzaria el Atlantico. Si algun dia la base se muda a `sa-east-1`, mover esto tambien.
 
-### 2026-08 — Renombrar un ejercicio reescribe el pasado (PENDIENTE, bloquea fase 5)
+### 2026-08 — Renombrar un ejercicio reescribe el pasado (RESUELTO)
+
+> **Estado: implementado el 2026-08-02.** Existe el catalogo (`lib/catalog.js`), el selector
+> reemplazo al texto libre, y cambiar el ejercicio de uno que ya tiene series registradas es una
+> sustitucion: entra con id propio y el anterior sale del programa, con su historial y su e1RM
+> aparte. Progreso conserva los retirados (marcados "fuera") y sigue contandolos en el tonelaje.
+> Queda pendiente el schema SQL del catalogo y su sync: hoy vive solo en el cliente.
+>
+> El analisis original queda abajo porque explica el porque del diseno.
+
+
 **Detectado en uso real**: el programa traia "Prensa horizontal" en la sesion C. Al probarla no
 convencio y se hizo Prensa 45° en su lugar. Se edito el **nombre** del ejercicio y aparecieron dos
 filas "Prensa 45°" en Progreso — una por cada id, porque Progreso agrupa por id y muestra el nombre.
