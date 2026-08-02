@@ -6,21 +6,12 @@
  * Lo que importa: la migracion corre sobre programas reales con 33 ejercicios y
  * no puede perder ninguno ni inventar duplicados.
  */
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, normalizar, tieneSeriesRegistradas, absorberDeProgramas, CATALOGO_BASE } from "../lib/catalog.js";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-// El SEED real, extraido del componente para no mantener una copia.
-const src = readFileSync(resolve(root, "components/ForgeApp.jsx"), "utf8");
-const desde = src.indexOf("const SEED = [");
-const hasta = src.indexOf("];", desde);
-if (desde === -1 || hasta === -1) throw new Error("No se encontro el SEED en ForgeApp.jsx");
-// Mismo mecanismo que gen-programa-xlsx.mjs: se evalua el literal del fuente
-// para no mantener una copia del SEED que pueda divergir.
-const SEED = new Function(`return ${src.slice(desde + "const SEED = ".length, hasta + 1)}`)();
+// El SEED real, importado del modulo donde vive. Antes se extraia del texto de
+// ForgeApp.jsx; cuando el SEED se mudo, esa extraccion se rompio de tres formas
+// distintas en tres scripts, y una de ellas fallo en silencio.
+const { SEED } = await import("../lib/seed-ciclo2.js");
 
 const fallas = [];
 const check = (label, fn) => {

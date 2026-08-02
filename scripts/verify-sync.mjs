@@ -197,12 +197,47 @@ await check("sesionesPendientes detecta lo que quedo sin subir", () => {
   return true;
 });
 
-await check("mergePrograms agrega los que faltan sin pisar los locales", () => {
+await check("mergePrograms agrega los que faltan sin pisar los PROPIOS", () => {
   const local = [{ id: "p1", name: "local" }];
   const remoto = [{ id: "p1", name: "remoto" }, { id: "p2", name: "otro" }];
   const out = mergePrograms(local, remoto);
   if (out.length !== 2) return `${out.length} programas`;
   if (out.find((p) => p.id === "p1").name !== "local") return "piso el programa local";
+  return true;
+});
+
+await check("un programa ASIGNADO si se reemplaza con la version del servidor", () => {
+  // El bug que esto cubre no daba error: el entrenador corregia el programa, el
+  // alumno sincronizaba y seguia viendo el viejo, sin ninguna senal.
+  const local = [{ id: "c1", name: "viejo", readOnly: true, exercises: [{ id: "e1" }, { id: "e2" }] }];
+  const remoto = [{ id: "c1", name: "corregido", readOnly: true, exercises: [{ id: "e1" }] }];
+  const out = mergePrograms(local, remoto);
+  const p = out.find((x) => x.id === "c1");
+  if (p.name !== "corregido") return "el alumno se quedo con la version vieja";
+  if (p.exercises.length !== 1) return "el ejercicio que el entrenador saco sigue estando";
+  return true;
+});
+
+await check("reemplazar el asignado no toca a los propios en la misma pasada", () => {
+  const local = [
+    { id: "mio", name: "mi programa" },
+    { id: "coach", name: "viejo", readOnly: true },
+  ];
+  const remoto = [
+    { id: "mio", name: "version del servidor" },
+    { id: "coach", name: "nuevo", readOnly: true },
+  ];
+  const out = mergePrograms(local, remoto);
+  if (out.find((p) => p.id === "mio").name !== "mi programa") return "piso un programa propio";
+  if (out.find((p) => p.id === "coach").name !== "nuevo") return "no actualizo el asignado";
+  if (out.length !== 2) return `${out.length} programas, esperaba 2`;
+  return true;
+});
+
+await check("el orden de la lista de programas no cambia al sincronizar", () => {
+  const local = [{ id: "a" }, { id: "b", readOnly: true }, { id: "c" }];
+  const out = mergePrograms(local, [{ id: "b", readOnly: true, name: "x" }, { id: "d" }]);
+  if (out.map((p) => p.id).join(",") !== "a,b,c,d") return `orden ${out.map((p) => p.id).join(",")}`;
   return true;
 });
 

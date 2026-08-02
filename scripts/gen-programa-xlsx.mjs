@@ -5,34 +5,17 @@
  *
  *   node scripts/gen-programa-xlsx.mjs
  *
- * Lee el SEED directamente de components/ForgeApp.jsx para que no pueda divergir del codigo.
+ * Lee el SEED de lib/seed-ciclo2.js, que es donde vive desde que las cuentas
+ * nuevas dejaron de arrancar con el programa de otra persona.
  * Salida: data/ (gitignored — son datos personales del atleta, no van al repo publico).
  */
-import { readFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const src = readFileSync(resolve(root, "components/ForgeApp.jsx"), "utf8");
-
-/** Extrae un array literal top-level del fuente y lo evalua. */
-function extractArray(name) {
-  const start = src.indexOf(`const ${name} = [`);
-  if (start === -1) throw new Error(`No se encontro "const ${name} = [" en ForgeApp.jsx`);
-  const open = src.indexOf("[", start);
-  let depth = 0;
-  for (let i = open; i < src.length; i++) {
-    if (src[i] === "[") depth++;
-    else if (src[i] === "]" && --depth === 0) {
-      return new Function(`return ${src.slice(open, i + 1)}`)();
-    }
-  }
-  throw new Error(`Array "${name}" sin cerrar`);
-}
-
-const SEED = extractArray("SEED");
-const SESSIONS = extractArray("DEFAULT_SESSIONS");
+const { SEED, SESIONES_CICLO2: SESSIONS } = await import("../lib/seed-ciclo2.js");
 
 const byId = new Map(SEED.map((e) => [e.id, e]));
 const HEADER = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Unidad", "Descripcion"];

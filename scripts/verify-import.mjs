@@ -15,16 +15,6 @@ import * as XLSX from "xlsx";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const src = readFileSync(resolve(root, "components/ForgeApp.jsx"), "utf8");
 
-function extractArray(name) {
-  const open = src.indexOf("[", src.indexOf(`const ${name} = [`));
-  let depth = 0;
-  for (let i = open; i < src.length; i++) {
-    if (src[i] === "[") depth++;
-    else if (src[i] === "]" && --depth === 0) return new Function(`return ${src.slice(open, i + 1)}`)();
-  }
-  throw new Error(`Array "${name}" sin cerrar`);
-}
-
 // Bloque de helpers de import tal cual esta en el fuente.
 const from = src.indexOf("/* ---------- Excel import helpers ---------- */");
 const to = src.indexOf("function ImportWizard");
@@ -34,7 +24,10 @@ const helpers = new Function("XLSX", "uid", `${src.slice(from, to)}; return { ma
   () => Math.random().toString(36).slice(2, 9),
 );
 
-const SEED = extractArray("SEED");
+// Se importa el modulo en vez de extraerlo del fuente: cuando el SEED salio
+// de ForgeApp.jsx, la extraccion por texto no fallo — agarro el primer array
+// que encontro y comparo contra el equivocado.
+const { SEED } = await import("../lib/seed-ciclo2.js");
 // XLSX.readFile no esta disponible en el build ESM (fs no viene bindeado): leer el buffer.
 const wb = XLSX.read(readFileSync(resolve(root, "data/forge-ciclo2-gabriel.xlsx")), { type: "buffer" });
 const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
