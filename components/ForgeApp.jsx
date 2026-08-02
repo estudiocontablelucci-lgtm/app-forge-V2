@@ -752,7 +752,11 @@ export default function ForgeApp() {
               {program.filter((e) => metrics.e1rms[e.id]).map((e) => {
                 const row = Array.from({ length: activeProgram?.weeks || 4 }, (_, i) => metrics.e1rms[e.id][String(i + 1)]); const nums = row.filter(Boolean);
                 const trend = nums.length >= 2 ? (nums[nums.length - 1] > nums[0] ? "↗" : nums[nums.length - 1] < nums[0] ? "↘" : "→") : "";
-                return (<div key={e.id} className="e1row" style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span className="e1name">{e.name} <span className={`tr ${trend === "↗" ? "up" : trend === "↘" ? "dn" : ""}`}>{trend}</span></span>{row.map((v, i) => <span key={i} className="mono e1v">{v ? Math.round(v) : "·"}</span>)}</div>);
+                // El mismo ejercicio puede estar en dos sesiones (o quedar con
+                // nombre repetido tras una edicion). Se agrupa por id, asi que
+                // serian dos filas identicas: la sesion las distingue.
+                const repetido = program.filter((o) => o.name === e.name).length > 1;
+                return (<div key={e.id} className="e1row" style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span className="e1name">{e.name}{repetido && <span className="e1sess">{e.session}</span>} <span className={`tr ${trend === "↗" ? "up" : trend === "↘" ? "dn" : ""}`}>{trend}</span></span>{row.map((v, i) => <span key={i} className="mono e1v">{v ? Math.round(v) : "·"}</span>)}</div>);
               })}
               {Object.keys(metrics.e1rms).length === 0 && <div className="empty">Registrá series con kg y reps para ver tu e1RM acá.</div>}
             </div>
@@ -1444,6 +1448,7 @@ const CSS = `
 .btn-primary { width: 100%; height: 50px; margin-top: 18px; border: 0; border-radius: 12px; background: #2C6BED; color: #fff; font: 600 16px 'Inter'; cursor: pointer; }
 .btn-primary:disabled { opacity: .45; cursor: default; }
 .btn-ghost { width: 100%; height: 50px; margin-top: 12px; border: 1px solid #E5E5EA; border-radius: 12px; background: #fff; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
+.e1sess { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 10px 'Inter'; vertical-align: middle; }
 .btn-secondary { width: 100%; height: 46px; margin-top: 12px; border: 1px solid #2C6BED; border-radius: 12px; background: #fff; color: #2C6BED; font: 600 15px 'Inter'; cursor: pointer; }
 .btn-secondary:disabled { opacity: .5; cursor: default; }
 .ticon { font-size: 18px; line-height: 1; }
