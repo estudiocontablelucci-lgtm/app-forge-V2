@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
-import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes, marcarParaAlumnos } from "@/lib/sync/client";
+import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, logsFromHistory, sesionesPendientes, marcarParaAlumnos } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
@@ -297,6 +297,8 @@ export default function ForgeApp() {
   historyRef.current = history;
   const programsRef = useRef(programs);
   programsRef.current = programs;
+  const catalogRef = useRef(catalog);
+  catalogRef.current = catalog;
 
   /**
    * Sincroniza en los dos sentidos: baja lo que hay en la nube y sube las
@@ -320,7 +322,9 @@ export default function ForgeApp() {
       return;
     }
 
-    const { programs: remotos = [], history: histRemoto = [] } = r.data;
+    const { programs: remotos = [], history: histRemoto = [], catalog: catRemoto = [] } = r.data;
+    // El catalogo primero: los programas que llegan lo referencian por id.
+    if (catRemoto.length) setCatalog((C) => mergeCatalog(C, catRemoto));
     if (remotos.length) {
       // Los ejercicios que llegan de otro dispositivo se incorporan al catalogo.
       // Sin esto la app los muestra igual (cae al nombre denormalizado) pero no
@@ -343,7 +347,7 @@ export default function ForgeApp() {
     // un alumno. Los ajenos (asignados por un entrenador) no se tocan.
     let programasSubidos = 0;
     for (const p of programsRef.current.filter((x) => !x.readOnly)) {
-      const res = await pushProgram(p);
+      const res = await pushProgram(p, catalogRef.current);
       if (res.ok) programasSubidos++;
     }
 
@@ -353,7 +357,7 @@ export default function ForgeApp() {
     for (const h of pendientes) {
       const prog = programsRef.current.find((p) => p.id === h.programId) || programsRef.current[0];
       if (!prog) continue;
-      const res = await pushSession({ program: prog, entry: h });
+      const res = await pushSession({ program: prog, entry: h, catalog: catalogRef.current });
       if (res.ok) subidas++;
     }
 
@@ -504,7 +508,7 @@ export default function ForgeApp() {
       // aunque en el gimnasio no haya senal.
       if (signedIn && activeProgram) {
         setSyncState("Subiendo…");
-        pushSession({ program: activeProgram, entry }).then((r) => {
+        pushSession({ program: activeProgram, entry, catalog }).then((r) => {
           setSyncState(r.ok
             ? `Última subida: ${new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`
             : r.motivo === "sin-red"

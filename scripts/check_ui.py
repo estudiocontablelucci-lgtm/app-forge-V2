@@ -27,6 +27,10 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 RUTAS = {
     "/": "Entrenar",
     "/login": "FORGE",
+    # Sin sesion muestra el cartel para entrar, que es lo que corresponde: lo
+    # que se verifica aca es que la ruta hidrate, no el flujo del entrenador.
+    # Ese vive en check_coach_ui.py, que si necesita dos sesiones.
+    "/entrenador": "Entrenador",
 }
 
 
