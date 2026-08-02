@@ -176,9 +176,21 @@ convencio y se hizo Prensa 45° en su lugar. Se edito el **nombre** del ejercici
 filas "Prensa 45°" en Progreso — una por cada id, porque Progreso agrupa por id y muestra el nombre.
 
 **El sintoma visible ya esta corregido** (la fila lleva un badge con la sesion cuando el nombre se
-repite). **El problema de fondo no**: editar el nombre lo cambia tambien en las semanas ya
-entrenadas. El historial pasa a decir que se hizo Prensa 45° en las semanas 1 y 2, cuando se hizo
-Prensa horizontal. Se reescribe el pasado.
+repite).
+
+**Alcance real del problema — verificado en el navegador, no deducido:**
+
+| Pantalla | Tras renombrar muestra | |
+|---|---|---|
+| Historial | el nombre **viejo** | correcto |
+| Progreso | el nombre **nuevo** | reescribe |
+
+El historial guarda un snapshot del nombre al cerrar la sesion (`handleConfirmOk`) y `set_logs.
+exercise_name` hace lo mismo del lado del servidor: **el registro de lo que se hizo esta intacto**.
+Lo que se reescribe es solo la etiqueta de Progreso, que agrupa por id y toma el nombre del
+programa actual.
+
+Que Progreso quede mal no se arregla eligiendo "el otro nombre": depende de que fue el cambio.
 
 **La causa es que hoy hay una sola operacion para dos cosas distintas:**
 - *Corregir* el nombre (un typo) → tiene que aplicar hacia atras. Es lo que hace hoy.
@@ -190,16 +202,31 @@ Lo segundo no es una opinion: el propio SEED lo dice en la descripcion de la Sen
 mecanica de la maquina, no por mas fuerza. Su e1RM arranca como serie nueva"—. La regla de negocio
 ya esta escrita en el programa; la app todavia no la implementa.
 
-**Diseno propuesto** (fase 5, antes del rol entrenador):
-- "Sustituir ejercicio" como operacion propia, distinta de editar el nombre. Crea un id nuevo y
-  archiva el anterior con su historial intacto.
-- El schema ya lo soporta: `program_exercises.deleted_at`, `set_logs.exercise_name` desnormalizado
-  y FK `ON DELETE SET NULL` — el log sobrevive (verificado en verify-repo).
-- Falta una columna `replaced_by` para que el entrenador vea la cadena de sustituciones.
-- Progreso muestra las dos series por separado, sin encadenar e1RM entre ejercicios distintos.
+**Diseno propuesto: catalogo de ejercicios** (idea de Agustin, 2026-08). El nombre deja de ser
+texto libre en `program_exercises` y pasa a ser una referencia a una tabla de ejercicios. Al armar
+el programa se elige de una lista o se agrega uno nuevo.
 
-**Urgencia**: con un solo atleta es molesto. Con entrenadores editando el mesociclo en marcha de
-varios alumnos, corrompe el historial de todos en silencio.
+Lo que resuelve, y por que es la solucion correcta y no un parche:
+- **Typos y duplicados por nombre**: dejan de ser posibles. "Prensa 45°" es una fila, no un string
+  que se escribe dos veces distinto.
+- **Convierte el rename en sustitucion sin pedirle nada al usuario**: cambiar de "Prensa
+  horizontal" a "Prensa 45°" deja de ser editar un texto y pasa a ser *apuntar a otro ejercicio*.
+  La app puede distinguir por fin las dos operaciones que hoy se confunden — corregir el nombre de
+  un ejercicio (aplica hacia atras) contra cambiar de ejercicio (empieza una serie nueva).
+- **Progreso puede cortar la serie de e1RM** cuando cambia la referencia, en vez de encadenar dos
+  maquinas distintas.
+
+Que el e1RM no se herede entre ejercicios distintos no es una opinion: el propio SEED lo dice en la
+descripcion de la Sentadilla pendular —"Reemplaza al belt squat (tope mecanico 120kg). NO heredar
+esos kilos: la pendular mueve mas por mecanica de la maquina, no por mas fuerza. Su e1RM arranca
+como serie nueva"—. La regla ya esta escrita en el programa; falta implementarla.
+
+Schema: tabla `exercises` (catalogo, global + por coach) y `program_exercises.exercise_id` como FK.
+`set_logs` ya guarda el snapshot del nombre, asi que el historial sigue anclado a lo que se hizo.
+Migracion: los nombres actuales se vuelcan al catalogo deduplicando por nombre normalizado.
+
+**Urgencia**: con un solo atleta es una molestia que se corrige a mano. Con entrenadores editando
+el mesociclo en marcha de varios alumnos, las metricas de todos dejan de significar lo que dicen.
 
 ### 2026-08 — Adapter de NextAuth propio en vez de uno de libreria
 **Decision**: `lib/auth/adapter.js` escrito a mano sobre la tabla `users` del dominio.
