@@ -1,11 +1,43 @@
 # E4 — Sección de entrenador
 
-Punto de partida para la próxima sesión. Todo lo de abajo está decidido; lo que
-falta es construirlo.
+**Hecha y mergeada a main el 2026-08-02.** Lo que sigue documenta cómo quedó y
+qué decisiones la sostienen. Lo pendiente está al final.
 
 ---
 
-## Qué existe hoy
+## Cómo quedó
+
+- **Ruta propia `/entrenador`** (`components/coach/`), fuera del modal de Perfil.
+  Layout de dos columnas arriba de 900px, una columna abajo — en el celular se ve
+  la lista **o** la ficha, con "← Alumnos" para volver. La app del atleta sigue
+  clavada a 430px y no se tocó.
+- **El Perfil volvió a ser el Perfil**: nombre, peso corporal, sincronización y
+  cerrar sesión. Queda un enlace "Entrenar a otros →" y nada más: sin él no se
+  puede llegar a invitar al primer alumno, y el espacio nace al invitarlo.
+- **Ficha del alumno** (`GET /api/coach/alumno`): programa y semana en curso,
+  adherencia de 7 días, último entrenamiento, alerta de RIR, notas de sesión,
+  tonelaje semanal y tabla de e1RM. **Se sacó la lista de calibración de kilos.**
+- **`lib/coach/metrics.js`** — funciones puras, sin base ni sesión. Es lo que
+  permite verificar las reglas (adherencia, desvío de RIR) sin levantar nada.
+- **Notas de sesión**: `session_logs.note` existía desde v01 y **nadie escribía
+  ahí**. Ahora el atleta la deja al cerrar la sesión y viaja por el push/pull.
+- **Duplicar y asignar es un solo movimiento** (`POST /api/coach/asignar` con
+  `duplicar: true`), que es lo que hace viable "un programa por alumno".
+
+### Dos cosas que decidió la implementación
+
+**El desvío de RIR se mide contra el borde del rango, no contra el punto medio.**
+Un objetivo "2-3" cumplido con RIR 3 está en objetivo, no desviado 0.5. Y mira
+solo la semana más reciente de ese ejercicio: promediar el ciclo entero diluye
+el desvío justo cuando hay que actuar.
+
+**La adherencia es sesiones hechas contra sesiones que tiene una semana del
+programa.** No se intenta adivinar en qué días concretos debería haber entrenado
+— la app no pide un calendario y fingir que lo sabe daría un número inventado.
+
+---
+
+## Qué existía antes de E4
 
 Las etapas E1 a E3 de la fase 5 están hechas, verificadas y en producción:
 
@@ -17,39 +49,21 @@ Las etapas E1 a E3 de la fase 5 están hechas, verificadas y en producción:
   `asignacionesDeMisProgramas`, `resolveRefs`, `setRef`.
 - **API**: `/api/coach` (espacio, invitar, baja), `/api/coach/asignar`
   (asignar y calibrar), `/api/invitaciones` (ver y aceptar).
-- **UI**: `CoachScreen` y `AlumnoDetalle`, hoy **dentro del modal de Perfil**.
+- **UI**: `CoachScreen` y `AlumnoDetalle`, dentro del modal de Perfil. **E4 los
+  borró**: los reemplazan `components/coach/`.
 - El alumno recibe el programa asignado en modo lectura, con el nombre de quien
   se lo prescribió, y no puede editarlo.
 
-## Qué hay que hacer
+## Qué queda pendiente
 
-### 1. Sacar la sección de entrenador del Perfil
-
-Sección propia con selector de alumno. El Perfil vuelve a ser lo que era: nombre,
-peso corporal, sincronización y cerrar sesión.
-
-**Responsive real**: una columna en el celular, aprovechando el ancho en la
-computadora. Ojo — la app del **atleta** sigue siendo mobile-first a 430px y no
-se toca. La del entrenador es otra cosa y se diseña aparte.
-
-### 2. Ficha del alumno: métricas, no calibración
-
-Sacar la lista de kilos por ejercicio. En su lugar, **cómo le está yendo**:
-
-- Programa asignado y en qué semana va.
-- **Adherencia**: sesiones completadas contra programadas en los últimos 7 días.
-- Último entrenamiento (cuándo, cuál, cuánto duró).
-- e1RM por ejercicio y tonelaje semanal — lo mismo que ve el atleta en Progreso.
-- **Notas de sesión del alumno** (`session_logs.note`): es el canal de feedback
-  asincrónico. El alumno no edita la prescripción pero sí deja comentarios.
-- **Alerta de RIR**: si el RIR reportado promedio se desvía más de 1 punto del
-  objetivo, la carga está mal calibrada. Sale de `rutina_gym.md` y de
-  `forge-arquitectura.md` §7.4.
-
-### 3. Flujo de asignación: duplicar y adaptar
-
-El entrenador duplica un programa, lo adapta y lo asigna. Ese es el camino
-principal; hoy funciona pero está repartido entre dos pantallas.
+- **Adaptar el programa se sigue haciendo en la pestaña Programa de la app del
+  atleta.** La sección de entrenador asigna y duplica, pero no edita ejercicios;
+  para eso todavía hay que cruzar de pantalla. Es lo que falta para que el flujo
+  "duplicar → adaptar → asignar" viva en un solo lugar.
+- **El catálogo de ejercicios no tiene schema SQL.** Vive solo en el cliente y el
+  pull lo mantiene al día con `absorberDeProgramas()`.
+- **`health_consents` se registra pero no hay UI que lo pida.** La invitación lo
+  graba al aceptarse; falta la pantalla que lo muestre y permita revocarlo.
 
 ---
 
@@ -92,16 +106,54 @@ manifest de client components queda inconsistente.
 mismo puerto le sirve assets cacheados a FORGE.
 
 **La constante `CSS` es un template string**: nada de backticks ni `${` adentro,
-ni siquiera en comentarios.
+ni siquiera en comentarios. La sección de entrenador **no** usa esa constante:
+tiene `components/coach/coach.css`, un archivo CSS de verdad, sin esa
+restricción — y carga las tipografías por su cuenta, porque el `@import` de la
+app del atleta no se monta en `/entrenador`.
+
+**Los `next dev` viejos quedan vivos entre sesiones y comparten `.next/`.** Antes
+de buildear: `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` filtrando
+por `app-forge-v2`. En agosto había cinco servidores huérfanos de días anteriores,
+uno de ellos un `next start -p 3000` contra la base de **producción**.
+
+**Reseedear la base con el server levantado no funciona en Windows.** El cliente
+libSQL mantiene el archivo abierto: el `rm` falla en silencio, las migraciones
+tiran "table users already exists" y, si llega a borrarse, el server sigue
+hablando con el archivo viejo. Parar el server, reseedear, levantar.
+
+**Playwright devuelve el texto RENDERIZADO.** `.mlabel` y `.flabel` tienen
+`text-transform: uppercase`, así que `"Peso corporal" in inner_text()` es False.
+Comparar sin distinguir caja, o mejor: mirar el **valor** de la tarjeta y no su
+rótulo — un rótulo sin número abajo es justo el bug que se está buscando.
 
 ---
 
 ## Cómo verificar
 
 ```bash
-npm run verify          # 5 suites, ~60 checks, sin navegador
-npm run verify:ui       # headless, necesita la app levantada
+npm run verify          # 8 suites, 120 checks, sin navegador
+npm run verify:metrics  # solo las metricas de la ficha (29 checks)
+npm run verify:ui       # headless generico, necesita la app levantada
 ```
+
+Para el flujo de dos personas, que es el que importa acá:
+
+```bash
+# 1. base de demo con un coach, dos alumnos y un ciclo entrenado.
+#    Aborta si DATABASE_URL no es local: nunca contra produccion.
+DATABASE_URL=file:db/demo.db node scripts/seed-demo-coach.mjs > demo.json
+
+# 2. levantar CONTRA ESA BASE (la var del shell le gana a .env.local)
+DATABASE_URL=file:db/demo.db npx next dev -p 3007
+
+# 3. 40 checks en navegador, como el coach y como la alumna
+python scripts/check_coach_ui.py --base http://localhost:3007 \
+  --cookies demo.json --shots ./capturas
+```
+
+`seed-demo-coach.mjs` emite las cookies de sesión de cada persona firmando un
+JWT con `NEXTAUTH_SECRET`, que es lo que evita tener que loguearse a mano dos
+veces. Los últimos bugs de esta fase salieron de acá y no de leer el código.
 
 Para probar flujos de dos usuarios sin ensuciar producción: levantar el server
 con `DATABASE_URL=file:db/local.db` y generar sesiones firmando un JWT con

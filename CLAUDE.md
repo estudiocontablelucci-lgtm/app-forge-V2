@@ -29,32 +29,47 @@ App de tracking de entrenamiento para gimnasio. Reemplaza Google Sheets con una 
 app-forge-v2/
 ├── app/                   # App Router
 │   ├── layout.jsx         # shell HTML + metadata + viewport
-│   ├── page.jsx           # monta <ForgeApp />
+│   ├── page.jsx           # monta <ForgeApp /> — la app del ATLETA
+│   ├── entrenador/        # la app del ENTRENADOR (monta <CoachApp />)
 │   ├── globals.css        # estilos globales minimos
 │   ├── login/             # pantalla de acceso (page.jsx + login.css)
-│   └── api/auth/[...nextauth]/route.js
+│   ├── invitacion/[token] # aceptar una invitacion de entrenador
+│   └── api/               # auth, sync, profile, invitaciones,
+│                          # coach/ (espacio), coach/alumno (ficha), coach/asignar
 ├── components/
-│   ├── ForgeApp.jsx       # archivo monolitico principal (~1400 lineas, "use client")
-│   └── LoginForm.jsx      # formulario de acceso (client)
+│   ├── ForgeApp.jsx       # monolito del atleta (~1400 lineas, "use client")
+│   ├── LoginForm.jsx      # formulario de acceso (client)
+│   └── coach/             # la seccion de entrenador, con su propio CSS
+│       ├── CoachApp.jsx        # shell + selector de alumno + invitar
+│       ├── AlumnoFicha.jsx     # metricas de seguimiento
+│       ├── AsignarPrograma.jsx # duplicar / asignar
+│       └── coach.css           # responsive real, un breakpoint (900px)
 ├── lib/
 │   ├── db.js              # cliente libSQL + uid/now/tx
 │   ├── formulas.js        # brzycki, keyOf, isNum — fuente unica (UI y server)
 │   ├── auth/              # options, adapter propio, envio Resend, interop v4
-│   └── repo/              # users.js, programs.js, training.js
+│   ├── coach/             # metrics.js (funciones puras) + invite-email.js
+│   ├── sync/              # ids.js (prefijos), service.js, client.js
+│   └── repo/              # users, programs, training, coaching
 ├── db/
 │   ├── v01_init.sql       # dominio multi-tenant
 │   ├── v02_auth.sql       # tablas de NextAuth
+│   ├── v03_coach.sql      # catalogo con dueno + coach_invites
 │   └── *.db               # bases locales (gitignored)
 ├── public/                # assets estaticos
 ├── scripts/               # utilidades node (no entran al bundle)
 │   ├── gen-programa-xlsx.mjs  # genera el .xlsx del SEED para importar por el wizard
 │   ├── migrate.mjs            # aplica db/*.sql en orden, idempotente
+│   ├── seed-demo-coach.mjs    # base de demo con 2 usuarios + cookies de sesion
 │   ├── verify-import.mjs      # round-trip del import, contra los helpers reales
 │   ├── verify-export.mjs      # export del historial contra historial sintetico
 │   ├── verify-schema.mjs      # invariantes del schema sobre base descartable
 │   ├── verify-repo.mjs        # capa de datos real sobre base descartable
 │   ├── verify-sync.mjs        # aislamiento entre usuarios + merge del cliente
-│   └── check_ui.py            # headless: falla si una ruta no hidrata (requiere app levantada)
+│   ├── verify-coaching.mjs    # vinculo coach-alumno, cupos, baja
+│   ├── verify-coach-metrics.mjs # metricas de la ficha + camino coach->alumno
+│   ├── check_ui.py            # headless: falla si una ruta no hidrata
+│   └── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
 ├── data/                  # .xlsx generados (gitignored — datos personales)
 ├── forge-arquitectura.md  # documento de diseno tecnico completo
 ├── forge-mvp.jsx          # version anterior de referencia
@@ -205,7 +220,12 @@ Restriccion medica que condiciona la seleccion de ejercicios: discopatias lumbar
 Sustitutos validos en uso: sentadilla pendular, prensa horizontal, prensa 45, trap bar, hip thrust.
 
 `npm run gen:programa` genera `data/*.xlsx` para importar por el wizard (el SEED solo aplica a
-instalaciones nuevas). `npm run verify` corre las tres verificaciones (excel, schema, capa de datos).
+instalaciones nuevas). `npm run verify` corre las 8 suites (120 checks, sin navegador).
+
+Para lo que el verify no ve, que es donde aparecieron los ultimos bugs, hay dos
+verificadores con navegador: `npm run verify:ui` (generico) y
+`scripts/check_coach_ui.py` (la seccion de entrenador, con dos sesiones reales).
+Ver `docs/e4-seccion-entrenador.md` para como levantarlos.
 
 Los datos de salud (lesiones en `description` y `note`) son **dato sensible** bajo la Ley 25.326
 cuando son de terceros. Antes de onboardear un alumno real hace falta consentimiento expreso —
@@ -225,16 +245,25 @@ la tabla `health_consents` existe para registrarlo, pero todavia no hay UI que l
 
 ## Rol entrenador (fase 5)
 
-E1-E3 hechas: schema v03, invitaciones con consentimiento, asignar programas.
-**E4 pendiente** — ver `docs/e4-seccion-entrenador.md`, que tiene el estado, las
-decisiones tomadas y los errores que ya mordieron.
+E1-E4 hechas. Ver `docs/e4-seccion-entrenador.md` para el detalle, lo que quedo
+pendiente y los errores que ya mordieron.
 
-Dos reglas que valen mas que su implementacion:
-- **Un programa por alumno**, no una plantilla calibrada. Personalizar es el trabajo
-  del entrenador personalizado.
+**Son dos apps con dos formas distintas y no se mezclan.** La del atleta vive en
+`/` y esta clavada a 430px porque se usa con una mano en el gimnasio. La del
+entrenador vive en `/entrenador` (`components/coach/`), es responsive de verdad y
+tiene su propio `coach.css` — un archivo CSS normal, no la constante `CSS`.
+Cambiar una no deberia tocar a la otra.
+
+Tres reglas que valen mas que su implementacion:
+- **Un programa por alumno**, no una plantilla calibrada. Por eso duplicar y
+  asignar son un solo movimiento: asignar el mismo programa a dos personas las
+  deja compartiendo la prescripcion.
+- La ficha del alumno muestra **como le esta yendo**, no con que kilos entrena.
+  `assignment_refs` sigue existiendo y verificado, pero no es el camino principal.
 - Los ids llevan el prefijo del usuario que los subio; uno que **ya viene prefijado no se
   vuelve a prefijar**. En un programa asignado el id del servidor es el canonico. Ver
-  `lib/sync/ids.js`.
+  `lib/sync/ids.js`. Vale tambien para los ids que genera el SERVIDOR (duplicar un
+  programa): si nacen pelados, el push siguiente los prefija y duplica el programa.
 
 ## Roadmap
 
@@ -244,8 +273,8 @@ Dos reglas que valen mas que su implementacion:
 4. **En curso** — Persistencia real (Turso) + auth + multi-device
    - Hecho: shell Next.js, base `forge` en Turso, schema v01+v02, capa de datos, NextAuth
    - Falta: `/api/sync`, cablear la UI a la capa de datos, migrar el localStorage existente
-5. **En curso** — Roles coach/atleta: invitaciones y asignacion hechas, falta la
-   seccion de entrenador con metricas (E4)
+5. ~~Roles coach/atleta: invitaciones, asignacion y seccion de entrenador con
+   metricas (E1-E4)~~ Done
 6. PWA offline
 
 ---
