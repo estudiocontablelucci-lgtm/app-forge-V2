@@ -61,6 +61,13 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
 
   return (
     <div className="screen">
+      {/* Salir del perfil es lo que mas se hace acá y estaba al fondo de todo,
+          debajo de "Cerrar sesión" y con el mismo peso visual. Va arriba, es lo
+          primero que se ve y no se parece a cerrar sesión. */}
+      <button className="volver-top" onClick={onClose}>
+        <span aria-hidden="true">←</span> Volver a entrenar
+      </button>
+
       <header className="top">
         <div className="brand">FORGE</div>
         <h1>Perfil</h1>
@@ -121,11 +128,12 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
               al primero hace falta poder llegar. */}
           <a className="btn-ghost" href="/entrenador">Entrenar a otros →</a>
 
-          <button className="btn-ghost" onClick={() => signOut({ callbackUrl: "/" })}>Cerrar sesión</button>
+          <button className="btn-primary" onClick={onClose} style={{ marginTop: 20 }}>Volver a entrenar</button>
+          <button className="btn-salir" onClick={() => signOut({ callbackUrl: "/" })}>Cerrar sesión</button>
         </>
       )}
 
-      <button className="btn-ghost" onClick={onClose}>Volver</button>
+      {!user && <button className="btn-ghost" onClick={onClose}>Volver</button>}
     </div>
   );
 }

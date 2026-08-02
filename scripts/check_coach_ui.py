@@ -201,6 +201,13 @@ def main() -> int:
               "el espacio de entrenador sigue embebido en el perfil")
         check("el perfil deja llegar a la seccion de entrenador",
               a2.get_by_text("Entrenar a otros").is_visible())
+        # Salir del perfil es lo que mas se hace ahi y estaba al fondo, con el
+        # mismo peso visual que cerrar sesion.
+        check("hay un boton visible para volver a entrenar",
+              a2.get_by_text("Volver a entrenar").first.is_visible())
+        volver_y = a2.evaluate("document.querySelector('.volver-top')?.getBoundingClientRect().top ?? 9999")
+        salir_y = a2.evaluate("[...document.querySelectorAll('button')].find(b => b.innerText.includes('Cerrar sesión'))?.getBoundingClientRect().top ?? 0")
+        check("volver esta ARRIBA de cerrar sesion", volver_y < salir_y, f"volver {volver_y} vs salir {salir_y}")
 
         a2.get_by_text("Entrenar a otros").first.click()
         a2.wait_for_timeout(2500)
@@ -215,6 +222,11 @@ def main() -> int:
 
         a.get_by_text("Entrenar").first.click()
         a.wait_for_timeout(600)
+        # Una semana que todavia no entreno: sobre una ya entrenada la app abre
+        # el dialogo de re-entrenamiento en vez del health check, que es lo
+        # correcto pero no es el camino que se quiere probar aca.
+        a.get_by_text("S4", exact=True).first.click()
+        a.wait_for_timeout(400)
         a.locator(".scard").first.click()
         a.wait_for_timeout(600)
         empezar = a.get_by_text("Empezar")
@@ -253,6 +265,77 @@ def main() -> int:
         subida = next((h for h in vuelta.get("history", []) if h.get("note") == TEXTO), None)
         check("la nota vuelve en el pull del atleta", subida is not None,
               "la nota se perdio entre el push y el pull")
+
+        # ---------- lo que corrige el entrenador tiene que llegar ----------
+        # El bug que esto cubre no daba error en ningun lado: el coach editaba,
+        # subia, la alumna sincronizaba y seguia entrenando la version vieja.
+        print("\nla correccion del entrenador llega al telefono de la alumna")
+
+        antes = ctx3.request.get(f"{base}/api/sync").json()
+        suyo = next((p for p in antes["programs"] if p.get("readOnly")), None)
+        check("la alumna tiene un programa asignado", suyo is not None)
+
+        if suyo:
+            n_antes = len(suyo["exercises"])
+            # El coach le saca un ejercicio y le cambia el nombre al programa.
+            recortado = {**suyo, "readOnly": False,
+                         "name": "Hipertrofia 4 sem (corregido)",
+                         "exercises": suyo["exercises"][:-1]}
+            r = ctx.request.post(f"{base}/api/sync", data={"program": recortado})
+            check("el coach sube la correccion", r.status == 200, f"status {r.status}")
+
+            despues = ctx3.request.get(f"{base}/api/sync").json()
+            ahora = next((p for p in despues["programs"] if p["id"] == suyo["id"]), None)
+            check("el servidor ya devuelve el programa corregido",
+                  ahora and ahora["name"].endswith("(corregido)"), str(ahora and ahora["name"]))
+            check("el ejercicio que saco el coach ya no viene",
+                  ahora and len(ahora["exercises"]) == n_antes - 1,
+                  f"{ahora and len(ahora['exercises'])} ejercicios, esperaba {n_antes - 1}")
+
+            # Y lo que importa: que el cliente NO se quede con el viejo al mergear.
+            fusionado = a.evaluate(
+                """([local, remoto]) => {
+                    const porId = new Map(local.map(p => [p.id, p]));
+                    for (const r of remoto) {
+                      const actual = porId.get(r.id);
+                      if (!actual || actual.readOnly || r.readOnly) porId.set(r.id, r);
+                    }
+                    return [...porId.values()];
+                }""",
+                [[{**suyo}], [ahora]],
+            )
+            merged = next((p for p in fusionado if p["id"] == suyo["id"]), None)
+            check("al fusionar, la alumna se queda con la version del entrenador",
+                  merged and merged["name"].endswith("(corregido)"),
+                  "se quedo con la version vieja")
+
+        # ---------- una cuenta nueva no ve el programa de nadie ----------
+        print("\ncuenta nueva")
+        ctx6 = navegador.new_context(viewport=CELULAR)
+        n, err_n, con_n = abrir(ctx6, f"{base}/")
+        check("la app abre sin sesion y sin errores", not err_n and not con_n, f"{err_n or con_n}")
+        texto_n = n.inner_text("body")
+        check("NO aparece el programa de otra persona",
+              "Mesociclo DUP" not in texto_n and "Ciclo 2" not in texto_n,
+              "una instalacion nueva sigue trayendo el programa de Agustin")
+        check("dice que no hay ningun programa todavia",
+              "Todavía no tenés ningún programa" in texto_n or "Primero necesitás un programa" in texto_n,
+              texto_n[:220])
+
+        # Por el boton del cartel y no por la tabbar: es el camino que la app le
+        # propone, y ademas el indicador de dev de Next tapa la esquina inferior
+        # izquierda, que es justo donde cae la pestaña Programa.
+        n.get_by_text("Ir a Programa").first.click()
+        n.wait_for_timeout(800)
+        prog_n = n.inner_text("body")
+        check("ofrece armar uno, uno basico, o importar",
+              "Crear programa" in prog_n and "básico" in prog_n and "Importar Excel" in prog_n,
+              prog_n[:220])
+
+        n.get_by_text("Fullbody 3x básico").first.click()
+        n.wait_for_timeout(900)
+        check("cargar el basico deja un programa usable",
+              "Fullbody 3x · básico" in n.inner_text("body"), n.inner_text("body")[:200])
 
         # ---------- un alumno no entra al espacio de entrenador ----------
         print("\npermisos")

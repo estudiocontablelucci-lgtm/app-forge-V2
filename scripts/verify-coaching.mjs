@@ -336,6 +336,47 @@ await check("el entrenador distingue lo que prescribe de lo que entrena", async 
   return true;
 });
 
+/* ---------- la misma casilla escrita de dos formas ---------- */
+
+const { canonicalizarEmail, mismoEmail } = await import("../lib/email-id.js");
+
+await check("en Gmail los puntos no distinguen casillas", async () => {
+  if (!mismoEmail("olga.lightblue@gmail.com", "olgalightblue@gmail.com")) return "las dio por distintas";
+  if (!mismoEmail("Olga.LightBlue+gym@gmail.com", "olgalightblue@gmail.com")) return "no saco la etiqueta +";
+  return true;
+});
+
+await check("en un dominio cualquiera los puntos SI distinguen", async () => {
+  // Unificarlas seria darle a una persona el acceso de otra.
+  if (mismoEmail("a.b@estudiolucci.com.ar", "ab@estudiolucci.com.ar")) return "las unifico";
+  if (canonicalizarEmail("A.B@Estudiolucci.com.ar") !== "a.b@estudiolucci.com.ar") return "no normalizo la caja";
+  return true;
+});
+
+// Entrenador aparte: el de arriba ya tiene el cupo lleno de las pruebas previas.
+const otroCoach = await users.findOrCreate({ email: "coach2@example.com", displayName: "Entrenadora" });
+const carla = await users.findOrCreate({ email: "car.la.demo@gmail.com", displayName: "Carla" });
+
+await check("la invitacion aparece aunque se registre con el mail escrito distinto", async () => {
+  // El caso real: se invito sin puntos y la persona se registro con puntos.
+  const r = await co.invitar({ ownerUserId: otroCoach.id, email: "carlademo@gmail.com" });
+  if (!r.ok) return `no invito: ${r.motivo}`;
+
+  const suyas = await co.invitacionesPara(carla.email);
+  if (!suyas.length) return "no ve ninguna invitacion: la pantalla le queda vacia";
+
+  const ok = await co.aceptarInvitacion({ token: r.token, userId: carla.id, email: carla.email });
+  if (!ok.ok) return `no la pudo aceptar: ${ok.motivo}`;
+  return true;
+});
+
+await check("no se puede invitar dos veces a la misma casilla escribiendola distinto", async () => {
+  const r = await co.invitar({ ownerUserId: otroCoach.id, email: "car.la.demo+otra@gmail.com" });
+  if (r.ok) return "creo una segunda invitacion para alguien que ya es alumno";
+  if (r.motivo !== "ya-es-alumno") return `motivo ${r.motivo}, esperaba 'ya-es-alumno'`;
+  return true;
+});
+
 if (fallas.length) {
   console.error(`\nFALLO  ${fallas.length} verificacion(es):`);
   for (const f of fallas) console.error(`  - ${f}`);

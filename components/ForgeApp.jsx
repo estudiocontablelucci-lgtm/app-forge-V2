@@ -5,7 +5,8 @@ import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
-import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } from "@/lib/sync/client";
+import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes, marcarParaAlumnos } from "@/lib/sync/client";
+import { crearProgramaBasico } from "@/lib/programa-basico";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
 import ExercisePicker from "./ExercisePicker";
@@ -22,42 +23,6 @@ const DEFAULT_SESSIONS = [
   { id: "C", name: "Intensidad & Fuerza" },
 ];
 
-/* ---------- Seed: Ciclo 2 ---------- */
-const SEED = [
-  { id: "a1",  session: "A", order: 1,  name: "Sentadilla pendular",       group: "Cuádriceps",    sets: 3, refKg: null,     repsMin: 8,  repsMax: 10, tempo: "3-1-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "REVISAR ref. Reemplaza al belt squat (tope mecánico 120kg) — NO heredar esos kilos: la pendular mueve más por mecánica de la máquina, no por más fuerza. Arrancar RIR 3-4 y dejar que la autorregulación calibre en 1-2 sesiones. Su e1RM arranca como serie nueva, no continúa la del belt squat." },
-  { id: "a2",  session: "A", order: 2,  name: "Press Plano (barra)",       group: "Pecho",         sets: 3, refKg: 65,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "a3",  session: "A", order: 3,  name: "Remo T (soporte pect.)",    group: "Espalda",       sets: 3, refKg: 42.5,     repsMin: 8,  repsMax: 10, tempo: "2-0-1-1", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "a4",  session: "A", order: 4,  name: "Sillón de cuádriceps",      group: "Cuádriceps",    sets: 3, refKg: 60,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "2-3", superset: "a9",   unit: "reps", description: "" },
-  { id: "a5",  session: "A", order: 5,  name: "Vuelos laterales (DB)",     group: "Hombros",       sets: 3, refKg: 12,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "Subió de 10 a 12kg: estaba en tope de reps. Acá NO va dropset — se resuelve por progresión de carga." },
-  { id: "a6",  session: "A", order: 6,  name: "Ext. tríceps overhead (DB)",group: "Tríceps",       sets: 3, refKg: 32.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: "a7",   unit: "reps", description: "Puede con 35 pero molesta en muñecas — se queda en 32.5 hasta que deje de molestar." },
-  { id: "a7",  session: "A", order: 7,  name: "Curl sentado (DB)",         group: "Bíceps",        sets: 3, refKg: 12.5,     repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 90,  rir: "1-2", superset: "a6",   unit: "reps", description: "" },
-  { id: "a8",  session: "A", order: 8,  name: "Gemelo sentado",            group: "Gemelos",       sets: 3, refKg: 45,       repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "DS última serie: al llegar al fallo (RIR 0-1) bajar 20-25% la carga y seguir al fallo, 1-2 descuelgues. Grupo rezagado (pantorrilla 36 vs 39.5 target)." },
-  { id: "a9",  session: "A", order: 9,  name: "Camilla isquios",           group: "Isquios",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "2-3", superset: "a4",   unit: "reps", description: "" },
-  { id: "a10", session: "A", order: 10, name: "Extensión lumbar",          group: "Core",          sets: 2, refKg: 30,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "a11", session: "A", order: 11, name: "Shrugs DB",                 group: "Espalda",       sets: 3, refKg: 25,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "a12", session: "A", order: 12, name: "Curl sentado brazo I (DB)", group: "Bíceps",        sets: 2, refKg: 12.5,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a13",  unit: "reps", description: "ASIM-IZQ (brazo izq -4.8%): empezar siempre por el izquierdo, igualar las reps del derecho a lo que rindió el izquierdo, y 1 serie extra solo al izquierdo (izq 2 / der 1). No subir a +2." },
-  { id: "a13", session: "A", order: 13, name: "Ext. overhead brazo I (DB)",group: "Tríceps",       sets: 2, refKg: null,     repsMin: 8,  repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "a12",  unit: "reps", description: "ASIM-IZQ: mismo protocolo que el curl. Ref TBD — calibrar en la primera sesión." },
-  { id: "b1",  session: "B", order: 1,  name: "Prensa 45°",               group: "Cuádriceps",    sets: 3, refKg: 120,      repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "b2",  session: "B", order: 2,  name: "Dominadas",                 group: "Espalda",       sets: 3, refKg: "BW",     repsMin: 4,  repsMax: 8,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "b3",  session: "B", order: 3,  name: "Camilla isquios",           group: "Isquios",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "b4",  session: "B", order: 4,  name: "Press inclinado (DB)",      group: "Pecho",         sets: 3, refKg: 25,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "b5",  session: "B", order: 5,  name: "Vuelos posteriores",        group: "Hombros",       sets: 3, refKg: 50,       repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "Subió de 45 a 50: 45x15 RIR 2, reps en tope." },
-  { id: "b6",  session: "B", order: 6,  name: "Face pulls",                group: "Espalda",       sets: 3, refKg: 50,       repsMin: 12, repsMax: 15, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "Polea con cuerda. Deltoides posterior + rotadores externos + traps medios." },
-  { id: "b7",  session: "B", order: 7,  name: "Ext. tríceps (polea)",      group: "Tríceps",       sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b8",   unit: "reps", description: "" },
-  { id: "b8",  session: "B", order: 8,  name: "Curl bíceps (polea)",       group: "Bíceps",        sets: 3, refKg: 50,       repsMin: 10, repsMax: 12, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "b7",   unit: "reps", description: "Subió de 45 a 50: RIR 4 en la primera serie con 45." },
-  { id: "b9",  session: "B", order: 9,  name: "Gemelo prensa 45",          group: "Gemelos",       sets: 3, refKg: 180,      repsMin: 12, repsMax: 15, tempo: "2-1-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "DS última serie: al fallo (RIR 0-1), bajar 20-25% y seguir. Mismo criterio que el gemelo sentado — rezagado y periférico." },
-  { id: "b10", session: "B", order: 10, name: "Caminata granjero",         group: "Core",          sets: 3, refKg: "25kg/m", repsMin: 40, repsMax: 60, tempo: "",         rest: 120, rir: "",    superset: null,   unit: "pasos", description: "" },
-  { id: "c1",  session: "C", order: 1,  name: "Prensa horizontal",         group: "Cuádriceps",    sets: 4, refKg: null,     repsMin: 6,  repsMax: 8,  tempo: "3-1-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "REVISAR ref. Reemplaza al belt squat pesado. Acostado, torso apoyado = cero carga axial. NO heredar los 120kg. Arrancar RIR 3-4. No compite con la Prensa 45 de Sesión B: ángulo y posición distintos." },
-  { id: "c2",  session: "C", order: 2,  name: "Press Plano (pesado)",      group: "Pecho",         sets: 4, refKg: 70,       repsMin: 4,  repsMax: 6,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "c3",  session: "C", order: 3,  name: "Remo T (prono)",            group: "Espalda",       sets: 3, refKg: 45,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 150, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "c4",  session: "C", order: 4,  name: "Peso Muerto Trap Bar",      group: "Isquios",       sets: 3, refKg: 115,      repsMin: 6,  repsMax: 8,  tempo: "2-0-1-0", rest: 180, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "c5",  session: "C", order: 5,  name: "Hip Thrust",                group: "Isquios/Glúteos",sets: 3,refKg: 60,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-1", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "c6",  session: "C", order: 6,  name: "Apertura máquina",          group: "Pecho",         sets: 3, refKg: 70,       repsMin: 10, repsMax: 12, tempo: "2-0-1-1", rest: 90,  rir: "1-2", superset: null,   unit: "reps", description: "DS última serie: al fallo (RIR 0-1), bajar 20-25% y seguir. Es pecho esternal, no clavicular — el clavicular se ataca con la progresión de carga del inclinado DB en Sesión B." },
-  { id: "c7",  session: "C", order: 7,  name: "Press francés",             group: "Tríceps",       sets: 2, refKg: 32.5,     repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "c8",   unit: "reps", description: "" },
-  { id: "c8",  session: "C", order: 8,  name: "Curl DB",                   group: "Bíceps",        sets: 2, refKg: 15,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 60,  rir: "1-2", superset: "c7",   unit: "reps", description: "" },
-  { id: "c9",  session: "C", order: 9,  name: "Press máquina hombros",     group: "Hombros",       sets: 3, refKg: 35,       repsMin: 8,  repsMax: 10, tempo: "2-0-1-0", rest: 120, rir: "2-3", superset: null,   unit: "reps", description: "" },
-  { id: "c10", session: "C", order: 10, name: "Extensión lumbar",          group: "Core",          sets: 2, refKg: 35,       repsMin: 12, repsMax: 15, tempo: "2-0-1-0", rest: 90,  rir: "2-3", superset: null,   unit: "reps", description: "" },
-];
 
 /* ---------- Helpers ---------- */
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -128,18 +93,6 @@ function semaphore(exercise, logs, week, deload) {
 const SEM_LABELS = { green: "Subir peso", yellow: "Mantener", red: "Revisar", gray: "" };
 const SEM_COLORS = { green: "#34C759", yellow: "#FF9500", red: "#FF3B30", gray: "#D1D1D6" };
 
-/* ---------- Program template ---------- */
-const SEED_PROGRAM = {
-  id: "seed-dup-c2",
-  name: "Mesociclo DUP · Ciclo 2",
-  weeks: 4,
-  hasDeload: true,
-  sessions: DEFAULT_SESSIONS,
-  exercises: SEED,
-  status: "active",
-  createdAt: 0,
-};
-
 /* ---------- Persistencia ---------- */
 function migrateState(raw) {
   // v1 → v2: flat program[] + sessions[] → programs[] with activeProgramId
@@ -151,7 +104,7 @@ function migrateState(raw) {
         weeks: 4,
         hasDeload: true,
         sessions: raw.sessions || DEFAULT_SESSIONS,
-        exercises: (raw.program || SEED).map((e) => ({ ...e, description: e.description ?? "" })),
+        exercises: (raw.program || []).map((e) => ({ ...e, description: e.description ?? "" })),
         status: "active",
         createdAt: 0,
       }],
@@ -224,14 +177,12 @@ function ExSetRow({ ex, n, week, logs, onSetChange, deload }) {
 
 /* ============================================================ */
 export default function ForgeApp() {
-  // El SEED arranca ya migrado al catalogo: una instalacion nueva no deberia
-  // pasar por la migracion de datos viejos.
-  const [{ programs: programsIniciales, catalog: catalogoInicial }] = useState(() =>
-    migrarACatalogo([{ ...SEED_PROGRAM, exercises: SEED.map((e) => ({ ...e })) }]));
-
-  const [programs, setPrograms] = useState(programsIniciales);
-  const [catalog, setCatalog] = useState(catalogoInicial);
-  const [activeProgramId, setActiveProgramId] = useState("seed-dup-c2");
+  // Una cuenta nueva arranca SIN programas. Antes se instalaba el mesociclo de
+  // Agustin en toda instalacion: el usuario nuevo veia el programa de otro, con
+  // sus kilos y sus notas de lesion, sin forma de saber que no era suyo.
+  const [programs, setPrograms] = useState([]);
+  const [catalog, setCatalog] = useState(() => migrarACatalogo([]).catalog);
+  const [activeProgramId, setActiveProgramId] = useState(null);
   const [logs, setLogs] = useState({});
   const [history, setHistory] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -281,10 +232,13 @@ export default function ForgeApp() {
    */
   const gruposDeProgramas = useMemo(() => {
     const asignadosAMi = programs.filter((p) => p.readOnly);
-    // Prescrito = se lo asigne a alguien MAS. Que yo entrene mi propio programa
-    // no lo convierte en un programa para alumnos.
-    const prescritos = programs.filter((p) => !p.readOnly && p.asignadoA?.length);
-    const mios = programs.filter((p) => !p.readOnly && !p.asignadoA?.length);
+    // Para alumnos = se lo asigne a alguien MAS, o lo marque como tal. Lo
+    // segundo hace falta porque un programa se escribe para un alumno antes de
+    // que exista el alumno; hasta que hubo que asignarlo, vivia mezclado con la
+    // rutina propia y no habia forma de separarlo.
+    const esDeAlumnos = (p) => Boolean(p.asignadoA?.length || p.paraAlumnos);
+    const prescritos = programs.filter((p) => !p.readOnly && esDeAlumnos(p));
+    const mios = programs.filter((p) => !p.readOnly && !esDeAlumnos(p));
     const grupos = [];
     if (mios.length) {
       grupos.push({
@@ -326,8 +280,8 @@ export default function ForgeApp() {
   useEffect(() => {
     const s = loadState();
     if (s) {
-      setPrograms(s.programs || [{ ...SEED_PROGRAM, exercises: SEED.map((e) => ({ ...e })) }]);
-      setActiveProgramId(s.activeProgramId || s.programs?.[0]?.id || "seed-dup-c2");
+      setPrograms(s.programs || []);
+      setActiveProgramId(s.activeProgramId || s.programs?.[0]?.id || null);
       if (s.catalog) setCatalog(s.catalog);
       setLogs(s.logs || {});
       setHistory(s.history || []);
@@ -672,6 +626,40 @@ export default function ForgeApp() {
   }
   function deleteExercise(id) { setProgram((P) => P.filter((e) => e.id !== id).map((e) => (e.superset === id ? { ...e, superset: null } : e))); setEditing(null); }
 
+  /**
+   * Guarda los metadatos del programa.
+   *
+   * "Para quien es" no vive en el localStorage sino en el servidor, porque es lo
+   * que decide como se agrupa el programa en TODOS los dispositivos y lo que la
+   * seccion de entrenador necesita saber. Se manda aparte y sin bloquear: si no
+   * hay senal, el resto de la edicion se guarda igual.
+   */
+  async function guardarPrograma(draft) {
+    const antes = activeProgram?.paraAlumnos ?? false;
+    updateActiveProgram({
+      name: draft.name, weeks: draft.weeks, hasDeload: draft.hasDeload,
+      deload: { ...DELOAD_DEFAULT, ...draft.deload },
+      maxTest: draft.maxTest || null,
+      paraAlumnos: draft.paraAlumnos ?? false,
+    });
+    setEditingProgram(null);
+
+    if (signedIn && (draft.paraAlumnos ?? false) !== antes) {
+      const r = await marcarParaAlumnos(activeProgramId, draft.paraAlumnos ?? false);
+      if (!r.ok) {
+        // Se revierte en pantalla: dejarlo marcado de un lado y no del otro es
+        // peor que no haberlo marcado.
+        updateActiveProgram({ paraAlumnos: antes });
+        setSyncState(r.error || "No se pudo cambiar para quién es el programa.");
+      }
+    }
+  }
+
+  // Sin programas, la pestaña Programa SIEMPRE muestra la lista: el detalle de
+  // un programa que no existe es una pantalla en blanco donde deberia estar el
+  // primer paso.
+  const verListaDeProgramas = programListView || programs.length === 0;
+
   // Blocks for Programa tab (must be before early return)
   const progBlocks = useMemo(() => getBlocks(program.filter((e) => e.session === activeProgSession)), [program, activeProgSession]);
 
@@ -737,7 +725,19 @@ export default function ForgeApp() {
         {/* ======== ENTRENAR SELECTOR ======== */}
         {tab === "entrenar" && session === null && (
           <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Entrenar</h1><p className="sub">{activeProgram?.name}</p></header>
+            <header className="top"><div className="brand">FORGE</div><h1>Entrenar</h1><p className="sub">{activeProgram?.name || "Sin programa"}</p></header>
+
+            {/* Sin programa no hay nada que entrenar: un selector de semanas y
+                sesiones vacias parece una app rota, no una cuenta nueva. */}
+            {!activeProgram && (
+              <div className="vacio-card">
+                <p className="vacio-t">Primero necesitás un programa</p>
+                <p className="vacio-p">Elegí uno en la pestaña Programa, o pedile a tu entrenador que te asigne el suyo.</p>
+                <button className="btn-secondary" onClick={() => { setTab("programa"); setProgramListView(true); }}>Ir a Programa</button>
+              </div>
+            )}
+
+            {activeProgram && <>
             <div className="weekchips">
               {weeks.map((w) => (<button key={w} className={`chip ${week === w ? "on" : ""} ${w === "DL" ? "dl" : ""}`} onClick={() => setWeek(w)}>{w === "DL" ? "Deload" : `S${w}`}</button>))}
             </div>
@@ -770,6 +770,7 @@ export default function ForgeApp() {
                 );
               })}
             </div>
+            </>}
           </div>
         )}
 
@@ -836,9 +837,34 @@ export default function ForgeApp() {
         )}
 
         {/* ======== PROGRAMA — LIST VIEW ======== */}
-        {tab === "programa" && programListView && (
+        {tab === "programa" && verListaDeProgramas && (
           <div className="screen">
             <header className="top"><div className="brand">FORGE</div><h1>Programas</h1><p className="sub">{programs.length} programa{programs.length !== 1 ? "s" : ""}</p></header>
+
+            {/* Cuenta nueva. Lo primero que ofrece es sincronizar, no crear: si
+                alguien la invito como alumna, su programa ya existe del otro
+                lado y crear uno propio seria empezar por el lado equivocado. */}
+            {programs.length === 0 && (
+              <div className="vacio-card">
+                <p className="vacio-t">Todavía no tenés ningún programa</p>
+                {signedIn ? (
+                  <>
+                    <p className="vacio-p">
+                      Si tu entrenador te asignó uno, aparece acá al sincronizar.
+                    </p>
+                    <button className="btn-secondary" onClick={sincronizar} disabled={syncing}>
+                      {syncing ? "Sincronizando…" : "Buscar mi programa"}
+                    </button>
+                    {syncState && <p className="vacio-p">{syncState}</p>}
+                  </>
+                ) : (
+                  <p className="vacio-p">
+                    Entrá con tu cuenta para recibir el programa de tu entrenador,
+                    o armá uno acá abajo.
+                  </p>
+                )}
+              </div>
+            )}
             {/* Los grupos se derivan, no hay un campo "tipo de programa": uno
                 puede ser propio hoy y estar asignado manana sin cambiar de
                 naturaleza. Con un solo grupo no se muestran encabezados. */}
@@ -872,18 +898,18 @@ export default function ForgeApp() {
               setProgramListView(false);
             }}>+ Crear programa</button>
             <button className="addbtn" style={{ marginTop: 8 }} onClick={() => {
-              const id = uid();
-              setPrograms((ps) => [...ps, { ...SEED_PROGRAM, id, name: "Mesociclo DUP (copia)", exercises: SEED.map((e) => ({ ...e, id: uid() })), createdAt: Date.now() }]);
-              setActiveProgramId(id);
+              const basico = crearProgramaBasico(uid);
+              setPrograms((ps) => [...ps, basico]);
+              setActiveProgramId(basico.id);
               setProgSession(null);
               setProgramListView(false);
-            }}>+ Desde plantilla predefinida</button>
+            }}>+ Fullbody 3x básico</button>
             <button className="addbtn import-btn" style={{ marginTop: 8 }} onClick={() => setImportWizard({ step: 1 })}>+ Importar Excel</button>
           </div>
         )}
 
         {/* ======== PROGRAMA — ACTIVE PROGRAM DETAIL ======== */}
-        {tab === "programa" && !programListView && (
+        {tab === "programa" && !verListaDeProgramas && (
           <div className="screen">
             <header className="top">
               <div className="brand">FORGE</div>
@@ -1109,6 +1135,20 @@ export default function ForgeApp() {
               <div className="sheethead"><h3>Editar programa</h3><button className="x" onClick={() => setEditingProgram(null)}>&times;</button></div>
               <div className="ed-form">
                 <label className="ed-full"><span>Nombre</span><input value={editingProgram.name} onChange={(e) => setEditingProgram((p) => ({ ...p, name: e.target.value }))} /></label>
+
+                {/* Para quien es. Antes esto solo se sabia DESPUES de asignarlo,
+                    asi que un programa escrito para un alumno vivia mezclado con
+                    la rutina propia hasta que hubiera alguien a quien darselo. */}
+                {signedIn && (
+                  <label className="ed-full"><span>Para quién es</span>
+                    <div className="ed-toggle-row">
+                      <button className={`ed-toggle ${editingProgram.paraAlumnos ? "" : "on"}`}
+                        onClick={() => setEditingProgram((p) => ({ ...p, paraAlumnos: false }))}>Para mí</button>
+                      <button className={`ed-toggle ${editingProgram.paraAlumnos ? "on" : ""}`}
+                        onClick={() => setEditingProgram((p) => ({ ...p, paraAlumnos: true }))}>Para alumnos</button>
+                    </div>
+                  </label>
+                )}
                 <div className="ed-row2">
                   <label><span>Semanas</span><input className="mono" inputMode="numeric" value={editingProgram.weeks} onChange={(e) => setEditingProgram((p) => ({ ...p, weeks: parseInt(e.target.value) || 0 }))} /></label>
                   <label className="ed-check-label"><span>Deload</span><div className="ed-toggle-row"><button className={`ed-toggle ${editingProgram.hasDeload ? "on" : ""}`} onClick={() => setEditingProgram((p) => ({ ...p, hasDeload: !p.hasDeload }))}>{editingProgram.hasDeload ? "Si" : "No"}</button></div></label>
@@ -1168,7 +1208,7 @@ export default function ForgeApp() {
                 <p className="ed-hint2">Semana vacía = el programa no tiene test.</p>
               </div>
               <div className="sheetactions" style={{ flexDirection: "column", gap: 8 }}>
-                <button className="save" onClick={() => { updateActiveProgram({ name: editingProgram.name, weeks: editingProgram.weeks, hasDeload: editingProgram.hasDeload, deload: { ...DELOAD_DEFAULT, ...editingProgram.deload }, maxTest: editingProgram.maxTest || null }); setEditingProgram(null); }}>Guardar</button>
+                <button className="save" onClick={() => { guardarPrograma(editingProgram); }}>Guardar</button>
                 <button className="prog-dup-btn" onClick={() => {
                   const id = uid();
                   const dup = { ...activeProgram, id, name: activeProgram.name + " (copia)", exercises: activeProgram.exercises.map((e) => ({ ...e, id: uid() })), createdAt: Date.now() };
@@ -1884,6 +1924,16 @@ const CSS = `
 .aviso { color: #1F7A3D; }
 /* El mismo boton, pero como enlace: la puerta a la seccion de entrenador. */
 a.btn-ghost { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+/* Salir del perfil, arriba de todo. Cerrar sesion queda visualmente aparte:
+   son dos formas de "irse" y confundirlas cuesta caro. */
+.volver-top { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px; padding: 9px 16px; border-radius: 999px; border: 1px solid #D1D1D6; background: #FFF; color: #2C6BED; font: 600 14px 'Inter'; cursor: pointer; }
+.btn-salir { width: 100%; height: 46px; margin-top: 10px; border: 0; border-radius: 12px; background: none; color: #8E8E93; font: 500 14px 'Inter'; cursor: pointer; }
+.btn-salir:hover { color: #D93025; }
+
+/* Estado vacio: cuenta nueva, o alumna esperando que le asignen el programa. */
+.vacio-card { background: #FFF; border-radius: 16px; padding: 20px 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.vacio-t { font: 600 16px 'Inter'; color: #1C1C1E; margin-bottom: 6px; }
+.vacio-p { font: 400 13px 'Inter'; color: #8E8E93; line-height: 1.5; margin-bottom: 12px; }
 .invite-banner { position: absolute; top: 62px; left: 16px; right: 16px; z-index: 25; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #EEF3FE; border: 1px solid #B9CDF5; font: 400 13px 'Inter'; color: #1F4B99; line-height: 1.4; }
 .invite-acciones { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .invite-ver { color: #2C6BED; font-weight: 600; text-decoration: none; white-space: nowrap; }
