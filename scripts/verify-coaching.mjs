@@ -324,6 +324,18 @@ await check("el alumno no genera un programa duplicado al entrenar", async () =>
   return true;
 });
 
+await check("el entrenador distingue lo que prescribe de lo que entrena", async () => {
+  const { programs } = await pullForUser(entrenador.id);
+  const prescrito = programs.find((p) => p.id === "prog-fuerza");
+  if (!prescrito) return "no encontre su programa";
+  if (!prescrito.asignadoA?.length) return "no dice a quien se lo asigno";
+  const nombres = prescrito.asignadoA.map((a) => a.name).sort();
+  if (!nombres.includes("Ana")) return `asignadoA: ${nombres.join(", ")}`;
+  // Entrenar el propio programa no lo convierte en uno "para alumnos".
+  if (prescrito.asignadoA.some((a) => a.id === entrenador.id)) return "se incluyo a si mismo";
+  return true;
+});
+
 if (fallas.length) {
   console.error(`\nFALLO  ${fallas.length} verificacion(es):`);
   for (const f of fallas) console.error(`  - ${f}`);

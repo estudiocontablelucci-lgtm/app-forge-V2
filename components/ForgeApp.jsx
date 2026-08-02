@@ -280,13 +280,23 @@ export default function ForgeApp() {
    */
   const gruposDeProgramas = useMemo(() => {
     const asignadosAMi = programs.filter((p) => p.readOnly);
-    const mios = programs.filter((p) => !p.readOnly);
+    // Prescrito = se lo asigne a alguien MAS. Que yo entrene mi propio programa
+    // no lo convierte en un programa para alumnos.
+    const prescritos = programs.filter((p) => !p.readOnly && p.asignadoA?.length);
+    const mios = programs.filter((p) => !p.readOnly && !p.asignadoA?.length);
     const grupos = [];
     if (mios.length) {
       grupos.push({
-        titulo: asignadosAMi.length ? "Mis programas" : "Programas",
+        titulo: asignadosAMi.length || prescritos.length ? "Mis programas" : "Programas",
         ayuda: null,
         lista: mios,
+      });
+    }
+    if (prescritos.length) {
+      grupos.push({
+        titulo: "Para alumnos",
+        ayuda: "Editarlos le cambia la rutina a quien los esté entrenando.",
+        lista: prescritos,
       });
     }
     if (asignadosAMi.length) {
@@ -1852,6 +1862,8 @@ const CSS = `
 .alumno-baja { padding: 6px 12px; border: 1px solid #E5E5EA; border-radius: 999px; background: #fff; color: #636366; font: 600 12px 'Inter'; cursor: pointer; }
 .alumno-baja.si { border-color: #D93025; color: #D93025; }
 .alumno-confirm { display: flex; gap: 6px; }
+.alumno-mas { padding: 4px 10px; background: none; border: 0; color: #8E8E93; font-size: 18px; line-height: 1; cursor: pointer; }
+.btn-peligro { width: 100%; height: 50px; margin-top: 16px; border: 0; border-radius: 12px; background: #D93025; color: #fff; font: 600 15px 'Inter'; cursor: pointer; }
 .prog-grupo { margin-bottom: 6px; }
 .prog-grupo-head { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px; }
 .prog-grupo-t { font: 600 11px 'Inter'; letter-spacing: .12em; text-transform: uppercase; color: #636366; }
@@ -1899,7 +1911,9 @@ const CSS = `
 .prog-card-name { font-weight: 600; font-size: 16px; color: #1C1C1E; }
 .prog-card-meta { font-size: 12px; color: #636366; margin-top: 3px; }
 .prog-active-badge { font-size: 11px; font-weight: 700; color: #2C6BED; background: #FFF; border: 1px solid #2C6BED; padding: 3px 10px; border-radius: 999px; flex-shrink: 0; }
-.prog-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* El boton de cuenta flota arriba a la derecha (position absolute), asi que
+   esta fila tiene que dejarle su lugar o el menu de programas le queda debajo. */
+.prog-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-right: 46px; }
 .prog-header-row h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prog-switch-btn { width: 38px; height: 38px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #636366; font-size: 18px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .export-btn { height: 38px; padding: 0 14px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; }
