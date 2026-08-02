@@ -199,7 +199,9 @@ pero cada query cruzaria el Atlantico. Si algun dia la base se muda a `sa-east-1
 > reemplazo al texto libre, y cambiar el ejercicio de uno que ya tiene series registradas es una
 > sustitucion: entra con id propio y el anterior sale del programa, con su historial y su e1RM
 > aparte. Progreso conserva los retirados (marcados "fuera") y sigue contandolos en el tonelaje.
-> Queda pendiente el schema SQL del catalogo y su sync: hoy vive solo en el cliente.
+> Queda pendiente el schema SQL del catalogo (se disena en fase 5 junto con `coach_id`, para
+> migrarlo una sola vez). El pull absorbe los ejercicios que llegan de otro dispositivo, asi
+> que en la practica el catalogo se mantiene al dia entre celular y computadora.
 >
 > El analisis original queda abajo porque explica el porque del diseno.
 

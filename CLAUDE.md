@@ -101,7 +101,9 @@ Cambiar `exerciseId` en un ejercicio **con series registradas es una sustitucion
 le da un id nuevo y saca el anterior del programa, para que los e1RM no se encadenen. Sin series
 registradas, edita en el lugar. Esa distincion es el motivo de que exista el catalogo.
 
-Vive solo en el cliente: falta el schema SQL y el sync.
+Vive solo en el cliente: falta el schema SQL. El pull igual lo mantiene al dia con
+`absorberDeProgramas()`, que incorpora los ejercicios que llegan de otro dispositivo
+respetando su id. Lo unico que no viaja es un ejercicio creado y nunca usado en un programa.
 
 ### Capa de datos (Turso) — existe, la UI todavia no la usa
 `lib/repo/*` traduce entre la forma que usa la UI (la de arriba) y el schema SQL.
