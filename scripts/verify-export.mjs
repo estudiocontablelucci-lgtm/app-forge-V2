@@ -59,7 +59,13 @@ mkdirSync(resolve(root, "data"), { recursive: true });
 process.chdir(resolve(root, "data"));
 exportHistory(history, "Mesociclo DUP · Ciclo 2");
 
-const name = `forge-historial-mesociclo-dup-ciclo-2-${new Date().toISOString().slice(0, 10)}.xlsx`;
+// La fecha del nombre se arma en hora LOCAL, igual que `stamp()` en la app.
+// Con toISOString() (UTC) este script fallaba entre las 21:00 y las 00:00 en
+// Argentina, cuando UTC ya esta en el dia siguiente y el archivo real no.
+const hoy = new Date();
+const p = (n) => String(n).padStart(2, "0");
+const fecha = `${hoy.getFullYear()}-${p(hoy.getMonth() + 1)}-${p(hoy.getDate())}`;
+const name = `forge-historial-mesociclo-dup-ciclo-2-${fecha}.xlsx`;
 const wb = XLSX.read(readFileSync(name), { type: "buffer" });
 const ses = XLSX.utils.sheet_to_json(wb.Sheets["Sesiones"]);
 const ser = XLSX.utils.sheet_to_json(wb.Sheets["Series"], { defval: "" });
