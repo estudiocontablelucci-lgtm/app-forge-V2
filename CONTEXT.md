@@ -6,9 +6,9 @@ Estado actual del proyecto y decisiones tomadas.
 
 ## Estado general
 
-**Fase**: Fase 4 en curso — infraestructura lista, la UI todavia escribe en localStorage
-**Deploy**: pendiente de conectar el repo a Vercel (GitHub Pages quedo atras con la migracion a Next.js)
-**Ultima actualizacion**: 2026-08-01
+**Fase**: Fase 4 cerrada. Proxima: fase 5 (rol entrenador)
+**Deploy**: https://forge-v2-five.vercel.app — push a `main` deploya solo
+**Ultima actualizacion**: 2026-08-02
 
 > El deploy sale de `main`. Una feature no esta en produccion hasta que su rama se
 > mergea a `main` y se pushea — verificar antes de dar una fase por cerrada.
@@ -26,7 +26,7 @@ Estado actual del proyecto y decisiones tomadas.
 - [x] Referencia semana anterior (e1RM inline)
 - [x] Historial de sesiones expandible con semaforo por ejercicio
 - [x] Progreso: e1RM Brzycki por ejercicio + tonelaje semanal con deltas
-- [x] Deload automatico (series - 1)
+- [x] Deload configurable por programa (porcentaje, metodo y piso de series)
 - [x] Sesiones editables (agregar, renombrar, eliminar)
 - [x] Re-entry flow (revisar/editar o empezar de cero)
 - [x] Programas multiples (crear vacio, desde plantilla predefinida, duplicar, eliminar)
@@ -63,7 +63,7 @@ S4. Es DUP — la ondulacion es entre sesiones (A volumen 8-15 RIR 2-3, B modera
 4-8 RIR 1-2), no entre semanas. En la Sheet 28 de 31 ejercicios tienen la misma referencia en las
 cuatro semanas. La progresion sale de la autorregulacion, que es lo que hace el semaforo.
 
-## Fase 4 — lo que ya esta
+## Fase 4 — cerrada
 
 - [x] Shell migrado de Vite/GitHub Pages a Next.js 15 App Router
 - [x] Base `forge` creada en Turso (org `gabriellucci`, grupo `default`, aws-eu-west-1)
@@ -72,16 +72,15 @@ cuatro semanas. La progresion sale de la autorregulacion, que es lo que hace el 
 - [x] `assignment_refs` operativo: dos atletas con el mismo programa tienen kilos distintos
 - [x] NextAuth v4 con adapter propio sobre `users`, Google OAuth + magic link por Resend
 - [x] Pantalla de login mobile-first
+- [x] `/api/sync`: push de la sesion al terminar, pull al abrir, boton manual bidireccional
+- [x] UI cableada a la base con la regla "si hay sesion sincroniza, si no sigue local"
+- [x] Perfil (nombre, peso corporal) y punto de entrada a la cuenta
+- [x] Historial real importado: 175 series del Ciclo 2 (semanas 1 y 2)
 
 ## Pendiente (futuro)
 
-- [ ] `/api/sync` — push de la cola de mutaciones + pull incremental por `updated_at`
-- [ ] Cablear la UI a la capa de datos (hoy `ForgeApp.jsx` sigue leyendo y escribiendo localStorage)
-- [ ] Migrar el localStorage existente a la base la primera vez que el usuario entra
-- [ ] **Sustituir ejercicio** como operacion distinta de renombrar — ver decision de 2026-08.
-      Bloquea el rol entrenador: un coach editando el mesociclo en marcha reescribe el historial
-      de sus alumnos sin darse cuenta
-- [ ] Multi-device sync
+- [ ] Tabla `exercises` en el schema, con `coach_id` — se disena en fase 5 para migrarla una
+      sola vez. Hoy el catalogo vive en el cliente y el pull lo mantiene al dia
 - [ ] Roles coach/athlete + dashboard trainer
 - [ ] Override de `ref_kg` por asignacion (bloqueante para el caso multi-alumno)
 - [ ] Consentimiento explicito de datos de salud (Ley 25.326) antes de alumnos reales
