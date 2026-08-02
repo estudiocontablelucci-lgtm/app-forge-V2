@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, normalizar, CATALOGO_BASE } from "../lib/catalog.js";
+import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, normalizar, tieneSeriesRegistradas, absorberDeProgramas, CATALOGO_BASE } from "../lib/catalog.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -124,6 +124,68 @@ check("agregarAlCatalogo ignora nombres vacios", () => {
   const { catalog, entrada } = agregarAlCatalogo(CATALOGO_BASE, { name: "   " });
   if (entrada !== null) return "creo una entrada con nombre vacio";
   if (catalog.length !== CATALOGO_BASE.length) return "modifico el catalogo igual";
+  return true;
+});
+
+/* ---------- absorber lo que llega del sync ---------- */
+
+check("los ejercicios que llegan del servidor entran al catalogo", () => {
+  // Un dispositivo nuevo: catalogo recien migrado del SEED, y por el pull llega
+  // un programa con un ejercicio que aca no existe.
+  const local = migrarACatalogo(programaSeed());
+  const remoto = [{ id: "p9", exercises: [
+    { id: "r1", exerciseId: "ex-jalon-al-pecho", name: "Jalón al pecho", group: "Espalda", sets: 3 },
+  ] }];
+
+  const absorbido = absorberDeProgramas(local.catalog, remoto);
+  const encontrado = absorbido.find((c) => normalizar(c.name) === "jalon al pecho");
+  if (!encontrado) return "el ejercicio remoto no entro al catalogo";
+  // Y no se pierde nada de lo que ya habia.
+  if (absorbido.length < local.catalog.length) {
+    return `el catalogo encogio de ${local.catalog.length} a ${absorbido.length}`;
+  }
+  return true;
+});
+
+check("absorber dos veces lo mismo no duplica", () => {
+  const local = migrarACatalogo(programaSeed());
+  const remoto = [{ id: "p9", exercises: [{ id: "r1", exerciseId: "ex-jalon-al-pecho", name: "Jalón al pecho", sets: 3 }] }];
+  const una = absorberDeProgramas(local.catalog, remoto);
+  const dos = absorberDeProgramas(una, remoto);
+  if (dos.length !== una.length) return `${una.length} -> ${dos.length}`;
+  return true;
+});
+
+/* ---------- deteccion de series registradas ---------- */
+
+const historialCon = (exId) => [{
+  id: "h1", week: 1, session: "A",
+  exercises: [{ id: exId, name: "X", sets: [{ setN: 1, kg: 60, reps: 10 }] }],
+}];
+
+check("detecta series del dispositivo actual", () => {
+  if (!tieneSeriesRegistradas("a1", { "1|a1|1": { done: true } }, [])) return "no las vio en logs";
+  return true;
+});
+
+check("detecta series que solo estan en el historial sincronizado", () => {
+  // El caso real: se entreno en el celular y se edita el programa en la compu,
+  // donde `logs` esta vacio pero el historial llego por el pull.
+  if (!tieneSeriesRegistradas("a1", {}, historialCon("a1"))) return "no las vio en el historial";
+  return true;
+});
+
+check("no confunde ejercicios distintos", () => {
+  if (tieneSeriesRegistradas("a2", { "1|a1|1": { done: true } }, historialCon("a1"))) {
+    return "marco series de otro ejercicio";
+  }
+  return true;
+});
+
+check("una sesion sin series no cuenta", () => {
+  const vacia = [{ id: "h1", exercises: [{ id: "a1", name: "X", sets: [] }] }];
+  if (tieneSeriesRegistradas("a1", {}, vacia)) return "conto una sesion sin series";
+  if (tieneSeriesRegistradas("a1", {}, [])) return "conto con historial vacio";
   return true;
 });
 

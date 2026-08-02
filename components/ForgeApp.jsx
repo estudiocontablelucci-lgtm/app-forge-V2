@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
-import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo } from "@/lib/catalog";
+import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
 import { pushSession, pullAll, mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } from "@/lib/sync/client";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
@@ -324,7 +324,15 @@ export default function ForgeApp() {
     }
 
     const { programs: remotos = [], history: histRemoto = [] } = r.data;
-    if (remotos.length) setPrograms((P) => mergePrograms(P, remotos));
+    if (remotos.length) {
+      // Los ejercicios que llegan de otro dispositivo se incorporan al catalogo.
+      // Sin esto la app los muestra igual (cae al nombre denormalizado) pero no
+      // aparecen en el selector, asi que no se pueden reutilizar en otra sesion.
+      // Respeta el id que traen, para que ambos dispositivos hablen del mismo
+      // ejercicio y no de dos copias homonimas.
+      setCatalog((C) => absorberDeProgramas(C, remotos));
+      setPrograms((P) => mergePrograms(P, remotos));
+    }
     if (histRemoto.length) {
       setHistory((H) => mergeHistory(H, histRemoto));
       // Lo local va segundo y por lo tanto gana: el usuario puede estar a
@@ -575,8 +583,9 @@ export default function ForgeApp() {
   function nombreSustituido(draft) {
     const original = activeProgram?.exercises?.find((e) => e.id === draft.id);
     if (!original?.exerciseId || original.exerciseId === draft.exerciseId) return null;
-    const tieneSeries = Object.keys(logs).some((k) => k.split("|")[1] === draft.id);
-    if (!tieneSeries) return null;
+
+    if (!tieneSeriesRegistradas(draft.id, logs, history)) return null;
+
     return buscarEnCatalogo(catalog, original.exerciseId)?.name || original.name;
   }
 
