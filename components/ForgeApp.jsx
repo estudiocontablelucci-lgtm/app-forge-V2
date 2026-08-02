@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum } from "@/lib/formulas";
+import { pushSession, pullAll, mergeHistory, mergePrograms } from "@/lib/sync/client";
+import AccountButton from "./AccountButton";
+import ProfileScreen from "./ProfileScreen";
 
 /* ============================================================
    FORGE — Tracking de entrenamiento (MVP v2)
@@ -218,6 +222,12 @@ export default function ForgeApp() {
   const [programListView, setProgramListView] = useState(false); // show program list vs active program
   const [editingProgram, setEditingProgram] = useState(null); // program metadata editor
   const [importWizard, setImportWizard] = useState(null); // { step, data, mapping, preview, name }
+  const [showProfile, setShowProfile] = useState(false);
+  const [syncState, setSyncState] = useState(null); // texto para la pantalla de perfil
+
+  // Sesion: si hay, se sincroniza; si no, la app funciona igual solo con localStorage.
+  const { data: authSession } = useSession();
+  const signedIn = Boolean(authSession?.user?.id);
 
   // Derived: active program, sessions, exercises
   const activeProgram = programs.find((p) => p.id === activeProgramId) || programs[0];
@@ -240,6 +250,22 @@ export default function ForgeApp() {
     setLoaded(true);
   }, []);
   useEffect(() => { if (loaded) saveState({ programs, activeProgramId, logs, history }); }, [programs, activeProgramId, logs, history, loaded]);
+
+  // Pull al entrar, una sola vez por login. Lo remoto se suma a lo local sin
+  // pisarlo: el usuario puede estar a mitad de una sesion cuando esto resuelve.
+  const pulled = useRef(false);
+  useEffect(() => {
+    if (!loaded || !signedIn || pulled.current) return;
+    pulled.current = true;
+    (async () => {
+      const r = await pullAll();
+      if (!r.ok) { setSyncState(r.motivo === "sin-red" ? "Sin conexión: trabajando local." : null); return; }
+      const { programs: remotos = [], history: histRemoto = [] } = r.data;
+      if (remotos.length) setPrograms((P) => mergePrograms(P, remotos));
+      if (histRemoto.length) setHistory((H) => mergeHistory(H, histRemoto));
+      setSyncState(`Sincronizado · ${histRemoto.length} sesión${histRemoto.length === 1 ? "" : "es"} en la nube.`);
+    })();
+  }, [loaded, signedIn]);
 
   useEffect(() => {
     if (!timer || timer.remaining <= 0) return;
@@ -362,6 +388,20 @@ export default function ForgeApp() {
         if (existing >= 0) { const next = [...H]; next[existing] = entry; return next; }
         return [entry, ...H];
       });
+
+      // Push al cerrar la sesion. Deliberadamente sin await: la sesion ya quedo
+      // guardada en local y el usuario tiene que poder salir de la pantalla
+      // aunque en el gimnasio no haya senal.
+      if (signedIn && activeProgram) {
+        setSyncState("Subiendo…");
+        pushSession({ program: activeProgram, entry }).then((r) => {
+          setSyncState(r.ok
+            ? `Última subida: ${new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`
+            : r.motivo === "sin-red"
+              ? "Sin conexión: quedó guardado local, se sube la próxima vez."
+              : "No se pudo subir. Queda guardado local.");
+        });
+      }
     }
     setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null);
     setConfirmAction(null);
@@ -386,10 +426,27 @@ export default function ForgeApp() {
 
   if (!loaded) return <div style={{ background: "#F2F2F7", minHeight: "100vh" }} />;
 
+  // El perfil tapa la app entera (sin tabbar): se sale con "Volver".
+  if (showProfile) {
+    return (
+      <div className="forge">
+        <style>{CSS}</style>
+        <div className="phone">
+          <ProfileScreen onClose={() => setShowProfile(false)} syncState={syncState} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="forge">
       <style>{CSS}</style>
       <div className="phone">
+
+        {/* Cuenta: se esconde durante el entrenamiento activo, que usa toda la pantalla */}
+        {!(tab === "entrenar" && session !== null) && (
+          <AccountButton onOpenProfile={() => setShowProfile(true)} />
+        )}
 
         {/* ======== HEALTH CHECK ======== */}
         {tab === "entrenar" && session !== null && healthCheck && (
@@ -1303,6 +1360,26 @@ const CSS = `
 .tabbar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; display: flex; background: rgba(255,255,255,.92); backdrop-filter: blur(16px); border-top: 1px solid #E5E5EA; z-index: 40; }
 .tabbar button { flex: 1; padding: 10px 0 14px; background: none; border: none; color: #636366; font: 500 11px 'Inter'; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .tabbar button.on { color: #2C6BED; }
+
+/* ---- cuenta y perfil ---- */
+.acct { position: absolute; top: 18px; right: 18px; z-index: 30; width: 36px; height: 36px; padding: 0; border-radius: 999px; border: 1px solid #E5E5EA; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.acct-img { width: 100%; height: 100%; object-fit: cover; }
+.acct-ini { font: 600 15px 'Inter'; color: #2C6BED; }
+.acct-in { width: auto; height: auto; padding: 7px 14px; font: 600 13px 'Inter'; color: #2C6BED; text-decoration: none; }
+.prof-head { display: flex; align-items: center; gap: 14px; }
+.prof-img { width: 52px; height: 52px; border-radius: 999px; object-fit: cover; }
+.prof-ini { width: 52px; height: 52px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 700 20px 'Inter'; display: flex; align-items: center; justify-content: center; }
+.prof-name { font: 600 17px 'Inter'; color: #1C1C1E; }
+.prof-role { font: 400 13px 'Inter'; color: #8E8E93; margin-top: 2px; }
+.flabel { display: block; font: 600 12px 'Inter'; color: #636366; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 6px; }
+.flabel:first-child { margin-top: 0; }
+.finput { width: 100%; height: 50px; box-sizing: border-box; padding: 0 14px; font-size: 16px; border: 1px solid #E5E5EA; border-radius: 12px; background: #FAFAFC; }
+.finput:focus { outline: none; border-color: #2C6BED; background: #fff; }
+.fhint { font: 400 13px 'Inter'; color: #8E8E93; line-height: 1.45; margin: 8px 0 0; }
+.ferror { font: 500 13px 'Inter'; color: #D93025; margin: 10px 0 0; }
+.btn-primary { width: 100%; height: 50px; margin-top: 18px; border: 0; border-radius: 12px; background: #2C6BED; color: #fff; font: 600 16px 'Inter'; cursor: pointer; }
+.btn-primary:disabled { opacity: .45; cursor: default; }
+.btn-ghost { width: 100%; height: 50px; margin-top: 12px; border: 1px solid #E5E5EA; border-radius: 12px; background: #fff; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
 .ticon { font-size: 18px; line-height: 1; }
 /* Lock card */
 .lock-card { display: flex; align-items: center; gap: 14px; padding: 18px; background: #FFF; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
