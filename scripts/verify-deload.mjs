@@ -7,7 +7,7 @@
  * tuviera el ejercicio, y dejaba en 1 serie a los de 2 — entre ellos el
  * protocolo ASIM-IZQ, que corrige asimetria justamente con series de mas.
  */
-import { setsFor, repsFor, DELOAD_DEFAULT } from "../lib/formulas.js";
+import { setsFor, repsFor, refFor, DELOAD_DEFAULT } from "../lib/formulas.js";
 
 const fallas = [];
 const check = (label, fn) => {
@@ -89,9 +89,59 @@ check("una config parcial completa lo que falta con el default", () => {
   return true;
 });
 
+/* ---------- referencias por semana ---------- */
+
+const conRefs = { refKg: 110, refsByWeek: { "4": 115, DL: 115 } };
+
+check("sin refs por semana devuelve la general", () => {
+  if (refFor({ refKg: 60 }, 1) !== 60) return `dio ${refFor({ refKg: 60 }, 1)}`;
+  if (refFor({ refKg: 60 }, "DL") !== 60) return "deload deberia usar la general";
+  return true;
+});
+
+check("la ref de la semana pisa a la general", () => {
+  // El caso real: el 24/06 subieron 8 refs "para Sem 4 + Deload".
+  if (refFor(conRefs, 4) !== 115) return `sem 4 dio ${refFor(conRefs, 4)}, esperaba 115`;
+  if (refFor(conRefs, "DL") !== 115) return `deload dio ${refFor(conRefs, "DL")}, esperaba 115`;
+  return true;
+});
+
+check("las semanas ya entrenadas conservan su referencia", () => {
+  // Lo que motiva la feature: subir la ref en la 4 no puede reescribir la 1-3.
+  for (const w of [1, 2, 3]) {
+    if (refFor(conRefs, w) !== 110) return `semana ${w} dio ${refFor(conRefs, w)}, esperaba 110`;
+  }
+  return true;
+});
+
+check("la semana entra igual como number o como string", () => {
+  // El cliente usa numbers; el servidor guarda TEXT y devuelve strings.
+  if (refFor(conRefs, "4") !== refFor(conRefs, 4)) return "no coinciden number y string";
+  return true;
+});
+
+check("una ref vacia cae a la general en vez de romper", () => {
+  const parcial = { refKg: 80, refsByWeek: { "2": "" } };
+  if (refFor(parcial, 2) !== 80) return `dio ${JSON.stringify(refFor(parcial, 2))}`;
+  return true;
+});
+
+check("BW se puede fijar por semana igual que un numero", () => {
+  const bw = { refKg: "BW", refsByWeek: { "4": 5 } };
+  if (refFor(bw, 1) !== "BW") return `sem 1 dio ${bw.refKg}`;
+  if (refFor(bw, 4) !== 5) return "no tomo el lastre de la semana 4";
+  return true;
+});
+
+check("un ejercicio sin refKg no inventa un valor", () => {
+  if (refFor({ refKg: null }, 1) !== null) return "deberia seguir siendo null";
+  if (refFor({}, 1) !== null) return "sin refKg deberia dar null";
+  return true;
+});
+
 if (fallas.length) {
   console.error(`\nFALLO  ${fallas.length} verificacion(es):`);
   for (const f of fallas) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log("\nOK  deload configurable: porcentaje, metodo y piso de series");
+console.log("\nOK  deload configurable y referencias por semana");
