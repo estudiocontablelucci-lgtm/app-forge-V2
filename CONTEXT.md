@@ -77,6 +77,39 @@ cuatro semanas. La progresion sale de la autorregulacion, que es lo que hace el 
 - [x] Perfil (nombre, peso corporal) y punto de entrada a la cuenta
 - [x] Historial real importado: 175 series del Ciclo 2 (semanas 1 y 2)
 
+## Fase 5 — rol entrenador
+
+| Etapa | Estado |
+|---|---|
+| E1 · Schema v03 + capa de datos | Hecha |
+| E2 · Invitar, aceptar con consentimiento, lista de alumnos | Hecha |
+| E3 · Asignar programa y calibrar kilos por alumno | Hecha |
+| E4 · Seccion de entrenador con metricas | **Pendiente — arranca con rediseno** |
+
+### 2026-08-02 — Un programa por alumno, no una plantilla calibrada
+**Decision**: en entrenamiento 1:1 cada alumno tiene su propio programa. El entrenador duplica
+uno existente, lo adapta y lo asigna. **No** se calibran kilos desde la ficha del alumno.
+
+**Motivo (de Agustin)**: personalizar es el trabajo del entrenador personalizado, no una excepcion
+a una plantilla. Los alumnos no comparten programa con otros kilos: tienen ejercicios distintos,
+series distintas y sustituciones por lesion. `assignment_refs` resuelve el caso de UNA plantilla
+en varias personas, que no es este.
+
+**Consecuencia**: la lista de 33 inputs de kilos sale de la ficha del alumno. `assignment_refs`
+**no se elimina** — funciona, esta verificado y sirve el dia que se comparta una plantilla entre
+varios — pero deja de ser el camino principal.
+
+**Convencion de nombres**: los programas se nombran por contenido ("Hipertrofia 4 sem"), no por
+alumno. El alumno ve ese nombre en su app, y la lista del entrenador ya muestra a quien esta
+asignado cada uno.
+
+### 2026-08-02 — La seccion de entrenador no vive en el Perfil
+**Decision**: seccion propia, no un desplegable dentro del modal de Perfil.
+**Motivo**: con varios alumnos hay que elegir con cual trabajar y ver su historial y sus metricas.
+Eso no entra en un modal pensado para editar el nombre y el peso corporal.
+**Formato**: responsive real — una columna en el celular, aprovechando el ancho en la computadora.
+La app del ATLETA sigue siendo mobile-first a 430px; la del entrenador es otra cosa.
+
 ## Pendiente (futuro)
 
 - [ ] Tabla `exercises` en el schema, con `coach_id` — se disena en fase 5 para migrarla una

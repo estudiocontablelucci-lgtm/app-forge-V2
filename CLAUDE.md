@@ -223,6 +223,19 @@ la tabla `health_consents` existe para registrarlo, pero todavia no hay UI que l
 
 ---
 
+## Rol entrenador (fase 5)
+
+E1-E3 hechas: schema v03, invitaciones con consentimiento, asignar programas.
+**E4 pendiente** — ver `docs/e4-seccion-entrenador.md`, que tiene el estado, las
+decisiones tomadas y los errores que ya mordieron.
+
+Dos reglas que valen mas que su implementacion:
+- **Un programa por alumno**, no una plantilla calibrada. Personalizar es el trabajo
+  del entrenador personalizado.
+- Los ids llevan el prefijo del usuario que los subio; uno que **ya viene prefijado no se
+  vuelve a prefijar**. En un programa asignado el id del servidor es el canonico. Ver
+  `lib/sync/ids.js`.
+
 ## Roadmap
 
 1. ~~MVP: programa seed, entrenamiento, timer, superseries, e1RM~~ Done
@@ -231,7 +244,8 @@ la tabla `health_consents` existe para registrarlo, pero todavia no hay UI que l
 4. **En curso** — Persistencia real (Turso) + auth + multi-device
    - Hecho: shell Next.js, base `forge` en Turso, schema v01+v02, capa de datos, NextAuth
    - Falta: `/api/sync`, cablear la UI a la capa de datos, migrar el localStorage existente
-5. Roles (trainer/athlete) + dashboard trainer
+5. **En curso** — Roles coach/atleta: invitaciones y asignacion hechas, falta la
+   seccion de entrenador con metricas (E4)
 6. PWA offline
 
 ---
