@@ -75,6 +75,7 @@ export default function CoachScreen() {
 
   const { coach, alumnos = [], invitaciones = [] } = datos || {};
   const lleno = coach && coach.usados >= coach.maxAthletes;
+  const enBaja = alumnos.find((a) => a.id === confirmarBaja);
 
   return (
     <>
@@ -122,6 +123,23 @@ export default function CoachScreen() {
         </div>
       )}
 
+      {enBaja && (
+        <div className="overlay" onClick={() => setConfirmarBaja(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheethead"><h3>{enBaja.name}</h3><button className="x" onClick={() => setConfirmarBaja(null)}>&times;</button></div>
+            <div style={{ padding: "0 4px 4px" }}>
+              <p className="fhint">
+                Al darlo de baja dejás de ver sus entrenamientos y se libera un lugar.
+                <strong> No se borra nada</strong>: su historial sigue siendo suyo y, si vuelve,
+                se reactiva con todo lo anterior.
+              </p>
+              <button className="btn-peligro" onClick={() => bajar(enBaja)}>Dar de baja a {enBaja.name.split(" ")[0]}</button>
+              <button className="btn-ghost" onClick={() => setConfirmarBaja(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {alumnos.length > 0 && (
         <div className="card">
           <div className="cardtitle">Alumnos</div>
@@ -131,14 +149,7 @@ export default function CoachScreen() {
                 <div className="alumno-name">{a.name}</div>
                 <div className="alumno-sub">{a.email}</div>
               </button>
-              {confirmarBaja === a.id
-                ? (
-                  <span className="alumno-confirm">
-                    <button className="alumno-baja si" onClick={() => bajar(a)}>Dar de baja</button>
-                    <button className="alumno-baja" onClick={() => setConfirmarBaja(null)}>No</button>
-                  </span>
-                )
-                : <button className="alumno-baja" onClick={() => setConfirmarBaja(a.id)}>Baja</button>}
+              <button className="alumno-mas" onClick={() => setConfirmarBaja(a.id)} aria-label={`Opciones de ${a.name}`}>⋯</button>
             </div>
           ))}
         </div>
