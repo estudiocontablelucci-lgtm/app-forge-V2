@@ -43,6 +43,7 @@ app-forge-v2/
 │       ├── CoachApp.jsx        # shell + selector de alumno + invitar
 │       ├── AlumnoFicha.jsx     # metricas de seguimiento
 │       ├── AsignarPrograma.jsx # duplicar / asignar
+│       ├── EditorPrograma.jsx  # adaptar el programa, edicion en linea
 │       └── coach.css           # responsive real, un breakpoint (900px)
 ├── lib/
 │   ├── db.js              # cliente libSQL + uid/now/tx
@@ -69,6 +70,7 @@ app-forge-v2/
 │   ├── verify-sync.mjs        # aislamiento entre usuarios + merge del cliente
 │   ├── verify-coaching.mjs    # vinculo coach-alumno, cupos, baja
 │   ├── verify-catalog-sync.mjs # identidad del ejercicio entre dispositivos
+│   ├── verify-coach-editor.mjs # lo que el coach edita llega al alumno
 │   ├── verify-coach-metrics.mjs # metricas de la ficha + camino coach->alumno
 │   ├── check_ui.py            # headless: falla si una ruta no hidrata
 │   └── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
@@ -269,6 +271,13 @@ entrenador vive en `/entrenador` (`components/coach/`), es responsive de verdad 
 tiene su propio `coach.css` — un archivo CSS normal, no la constante `CSS`.
 Cambiar una no deberia tocar a la otra.
 
+El circuito completo vive en `/entrenador`: duplicar, adaptar y asignar. El editor
+escribe DIRECTO en el servidor (`PUT /api/coach/programa`), no pasa por el
+localStorage del atleta, y lo que guarda le llega al alumno al sincronizar porque
+un programa asignado se reemplaza entero. Cambiar el ejercicio de una fila que ya
+tiene series es una SUSTITUCION tambien aca: id nuevo, para que el e1RM no
+encadene dos maquinas distintas.
+
 Tres reglas que valen mas que su implementacion:
 - **Un programa por alumno**, no una plantilla calibrada. Por eso duplicar y
   asignar son un solo movimiento: asignar el mismo programa a dos personas las
@@ -317,8 +326,6 @@ grafias distintas todavia puede terminar con dos cuentas. Eso es deuda de auth.
 - **`health_consents` se graba pero no hay UI que lo pida ni que lo revoque.**
   Postergado por decision explicita (2026-08-02): el trato con los alumnos es
   personal y la app es una herramienta, no el vinculo.
-- **Adaptar un programa se hace en la pestana Programa del atleta**, no en la
-  seccion de entrenador.
 - **La identidad de `users` es el email exacto.** Dos grafias del mismo Gmail
   crean dos cuentas. Las invitaciones ya no se ven afectadas, el login si.
 

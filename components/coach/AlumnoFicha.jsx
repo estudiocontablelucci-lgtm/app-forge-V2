@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AsignarPrograma from "./AsignarPrograma";
+import EditorPrograma from "./EditorPrograma";
 
 /**
  * Ficha de seguimiento: como le esta yendo al alumno.
@@ -15,6 +16,7 @@ import AsignarPrograma from "./AsignarPrograma";
 export default function AlumnoFicha({ alumno, onVolver, onBaja }) {
   const [datos, setDatos] = useState(null);
   const [estado, setEstado] = useState("cargando");
+  const [editando, setEditando] = useState(null); // id del programa que se edita
 
   const cargar = useCallback(async () => {
     setEstado("cargando");
@@ -32,6 +34,19 @@ export default function AlumnoFicha({ alumno, onVolver, onBaja }) {
 
   const nombre = alumno.name || alumno.email;
   const pila = (nombre || "?").trim().charAt(0).toUpperCase();
+
+  // Editar tapa la ficha entera: son dos tareas distintas y verlas a la vez, en
+  // una columna de celular, no deja hacer bien ninguna de las dos.
+  if (editando) {
+    return (
+      <EditorPrograma
+        programaId={editando}
+        alumno={alumno}
+        onCerrar={() => setEditando(null)}
+        onGuardado={cargar}
+      />
+    );
+  }
 
   return (
     <>
@@ -59,7 +74,7 @@ export default function AlumnoFicha({ alumno, onVolver, onBaja }) {
 
       {estado !== "error" && datos && (
         <>
-          <Resumen programa={datos.programa} ficha={datos.ficha} />
+          <Resumen programa={datos.programa} ficha={datos.ficha} onEditar={() => setEditando(datos.programa.id)} />
           {datos.ficha && (
             <>
               <AlertasRir alertas={datos.ficha.alertasRir} />
@@ -68,7 +83,7 @@ export default function AlumnoFicha({ alumno, onVolver, onBaja }) {
               <TablaE1rm filas={datos.ficha.e1rm} programa={datos.programa} />
             </>
           )}
-          <AsignarPrograma alumno={alumno} onAsignado={cargar} />
+          <AsignarPrograma alumno={alumno} onAsignado={cargar} onEditar={setEditando} />
         </>
       )}
     </>
@@ -77,7 +92,7 @@ export default function AlumnoFicha({ alumno, onVolver, onBaja }) {
 
 /* ---------- resumen ---------- */
 
-function Resumen({ programa, ficha }) {
+function Resumen({ programa, ficha, onEditar }) {
   if (!programa) {
     return (
       <div className="ccard">
@@ -97,7 +112,10 @@ function Resumen({ programa, ficha }) {
     <div className="ccard">
       <div className="ccard-head">
         <h2>{programa.name}</h2>
-        <span className="ccard-sub">{programa.exercises} ejercicios · {programa.weeks} semanas</span>
+        <span className="ccard-sub">
+          {programa.exercises} ejercicios · {programa.weeks} semanas
+          {onEditar && <button className="cbtn chico" style={{ marginLeft: 10 }} onClick={onEditar}>Editar</button>}
+        </span>
       </div>
       <div className="mgrid">
         <div className="mtile">

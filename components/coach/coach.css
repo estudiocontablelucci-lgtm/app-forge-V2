@@ -247,6 +247,44 @@
 .ficha-mail { font-size: 13px; color: #8E8E93; }
 .ficha-acc { margin-left: auto; display: flex; gap: 8px; }
 
+/* ---------- editor de programa ---------- */
+
+.ed-nombre { font: 700 18px 'Inter'; height: 46px; }
+.ed-toggle-fila { display: flex; gap: 6px; margin-top: 6px; }
+.ed-sesiones { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+
+.ed-fila { border: 1px solid #ECECF1; border-radius: 12px; padding: 12px; margin-bottom: 10px; background: #FDFDFE; }
+.ed-fila-top { display: flex; align-items: center; gap: 10px; }
+.ed-n { width: 22px; flex-shrink: 0; color: #8E8E93; font-size: 13px; font-weight: 600; }
+.ed-ex { flex: 1; min-width: 0; font-weight: 600; }
+.ed-fila-acc { display: flex; gap: 4px; flex-shrink: 0; }
+.ed-mini {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid #E1E1E6;
+  background: #FFF; color: #636366; font-size: 14px; cursor: pointer; line-height: 1;
+}
+.ed-mini:hover:not(:disabled) { border-color: #2C6BED; color: #2C6BED; }
+.ed-mini:disabled { opacity: .35; cursor: default; }
+.ed-mini.borrar:hover { border-color: #C7261B; color: #C7261B; }
+
+/* Los campos entran en una fila en escritorio y se apilan de a dos en el celular. */
+.ed-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin-top: 10px; }
+.ed-campos label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ed-campos span { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #8E8E93; font-weight: 600; }
+.ed-campos .cinput { height: 38px; padding: 0 10px; text-align: center; }
+
+.ed-aviso {
+  margin-top: 8px; padding: 9px 11px; border-radius: 10px;
+  background: #FFF7E6; border: 1px solid #F0D69B; color: #7A5600;
+  font-size: 12px; line-height: 1.45;
+}
+.ed-entrenado {
+  flex-shrink: 0; padding: 2px 8px; border-radius: 999px;
+  background: #EBF2FF; color: #2C6BED; font: 600 10px 'Inter';
+  text-transform: uppercase; letter-spacing: .05em; cursor: help;
+}
+.ed-nota-btn { margin-top: 10px; padding: 0; border: 0; background: none; color: #2C6BED; font: 600 12px 'Inter'; cursor: pointer; }
+.ed-nota { margin-top: 6px; height: auto; padding: 10px 12px; resize: vertical; line-height: 1.5; }
+
 /* ---------- confirmacion de baja ---------- */
 
 .coverlay {
