@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
  * sin cambiarle la rutina a la otra — asi que cuando el programa ya lo entrena
  * alguien mas, la accion que se ofrece primero es duplicarlo.
  */
-export default function AsignarPrograma({ alumno, onAsignado }) {
+export default function AsignarPrograma({ alumno, onAsignado, onEditar }) {
   const [datos, setDatos] = useState(null);
   const [estado, setEstado] = useState("cargando");
   const [error, setError] = useState(null);
@@ -66,11 +66,17 @@ export default function AsignarPrograma({ alumno, onAsignado }) {
       </div>
 
       {asignado
-        ? <p className="chint">
-            {primero} entrena <strong>{asignado.name}</strong> — {asignado.exercises.length} ejercicios,
-            {" "}{asignado.weeks} semanas. Para cambiarle la rutina, editá ese programa desde la pestaña
-            {" "}<strong>Programa</strong> de tu app; los cambios le llegan al sincronizar.
-          </p>
+        ? <>
+            <p className="chint">
+              {primero} entrena <strong>{asignado.name}</strong> — {asignado.exercises.length} ejercicios,
+              {" "}{asignado.weeks} semanas.
+            </p>
+            {onEditar && (
+              <button className="cbtn" style={{ marginTop: 10 }} onClick={() => onEditar(asignado.id)}>
+                Adaptarle el programa
+              </button>
+            )}
+          </>
         : <p className="chint">Todavía no le asignaste un programa.</p>}
 
       {!abierto && (

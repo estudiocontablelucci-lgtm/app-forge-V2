@@ -19,8 +19,9 @@
     "verify:catalog-sync": "node scripts/verify-catalog-sync.mjs",
     "verify:coaching": "node scripts/verify-coaching.mjs",
     "verify:metrics": "node scripts/verify-coach-metrics.mjs",
+    "verify:editor": "node scripts/verify-coach-editor.mjs",
     "verify:ui": "python scripts/check_ui.py",
-    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics"
+    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

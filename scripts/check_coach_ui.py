@@ -266,6 +266,63 @@ def main() -> int:
         check("la nota vuelve en el pull del atleta", subida is not None,
               "la nota se perdio entre el push y el pull")
 
+        # ---------- adaptar el programa sin salir de la seccion ----------
+        print("\neditor de programa")
+        pagina.get_by_text("Adaptarle el programa").first.click()
+        pagina.wait_for_timeout(2500)
+
+        check("el editor abre con los ejercicios del programa",
+              pagina.locator(".ed-fila").count() > 0,
+              f"{pagina.locator('.ed-fila').count()} filas")
+        check("hay selector de sesion", pagina.locator(".ed-sesiones .cbtn").count() >= 3,
+              f"{pagina.locator('.ed-sesiones .cbtn').count()} sesiones")
+        check("marca cuales ejercicios ya entreno",
+              pagina.locator(".ed-entrenado").count() > 0,
+              "ningun ejercicio marcado como ya entrenado")
+        check("guardar arranca deshabilitado", pagina.get_by_text("Guardar").first.is_disabled())
+
+        # Cambiar las series del primer ejercicio y guardar. El valor nuevo se
+        # deriva del actual: la suite se corre muchas veces sobre la misma base
+        # y escribir un numero fijo no cambiaria nada la segunda vez.
+        series = pagina.locator(".ed-fila").first.locator(".ed-campos input").first
+        objetivo = (int(series.input_value() or 3) % 6) + 2
+        series.fill(str(objetivo))
+        pagina.wait_for_timeout(300)
+        check("al editar, guardar se habilita", not pagina.get_by_text("Guardar").first.is_disabled())
+
+        pagina.get_by_text("Guardar").first.click()
+        pagina.wait_for_timeout(2500)
+        check("guarda sin error", pagina.locator(".cerror").count() == 0,
+              pagina.locator(".cerror").first.inner_text() if pagina.locator(".cerror").count() else "")
+
+        # Y llego al servidor, que es lo unico que importa.
+        despues = ctx.request.get(f"{base}/api/coach/programa?programa=hip4").json()
+        primero = despues["programa"]["exercises"][0]
+        check("el cambio esta en el servidor", primero["sets"] == objetivo,
+              f"series={primero['sets']}, esperaba {objetivo}")
+
+        # Agregar un ejercicio que NO esta en el catalogo: se crea al vuelo.
+        pagina.get_by_text("+ Agregar ejercicio").first.click()
+        pagina.wait_for_timeout(400)
+        nueva = pagina.locator(".ed-fila").last
+        nueva.locator(".ed-ex").fill("Ejercicio inventado para el test")
+        nueva.locator(".ed-ex").blur()
+        pagina.wait_for_timeout(400)
+        pagina.get_by_text("Guardar").first.click()
+        pagina.wait_for_timeout(2500)
+
+        conNuevo = ctx.request.get(f"{base}/api/coach/programa?programa=hip4").json()
+        check("un ejercicio nuevo se crea en el catalogo al tipearlo",
+              any(e["name"] == "Ejercicio inventado para el test" for e in conNuevo["programa"]["exercises"]),
+              "no quedo guardado")
+        check("y queda en el catalogo, reutilizable",
+              any(c["name"] == "Ejercicio inventado para el test" for c in conNuevo["catalog"]),
+              "no entro al catalogo")
+
+        pagina.get_by_text("Cerrar").first.click()
+        pagina.wait_for_timeout(1500)
+        check("cerrar el editor vuelve a la ficha", "Adherencia" in pagina.inner_text("body").replace("ADHERENCIA", "Adherencia"))
+
         # ---------- lo que corrige el entrenador tiene que llegar ----------
         # El bug que esto cubre no daba error en ningun lado: el coach editaba,
         # subia, la alumna sincronizaba y seguia entrenando la version vieja.
