@@ -11,8 +11,8 @@ App de tracking de entrenamiento para gimnasio. Reemplaza Google Sheets con una 
 | Framework | Next.js 15 (App Router) + React 19 |
 | Lenguaje | JSX (sin TypeScript por ahora) |
 | Estilos | CSS-in-JS embebido (string en constante `CSS`) |
-| Persistencia | localStorage (`forge-v2`) — la capa Turso existe pero la UI todavia no la usa |
-| Base de datos | Turso / libSQL — base `forge` (org `gabriellucci`), schema v01 + v02 aplicados |
+| Persistencia | localStorage (`forge-v2`) como fuente de verdad mientras se entrena, sincronizado con Turso |
+| Base de datos | Turso / libSQL — base `forge` (org `gabriellucci`), schema v01–v04 aplicados |
 | Auth | NextAuth v4 — Google OAuth + magic link por Resend |
 | Deploy | Vercel (region `dub1`, junto a la base) |
 | Linter | oxlint |
@@ -50,11 +50,12 @@ app-forge-v2/
 │   ├── auth/              # options, adapter propio, envio Resend, interop v4
 │   ├── coach/             # metrics.js (funciones puras) + invite-email.js
 │   ├── sync/              # ids.js (prefijos), service.js, client.js
-│   └── repo/              # users, programs, training, coaching
+│   └── repo/              # users, programs, training, coaching, catalog
 ├── db/
 │   ├── v01_init.sql       # dominio multi-tenant
 │   ├── v02_auth.sql       # tablas de NextAuth
-│   ├── v03_coach.sql      # catalogo con dueno + coach_invites
+│   ├── v03_coach.sql      # tabla exercises + program_exercises.exercise_id
+│   ├── v04_catalogo_por_usuario.sql # el catalogo es del usuario, no del coach
 │   └── *.db               # bases locales (gitignored)
 ├── public/                # assets estaticos
 ├── scripts/               # utilidades node (no entran al bundle)
@@ -67,6 +68,7 @@ app-forge-v2/
 │   ├── verify-repo.mjs        # capa de datos real sobre base descartable
 │   ├── verify-sync.mjs        # aislamiento entre usuarios + merge del cliente
 │   ├── verify-coaching.mjs    # vinculo coach-alumno, cupos, baja
+│   ├── verify-catalog-sync.mjs # identidad del ejercicio entre dispositivos
 │   ├── verify-coach-metrics.mjs # metricas de la ficha + camino coach->alumno
 │   ├── check_ui.py            # headless: falla si una ruta no hidrata
 │   └── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
@@ -116,11 +118,17 @@ Cambiar `exerciseId` en un ejercicio **con series registradas es una sustitucion
 le da un id nuevo y saca el anterior del programa, para que los e1RM no se encadenen. Sin series
 registradas, edita en el lugar. Esa distincion es el motivo de que exista el catalogo.
 
-Vive solo en el cliente: falta el schema SQL. El pull igual lo mantiene al dia con
-`absorberDeProgramas()`, que incorpora los ejercicios que llegan de otro dispositivo
-respetando su id. Lo unico que no viaja es un ejercicio creado y nunca usado en un programa.
+**Desde la v04 el catalogo se sincroniza entero** (`lib/repo/catalog.js`), incluidos los
+ejercicios que todavia no estan en ningun programa. El dueno es el USUARIO
+(`exercises.owner_user_id`), no el coach: un atleta que entrena solo no tiene fila en
+`coaches`, y con el modelo anterior sus ejercicios propios solo podian guardarse como
+catalogo base de todo el mundo.
 
-### Capa de datos (Turso) — existe, la UI todavia no la usa
+Los ids del catalogo base (`base-<slug>`) son universales y **no se prefijan**: si cada
+usuario subiera el suyo, el mismo ejercicio de siempre seria uno distinto por persona.
+El resto lleva el prefijo del dueno, como todo lo demas.
+
+### Capa de datos (Turso)
 `lib/repo/*` traduce entre la forma que usa la UI (la de arriba) y el schema SQL.
 Ese mapeo vive solo ahi: la UI no conoce el schema y el schema no conoce los
 nombres de la UI.
@@ -302,13 +310,9 @@ grafias distintas todavia puede terminar con dos cuentas. Eso es deuda de auth.
 
 ### Deuda conocida
 
-- **El catalogo de ejercicios no tiene schema SQL.** Vive en el cliente; el pull
-  lo mantiene al dia con `absorberDeProgramas()`, pero un `exerciseId` no
-  sobrevive el viaje al servidor (`program_exercises` no tiene esa columna). Un
-  programa creado del lado del servidor se ve bien pero cae al nombre
-  denormalizado.
-- **Un ejercicio borrado no viaja por el pull.** `saveProgram` borra con DELETE
-  duro y el pull no lo propaga: hay que resolverlo cuando entre el sync
+- **Un ejercicio borrado no viaja entre los dispositivos DEL MISMO usuario.**
+  En un programa asignado si viaja, porque el `readOnly` se reemplaza entero;
+  en uno propio no, porque lo local nunca se pisa. Se resuelve con sync
   incremental. Ver el comentario en `lib/repo/programs.js`.
 - **`health_consents` se graba pero no hay UI que lo pida ni que lo revoque.**
   Postergado por decision explicita (2026-08-02): el trato con los alumnos es
