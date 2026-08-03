@@ -394,6 +394,99 @@ def main() -> int:
         check("cargar el basico deja un programa usable",
               "Fullbody 3x · básico" in n.inner_text("body"), n.inner_text("body")[:200])
 
+        # ---------- dos dispositivos del MISMO usuario ----------
+        # El bug no era solo que el cambio no llegara: el dispositivo viejo
+        # volvia a subir su copia y DESHACIA lo que se acababa de editar.
+        print("\ndos dispositivos, un usuario")
+
+        d1 = navegador.new_context(viewport=CELULAR)
+        sesion(d1, cookies["beto"], base)
+
+        # La suite corre muchas veces sobre la misma base: se limpia lo que Beto
+        # tenga de corridas anteriores para que la seccion arranque siempre igual.
+        previos = [p["id"] for p in d1.request.get(f"{base}/api/sync").json()["programs"]
+                   if not p.get("readOnly")]
+        if previos:
+            d1.request.post(f"{base}/api/sync", data={"borrados": previos})
+
+        p1, err1, _ = abrir(d1, f"{base}/")
+        check("el primer dispositivo abre limpio", not err1, str(err1))
+
+        # Beto no tiene programa: carga el basico en el dispositivo 1.
+        p1.get_by_text("Ir a Programa").first.click()
+        p1.wait_for_timeout(700)
+        p1.get_by_text("Fullbody 3x básico").first.click()
+        p1.wait_for_timeout(1200)
+        check("el dispositivo 1 tiene el programa", "Fullbody 3x · básico" in p1.inner_text("body"))
+
+        # Sincroniza para subirlo.
+        p1.locator(".acct").first.click()
+        p1.wait_for_timeout(1200)
+        p1.get_by_text("Sincronizar ahora").first.click()
+        p1.wait_for_timeout(3000)
+
+        subidos = d1.request.get(f"{base}/api/sync").json()["programs"]
+        check("el programa llego al servidor", any(p["name"] == "Fullbody 3x · básico" for p in subidos),
+              f"{[p['name'] for p in subidos]}")
+
+        prog = next(p for p in subidos if p["name"] == "Fullbody 3x · básico")
+        nEjercicios = len(prog["exercises"])
+
+        # El dispositivo 2 baja esa version.
+        d2 = navegador.new_context(viewport=CELULAR)
+        sesion(d2, cookies["beto"], base)
+        p2, _, _ = abrir(d2, f"{base}/")
+        p2.wait_for_timeout(2500)
+        check("el dispositivo 2 lo recibe", "Fullbody 3x · básico" in p2.inner_text("body"))
+
+        # El dispositivo 1 borra un ejercicio y sube. (Se hace por API: lo que se
+        # esta probando es la resolucion del conflicto, no el editor.)
+        recortado = {**prog, "exercises": prog["exercises"][:-1],
+                     "updatedAt": "2030-01-01T10:00:00.000Z"}
+        d1.request.post(f"{base}/api/sync", data={"program": recortado})
+        tras = next(p for p in d1.request.get(f"{base}/api/sync").json()["programs"] if p["id"] == prog["id"])
+        check("el borrado quedo en el servidor", len(tras["exercises"]) == nEjercicios - 1,
+              f"{len(tras['exercises'])} ejercicios")
+
+        # Y ahora lo que rompia: el dispositivo 2, con su copia vieja, sincroniza.
+        p2.locator(".acct").first.click()
+        p2.wait_for_timeout(1200)
+        p2.get_by_text("Sincronizar ahora").first.click()
+        p2.wait_for_timeout(3500)
+
+        final = next(p for p in d2.request.get(f"{base}/api/sync").json()["programs"] if p["id"] == prog["id"])
+        check("el dispositivo desactualizado NO resucita el ejercicio borrado",
+              len(final["exercises"]) == nEjercicios - 1,
+              f"volvieron a {len(final['exercises'])} ejercicios: la copia vieja piso la nueva")
+
+        # ---------- borrar el ultimo programa no rompe la app ----------
+        print("\nborrar programas")
+        p1.get_by_text("Volver a entrenar").first.click()
+        p1.wait_for_timeout(800)
+        # Ir al detalle del programa y borrarlo.
+        p1.on("dialog", lambda d: d.accept())
+        p1.locator(".tabbar button").first.click(force=True)
+        p1.wait_for_timeout(800)
+        if p1.locator(".prog-card").count():
+            p1.locator(".prog-card").first.click()
+            p1.wait_for_timeout(600)
+        editar = p1.get_by_text("Editar programa")
+        if editar.count():
+            editar.first.click()
+            p1.wait_for_timeout(600)
+            p1.get_by_text("Eliminar programa").first.click()
+            p1.wait_for_timeout(1500)
+
+        check("borrar el ultimo programa no rompe la app",
+              "Todavía no tenés ningún programa" in p1.inner_text("body"),
+              p1.inner_text("body")[:200])
+
+        p1.get_by_text("Buscar mi programa").first.click()
+        p1.wait_for_timeout(3500)
+        check("y el borrado no vuelve al sincronizar",
+              "Fullbody 3x · básico" not in p1.inner_text("body"),
+              "el programa borrado reaparecio")
+
         # ---------- un alumno no entra al espacio de entrenador ----------
         print("\npermisos")
         r = ctx3.request.get(f"{base}/api/coach/alumno?alumno={datos['ana']['id']}")

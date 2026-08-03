@@ -302,12 +302,23 @@ Tres reglas que valen mas que su implementacion:
 
 ### Dos cosas del sync que ya rompieron
 
-**Un programa asignado se REEMPLAZA en el pull; uno propio nunca se pisa.** Es
-la distincion que hace `mergePrograms`. Un programa propio puede estar
-editandose mientras corre el pull, asi que lo local gana. Uno asignado es
-`readOnly` y el alumno no pudo haberlo tocado — y no reemplazarlo significaba
-que una correccion del entrenador no llegaba nunca, con los dos lados
-convencidos de mirar lo mismo. Es tambien lo que hace viajar los borrados.
+**Entre dos versiones de un programa gana la editada DESPUES, salvo si es
+asignado.** Lo decide `mergePrograms` con `updatedAt`, que es la marca de cuando
+lo toco el USUARIO y no de cuando se subio. Un programa asignado se reemplaza
+siempre: el alumno no pudo haberlo tocado, y no reemplazarlo significaba que una
+correccion del entrenador no llegaba nunca.
+
+La regla anterior era "lo local gana siempre", para no pisar algo que se
+estuviera editando durante el pull. Esa proteccion sigue en pie —lo que se acaba
+de tocar es lo mas nuevo— pero como regla absoluta hacia algo peor que el
+problema: el dispositivo desactualizado volvia a subir su copia vieja y DESHACIA
+en el servidor lo recien editado. `saveProgram` ademas rechaza toda escritura
+mas vieja que la guardada, asi que el orden de sincronizacion ya no decide nada.
+
+**Borrar un programa necesita una lapida.** El pull manda lo que existe, y de una
+lista no se deduce que falta por borrado y que falta porque el otro dispositivo
+no subio todavia. El cliente guarda los ids borrados y los avisa al sincronizar;
+la lapida se suelta cuando el servidor deja de devolver ese programa.
 
 **Los emails se comparan CANONICAMENTE, no como texto.** En Gmail los puntos del
 nombre de usuario no cuentan: invitar a `abc@gmail.com` y registrarse como
@@ -319,10 +330,6 @@ grafias distintas todavia puede terminar con dos cuentas. Eso es deuda de auth.
 
 ### Deuda conocida
 
-- **Un ejercicio borrado no viaja entre los dispositivos DEL MISMO usuario.**
-  En un programa asignado si viaja, porque el `readOnly` se reemplaza entero;
-  en uno propio no, porque lo local nunca se pisa. Se resuelve con sync
-  incremental. Ver el comentario en `lib/repo/programs.js`.
 - **`health_consents` se graba pero no hay UI que lo pida ni que lo revoque.**
   Postergado por decision explicita (2026-08-02): el trato con los alumnos es
   personal y la app es una herramienta, no el vinculo.

@@ -14,7 +14,7 @@
  */
 import { getServerSession } from "@/lib/auth/nextauth-interop";
 import { authOptions } from "@/lib/auth/options";
-import { pushForUser, pullForUser, pushProgramForUser, pushCatalogForUser } from "@/lib/sync/service.js";
+import { pushForUser, pullForUser, pushProgramForUser, pushCatalogForUser, borrarProgramasDe } from "@/lib/sync/service.js";
 
 async function requireUser() {
   const session = await getServerSession(authOptions);
@@ -32,16 +32,19 @@ export async function POST(request) {
     return Response.json({ error: "body invalido" }, { status: 400 });
   }
 
-  const { program, entry, catalog } = body || {};
-  if (!program?.id && !catalog?.length) {
+  const { program, entry, catalog, borrados } = body || {};
+  if (!program?.id && !catalog?.length && !borrados?.length) {
     return Response.json({ error: "falta el program" }, { status: 400 });
   }
 
   try {
+    // Los borrados van antes que nada: si en la misma pasada se sube un
+    // programa y se borra otro, el orden no puede depender del azar.
+    const nBorrados = borrados?.length ? await borrarProgramasDe(userId, borrados) : 0;
     // El catalogo va PRIMERO: los ejercicios del programa lo referencian, asi
     // que sus filas tienen que existir antes.
     if (catalog?.length) await pushCatalogForUser(userId, catalog);
-    if (!program?.id) return Response.json({ ok: true, soloCatalogo: true });
+    if (!program?.id) return Response.json({ ok: true, soloCatalogo: true, borrados: nBorrados });
     // Sin `entry` es solo el programa: lo usa el sync para que un programa
     // recien creado exista del lado del servidor sin esperar a que se entrene.
     if (!entry?.session) {
