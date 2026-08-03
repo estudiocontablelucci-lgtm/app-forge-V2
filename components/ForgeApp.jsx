@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
-import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, logsFromHistory, sesionesPendientes, marcarParaAlumnos } from "@/lib/sync/client";
+import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, marcarParaAlumnos } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
@@ -185,6 +185,9 @@ export default function ForgeApp() {
   const [activeProgramId, setActiveProgramId] = useState(null);
   const [logs, setLogs] = useState({});
   const [history, setHistory] = useState([]);
+  // Programas borrados en este dispositivo que todavia no se avisaron al
+  // servidor. Sin esto, el pull siguiente los resucita.
+  const [borrados, setBorrados] = useState({});
   const [loaded, setLoaded] = useState(false);
 
   const [tab, setTab] = useState("entrenar");
@@ -273,7 +276,14 @@ export default function ForgeApp() {
   );
 
   // Helpers to update active program fields
-  const updateActiveProgram = (updater) => setPrograms((ps) => ps.map((p) => p.id === activeProgramId ? (typeof updater === "function" ? updater(p) : { ...p, ...updater }) : p));
+  // Embudo unico de toda edicion de programa. Sella `updatedAt` porque de esa
+  // marca depende quien gana entre dos dispositivos: sin ella, el que sincroniza
+  // ultimo pisa al otro sin importar quien edito despues.
+  const updateActiveProgram = (updater) => setPrograms((ps) => ps.map((p) => {
+    if (p.id !== activeProgramId) return p;
+    const siguiente = typeof updater === "function" ? updater(p) : { ...p, ...updater };
+    return { ...siguiente, updatedAt: Date.now() };
+  }));
   const setSessions = (updater) => updateActiveProgram((p) => ({ ...p, sessions: typeof updater === "function" ? updater(p.sessions) : updater }));
   const setProgram = (updater) => updateActiveProgram((p) => ({ ...p, exercises: typeof updater === "function" ? updater(p.exercises) : updater }));
 
@@ -283,12 +293,13 @@ export default function ForgeApp() {
       setPrograms(s.programs || []);
       setActiveProgramId(s.activeProgramId || s.programs?.[0]?.id || null);
       if (s.catalog) setCatalog(s.catalog);
+      if (s.borrados) setBorrados(s.borrados);
       setLogs(s.logs || {});
       setHistory(s.history || []);
     }
     setLoaded(true);
   }, []);
-  useEffect(() => { if (loaded) saveState({ programs, catalog, activeProgramId, logs, history }); }, [programs, catalog, activeProgramId, logs, history, loaded]);
+  useEffect(() => { if (loaded) saveState({ programs, catalog, activeProgramId, logs, history, borrados }); }, [programs, catalog, activeProgramId, logs, history, borrados, loaded]);
 
   // El historial se lee dentro de sincronizar() sin que sea una dependencia:
   // asi el boton siempre ve el estado actual y la funcion no se recrea en cada
@@ -299,6 +310,8 @@ export default function ForgeApp() {
   programsRef.current = programs;
   const catalogRef = useRef(catalog);
   catalogRef.current = catalog;
+  const borradosRef = useRef(borrados);
+  borradosRef.current = borrados;
 
   /**
    * Sincroniza en los dos sentidos: baja lo que hay en la nube y sube las
@@ -323,6 +336,10 @@ export default function ForgeApp() {
     }
 
     const { programs: remotos = [], history: histRemoto = [], catalog: catRemoto = [] } = r.data;
+    // Los borrados pendientes se avisan ANTES de fusionar: si el servidor
+    // todavia devuelve un programa que este dispositivo borro, no puede entrar.
+    const lapidas = Object.keys(borradosRef.current);
+    if (lapidas.length) await pushBorrados(lapidas);
     // El catalogo primero: los programas que llegan lo referencian por id.
     if (catRemoto.length) setCatalog((C) => mergeCatalog(C, catRemoto));
     if (remotos.length) {
@@ -332,7 +349,7 @@ export default function ForgeApp() {
       // Respeta el id que traen, para que ambos dispositivos hablen del mismo
       // ejercicio y no de dos copias homonimas.
       setCatalog((C) => absorberDeProgramas(C, remotos));
-      setPrograms((P) => mergePrograms(P, remotos));
+      setPrograms((P) => mergePrograms(P, remotos, borradosRef.current));
     }
     if (histRemoto.length) {
       setHistory((H) => mergeHistory(H, histRemoto));
@@ -350,6 +367,10 @@ export default function ForgeApp() {
       const res = await pushProgram(p, catalogRef.current);
       if (res.ok) programasSubidos++;
     }
+
+    // Una lapida deja de hacer falta cuando el servidor ya no devuelve ese
+    // programa: guardarlas para siempre haria crecer el localStorage sin techo.
+    setBorrados((b) => limpiarBorrados(b, remotos));
 
     const pendientes = sesionesPendientes(historyRef.current, histRemoto);
 
@@ -1215,21 +1236,34 @@ export default function ForgeApp() {
                 <button className="save" onClick={() => { guardarPrograma(editingProgram); }}>Guardar</button>
                 <button className="prog-dup-btn" onClick={() => {
                   const id = uid();
-                  const dup = { ...activeProgram, id, name: activeProgram.name + " (copia)", exercises: activeProgram.exercises.map((e) => ({ ...e, id: uid() })), createdAt: Date.now() };
+                  const dup = { ...activeProgram, id, name: activeProgram.name + " (copia)", exercises: activeProgram.exercises.map((e) => ({ ...e, id: uid() })), createdAt: Date.now(), updatedAt: Date.now(), readOnly: false, assignmentId: undefined, coachName: undefined };
                   setPrograms((ps) => [...ps, dup]);
                   setActiveProgramId(id);
                   setProgSession(null);
                   setEditingProgram(null);
                 }}>Duplicar programa</button>
-                {programs.length > 1 && (
+                {/* Se puede borrar el ultimo. Antes estaba escondido tras
+                    `programs.length > 1`, que no era una regla de producto sino
+                    un parche: sin estado vacio, quedarse sin programas rompia la
+                    app. Ahora la pantalla vacia existe y ofrece los tres caminos. */}
+                {(
                   <button className="del" style={{ width: "100%" }} onClick={() => {
                     if (!window.confirm(`Eliminar "${activeProgram.name}"? Esta accion no se puede deshacer.`)) return;
                     const remaining = programs.filter((p) => p.id !== activeProgramId);
+                    // Lapida: el borrado tiene que viajar. Sin esto el pull
+                    // siguiente lo trae de vuelta como si nada.
+                    if (!activeProgram.readOnly) {
+                      setBorrados((b) => ({ ...b, [activeProgramId]: Date.now() }));
+                      if (signedIn) pushBorrados([activeProgramId]);
+                    }
                     setPrograms(remaining);
-                    setActiveProgramId(remaining[0].id);
+                    // Puede no quedar ninguno: `remaining[0].id` reventaba la app
+                    // al borrar el ultimo, que desde que las cuentas arrancan
+                    // vacias dejo de ser un caso imposible.
+                    setActiveProgramId(remaining[0]?.id ?? null);
                     setProgSession(null);
                     setEditingProgram(null);
-                    setProgramListView(false);
+                    setProgramListView(true);
                   }}>Eliminar programa</button>
                 )}
               </div>

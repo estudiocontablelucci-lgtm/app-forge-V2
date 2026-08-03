@@ -93,7 +93,13 @@ export async function PUT(request) {
     return { ...e, order: porSesion[e.session] };
   });
 
-  await saveProgram(ctx.user.id, scopeProgram(ctx.user.id, { ...programa, id: programId, exercises }));
+  // Marca de tiempo fresca: esto es una edicion deliberada del entrenador y
+  // tiene que ganarle a cualquier copia vieja que suba otro dispositivo. Sin
+  // esto llegaria con el `updatedAt` que se leyo al abrir el editor y la guarda
+  // anti-pisada de `saveProgram` lo descartaria por no ser mas nuevo.
+  await saveProgram(ctx.user.id, scopeProgram(ctx.user.id, {
+    ...programa, id: programId, exercises, updatedAt: Date.now(),
+  }));
 
   const guardado = await getProgram(programId);
   return Response.json({ ok: true, programa: unscopeProgram(ctx.user.id, guardado) });

@@ -29,7 +29,7 @@ for (const f of readdirSync(resolve(root, "db")).filter((f) => /^v\d+_.*\.sql$/.
 
 const users = await import("../lib/repo/users.js");
 const { pushForUser, pullForUser } = await import("../lib/sync/service.js");
-const { mergeHistory, mergePrograms, logsFromHistory, sesionesPendientes } = await import("../lib/sync/client.js");
+const { mergeHistory, mergePrograms, limpiarBorrados, logsFromHistory, sesionesPendientes } = await import("../lib/sync/client.js");
 
 const fallas = [];
 const check = async (label, fn) => {
@@ -197,6 +197,79 @@ await check("sesionesPendientes detecta lo que quedo sin subir", () => {
   return true;
 });
 
+/* ---------- el servidor no acepta que lo pisen con algo viejo ---------- */
+
+await check("subir una version vieja NO pisa una mas nueva en el servidor", async () => {
+  const { saveProgram, getProgram } = await import("../lib/repo/programs.js");
+  const dueno = await users.findOrCreate({ email: "conflicto@example.com", displayName: "Conflicto" });
+
+  const base = {
+    id: "pconf", name: "v1", weeks: 4, hasDeload: true,
+    sessions: [{ id: "A", name: "A" }],
+    exercises: [
+      { id: "x1", session: "A", order: 1, name: "Press", sets: 3, repsMin: 8, repsMax: 10, unit: "reps" },
+      { id: "x2", session: "A", order: 2, name: "Curl", sets: 2, repsMin: 10, repsMax: 12, unit: "reps" },
+    ],
+  };
+
+  // Dispositivo A borra el curl a las 10:00.
+  await saveProgram(dueno.id, {
+    ...base, name: "sin curl", updatedAt: Date.parse("2026-08-02T10:00:00Z"),
+    exercises: [base.exercises[0]],
+  });
+
+  // Dispositivo B sincroniza con su copia de las 09:00, que todavia lo tiene.
+  // Esto es lo que resucitaba el ejercicio borrado.
+  const r = await saveProgram(dueno.id, { ...base, updatedAt: Date.parse("2026-08-02T09:00:00Z") });
+  if (!r?.ignorado) return "el servidor acepto la escritura vieja";
+
+  const guardado = await getProgram("pconf");
+  if (guardado.name !== "sin curl") return `quedo "${guardado.name}"`;
+  if (guardado.exercises.length !== 1) return "el ejercicio borrado volvio";
+  return true;
+});
+
+await check("una edicion posterior si entra", async () => {
+  const { saveProgram, getProgram } = await import("../lib/repo/programs.js");
+  const dueno = await users.findOrCreate({ email: "conflicto@example.com", displayName: "Conflicto" });
+  await saveProgram(dueno.id, {
+    id: "pconf", name: "v3", weeks: 4, hasDeload: true,
+    updatedAt: Date.parse("2026-08-02T11:00:00Z"),
+    sessions: [{ id: "A", name: "A" }],
+    exercises: [{ id: "x1", session: "A", order: 1, name: "Press", sets: 4, repsMin: 8, repsMax: 10, unit: "reps" }],
+  });
+  const g = await getProgram("pconf");
+  if (g.name !== "v3") return `quedo "${g.name}"`;
+  if (g.exercises[0].sets !== 4) return "no guardo el cambio";
+  return true;
+});
+
+await check("borrar un programa lo saca del pull", async () => {
+  const { borrarProgramasDe } = await import("../lib/sync/service.js");
+  const dueno = await users.findOrCreate({ email: "borra@example.com", displayName: "Borra" });
+
+  await pushForUser(dueno.id, { program: SEED(), entry: entrada({ kg: 70, date: 1_800_000_200_000 }) });
+  const antes = await pullForUser(dueno.id);
+  if (!antes.programs.length) return "no subio el programa";
+
+  const n = await borrarProgramasDe(dueno.id, ["seed-dup-c2"]);
+  if (n !== 1) return `borro ${n} programas`;
+
+  const despues = await pullForUser(dueno.id);
+  if (despues.programs.some((p) => p.id === "seed-dup-c2")) return "el programa borrado sigue viniendo";
+  // El historial es del usuario y no se toca.
+  if (!despues.history.length) return "la baja del programa se llevo el historial";
+  return true;
+});
+
+await check("no se puede borrar el programa de otro", async () => {
+  const { borrarProgramasDe } = await import("../lib/sync/service.js");
+  const ajeno = await users.findOrCreate({ email: "ajeno-borra@example.com", displayName: "Ajeno" });
+  const n = await borrarProgramasDe(ajeno.id, ["seed-dup-c2"]);
+  if (n !== 0) return "borro un programa que no era suyo";
+  return true;
+});
+
 await check("mergePrograms agrega los que faltan sin pisar los PROPIOS", () => {
   const local = [{ id: "p1", name: "local" }];
   const remoto = [{ id: "p1", name: "remoto" }, { id: "p2", name: "otro" }];
@@ -238,6 +311,63 @@ await check("el orden de la lista de programas no cambia al sincronizar", () => 
   const local = [{ id: "a" }, { id: "b", readOnly: true }, { id: "c" }];
   const out = mergePrograms(local, [{ id: "b", readOnly: true, name: "x" }, { id: "d" }]);
   if (out.map((p) => p.id).join(",") !== "a,b,c,d") return `orden ${out.map((p) => p.id).join(",")}`;
+  return true;
+});
+
+await check("entre dos dispositivos gana el que se edito DESPUES", () => {
+  // El bug: lo local ganaba siempre, asi que el dispositivo desactualizado no
+  // solo se perdia el cambio, ademas volvia a subir su copia vieja.
+  const viejo = { id: "p1", name: "viejo", updatedAt: 1000 };
+  const nuevo = { id: "p1", name: "nuevo", updatedAt: 2000 };
+  if (mergePrograms([viejo], [nuevo]).find((p) => p.id === "p1").name !== "nuevo") {
+    return "el dispositivo se quedo con su copia vieja";
+  }
+  // Y al reves: lo que se acaba de tocar en este dispositivo no se pisa.
+  if (mergePrograms([nuevo], [viejo]).find((p) => p.id === "p1").name !== "nuevo") {
+    return "el pull piso una edicion mas nueva";
+  }
+  return true;
+});
+
+await check("compara bien aunque el servidor mande ISO y el cliente milisegundos", () => {
+  const local = { id: "p1", name: "local", updatedAt: Date.parse("2026-08-01T10:00:00Z") };
+  const remoto = { id: "p1", name: "remoto", updatedAt: "2026-08-02T10:00:00.000Z" };
+  if (mergePrograms([local], [remoto]).find((p) => p.id === "p1").name !== "remoto") {
+    return "comparo un numero con un texto y siempre gano el mismo";
+  }
+  return true;
+});
+
+await check("un programa sin updatedAt no gana por defecto", () => {
+  const local = { id: "p1", name: "viejo sin marca" };
+  const remoto = { id: "p1", name: "del servidor", updatedAt: "2026-08-02T10:00:00.000Z" };
+  if (mergePrograms([local], [remoto]).find((p) => p.id === "p1").name !== "del servidor") {
+    return "un programa de antes de que existiera la marca bloqueaba el pull para siempre";
+  }
+  return true;
+});
+
+await check("un programa borrado no vuelve por el pull", () => {
+  const remoto = [{ id: "p1", name: "borrado", updatedAt: 9999 }];
+  const out = mergePrograms([], remoto, { p1: 123 });
+  if (out.length) return "el programa borrado reaparecio";
+  return true;
+});
+
+await check("la lapida se suelta cuando el servidor deja de devolverlo", () => {
+  const quedan = limpiarBorrados({ p1: 1, p2: 2 }, [{ id: "p1" }]);
+  if (quedan.p2) return "guardo la lapida de un programa que ya no existe";
+  if (!quedan.p1) return "solto la lapida de un programa que el servidor todavia devuelve";
+  return true;
+});
+
+await check("el asignado se reemplaza aunque su fecha sea mas vieja", () => {
+  // La prescripcion del entrenador manda: el alumno no pudo haberla tocado.
+  const local = { id: "c1", name: "vieja", readOnly: true, updatedAt: 9999 };
+  const remoto = { id: "c1", name: "del coach", readOnly: true, updatedAt: 1 };
+  if (mergePrograms([local], [remoto]).find((p) => p.id === "c1").name !== "del coach") {
+    return "no reemplazo el programa asignado";
+  }
   return true;
 });
 
