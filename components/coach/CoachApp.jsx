@@ -44,7 +44,12 @@ export default function CoachApp() {
     }
   }, []);
 
-  useEffect(() => { if (status !== "loading") cargar(); }, [cargar, status]);
+  // Solo con sesion. Pedir el espacio sin estar logueado devolvia 401 y dejaba
+  // un error en la consola del navegador en una pantalla que funciona bien.
+  useEffect(() => {
+    if (status === "authenticated") cargar();
+    else if (status === "unauthenticated") setEstado("listo");
+  }, [cargar, status]);
 
   const invitar = async (e) => {
     e.preventDefault();

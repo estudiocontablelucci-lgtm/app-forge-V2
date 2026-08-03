@@ -1,7 +1,7 @@
 /**
  * Sincronizacion entre el localStorage del cliente y Turso.
  *
- *   POST /api/sync   push de una sesion terminada (+ el programa al que pertenece)
+ *   POST /api/sync   push de una sesion terminada (+ su programa y el catalogo)
  *   GET  /api/sync   pull de programas e historial
  *
  * Modelo elegido para la fase 4: el cliente sigue siendo la fuente de verdad
@@ -14,7 +14,7 @@
  */
 import { getServerSession } from "@/lib/auth/nextauth-interop";
 import { authOptions } from "@/lib/auth/options";
-import { pushForUser, pullForUser, pushProgramForUser } from "@/lib/sync/service.js";
+import { pushForUser, pullForUser, pushProgramForUser, pushCatalogForUser } from "@/lib/sync/service.js";
 
 async function requireUser() {
   const session = await getServerSession(authOptions);
@@ -32,10 +32,16 @@ export async function POST(request) {
     return Response.json({ error: "body invalido" }, { status: 400 });
   }
 
-  const { program, entry } = body || {};
-  if (!program?.id) return Response.json({ error: "falta el program" }, { status: 400 });
+  const { program, entry, catalog } = body || {};
+  if (!program?.id && !catalog?.length) {
+    return Response.json({ error: "falta el program" }, { status: 400 });
+  }
 
   try {
+    // El catalogo va PRIMERO: los ejercicios del programa lo referencian, asi
+    // que sus filas tienen que existir antes.
+    if (catalog?.length) await pushCatalogForUser(userId, catalog);
+    if (!program?.id) return Response.json({ ok: true, soloCatalogo: true });
     // Sin `entry` es solo el programa: lo usa el sync para que un programa
     // recien creado exista del lado del servidor sin esperar a que se entrene.
     if (!entry?.session) {
