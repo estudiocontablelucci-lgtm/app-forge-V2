@@ -215,6 +215,7 @@ export default function ForgeApp() {
   const [showProfile, setShowProfile] = useState(false);
   const [showMedidas, setShowMedidas] = useState(false);
   const [showAsistencia, setShowAsistencia] = useState(false);
+  const [grupoSel, setGrupoSel] = useState(null); // grupo muscular en foco
   const [syncState, setSyncState] = useState(null); // texto para la pantalla de perfil
   const [syncing, setSyncing] = useState(false);
 
@@ -765,6 +766,23 @@ export default function ForgeApp() {
   }, [weeks, semanasHechas]);
 
   /**
+   * Al entrar, la semana que toca — no siempre la 1.
+   *
+   * Arrancar siempre en la primera es un riesgo real: en la semana 3 uno abre
+   * la app, ve la semana 1 completa y registra encima de lo que ya entreno.
+   * Se elige la primera sin terminar; si estan todas cerradas, la ultima.
+   * Solo al abrir: una vez que el usuario toca un chip, manda el.
+   */
+  const semanaElegida = useRef(false);
+  useEffect(() => {
+    if (!loaded || semanaElegida.current || !weeks.length) return;
+    if (!Object.keys(semanasHechas).length) return;   // todavia no hay historial
+    semanaElegida.current = true;
+    const pendiente = weeks.find((w) => !semanasHechas[String(w)]?.cerrada);
+    setWeek(pendiente === undefined ? weeks[weeks.length - 1] : pendiente);
+  }, [loaded, weeks, semanasHechas]);
+
+  /**
    * Tonelaje por grupo muscular y semana.
    *
    * El total semanal dice cuanto se movio; este dice DONDE. Es lo que permite
@@ -897,7 +915,20 @@ export default function ForgeApp() {
 
             {activeProgram && <>
             <div className="weekchips">
-              {weeks.map((w) => (<button key={w} className={`chip ${week === w ? "on" : ""} ${w === "DL" ? "dl" : ""}`} onClick={() => setWeek(w)}>{w === "DL" ? "Deload" : `S${w}`}</button>))}
+              {/* Una semana completa se distingue de una por entrenar: el riesgo
+                  no es no encontrarla, es registrar encima de una vieja. */}
+              {weeks.map((w) => {
+                const est = semanasHechas[String(w)];
+                return (
+                  <button key={w} className={`chip ${week === w ? "on" : ""} ${w === "DL" ? "dl" : ""} ${est?.cerrada ? "hecha" : est ? "parcial" : ""}`}
+                    onClick={() => setWeek(w)}
+                    title={est ? `${est.hechas} de ${est.total} sesiones` : "sin entrenar"}>
+                    {w === "DL" ? "Deload" : `S${w}`}
+                    {est?.cerrada && <span className="chip-ok">✓</span>}
+                    {est && !est.cerrada && <span className="chip-n">{est.hechas}/{est.total}</span>}
+                  </button>
+                );
+              })}
             </div>
             {week === "DL" && (
               <div className="dlnote">
@@ -1207,34 +1238,71 @@ export default function ForgeApp() {
 
             <div className="card">
               <div className="cardtitle">Tonelaje por grupo muscular</div>
-              <p className="fhint" style={{ marginBottom: 10 }}>Dónde se movió el volumen. El total dice cuánto; esto dice dónde.</p>
-              {Object.keys(tonelajePorGrupo).length === 0
-                ? <div className="empty">Registrá series para verlo.</div>
-                : Object.entries(tonelajePorGrupo)
-                    .sort((a, b) => Object.values(b[1]).reduce((x, y) => x + y, 0) - Object.values(a[1]).reduce((x, y) => x + y, 0))
-                    .map(([grupo, porSem]) => {
-                      const vals = weeks.map((w) => porSem[String(w)] || 0);
-                      const max = Math.max(...vals, 1);
-                      const total = vals.reduce((a, b) => a + b, 0);
+              {(() => {
+                const grupos = Object.entries(tonelajePorGrupo)
+                  .map(([g, porSem]) => ({ grupo: g, porSem, total: Object.values(porSem).reduce((a, b) => a + b, 0) }))
+                  .sort((a, b) => b.total - a.total);
+                if (!grupos.length) return <div className="empty">Registrá series para verlo.</div>;
+
+                const sel = grupos.find((g) => g.grupo === grupoSel) || null;
+                const maxTotal = Math.max(...grupos.map((g) => g.total), 1);
+
+                return (
+                  <>
+                    <div className="grupo-chips">
+                      <button className={`chip ${!sel ? "on" : ""}`} onClick={() => setGrupoSel(null)}>Todos</button>
+                      {grupos.map((g) => (
+                        <button key={g.grupo} className={`chip ${sel?.grupo === g.grupo ? "on" : ""}`}
+                          onClick={() => setGrupoSel(g.grupo)}>{g.grupo}</button>
+                      ))}
+                    </div>
+
+                    {/* Sin grupo elegido, la pregunta es entre grupos: barras
+                        horizontales del ciclo, ordenadas. Doce mini-graficos
+                        apilados no comparan nada — ese era el problema. */}
+                    {!sel && (
+                      <>
+                        <p className="fhint" style={{ margin: "10px 0" }}>Total del ciclo. Tocá un grupo para ver su evolución semana a semana.</p>
+                        {grupos.map((g) => (
+                          <button key={g.grupo} className="ghrow" onClick={() => setGrupoSel(g.grupo)}>
+                            <span className="ghnom">{g.grupo}</span>
+                            <span className="ghbar"><span style={{ width: `${Math.max(3, (g.total / maxTotal) * 100)}%` }} /></span>
+                            <span className="ghval mono">{round1(g.total / 1000)}t</span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+
+                    {/* Con un grupo elegido, la pregunta es en el tiempo. Un solo
+                        grafico grande, con los valores escritos. */}
+                    {sel && (() => {
+                      const vals = weeks.map((w) => sel.porSem[String(w)] || 0);
+                      const maxSem = Math.max(...vals, 1);
                       return (
-                        <div key={grupo} className="grupo-row">
-                          <div className="grupo-head">
-                            <span className="grupo-nom">{grupo}</span>
-                            <span className="grupo-tot mono">{round1(total / 1000)}t</span>
-                          </div>
-                          <div className="grupo-barras">
+                        <>
+                          <p className="fhint" style={{ margin: "10px 0" }}>
+                            <strong>{sel.grupo}</strong> · {round1(sel.total / 1000)}t en el ciclo
+                          </p>
+                          <div className="gsem">
                             {weeks.map((w, i) => (
-                              <div key={w} className="grupo-col" title={`${weekLabel(w)}: ${Math.round(vals[i])} kg`}>
-                                <div className={`grupo-b ${!vals[i] ? "vacia" : semanasHechas[String(w)]?.cerrada ? "" : "encurso"}`}
-                                  style={{ height: `${vals[i] ? Math.max(6, (vals[i] / max) * 100) : 2}%` }} />
-                                <span className="grupo-lbl">{w === "DL" ? "DL" : `S${w}`}</span>
+                              <div key={w} className="gsem-col">
+                                <span className="gsem-v mono">{vals[i] ? `${round1(vals[i] / 1000)}t` : "—"}</span>
+                                <span className="gsem-hueco">
+                                  <span className={`gsem-b ${!vals[i] ? "vacia" : semanasHechas[String(w)]?.cerrada ? "" : "encurso"}`}
+                                    style={{ height: `${vals[i] ? Math.max(6, (vals[i] / maxSem) * 100) : 2}%` }} />
+                                </span>
+                                <span className="gsem-l">{w === "DL" ? "DL" : `S${w}`}</span>
                               </div>
                             ))}
                           </div>
-                        </div>
+                        </>
                       );
-                    })}
+                    })()}
+                  </>
+                );
+              })()}
             </div>
+
             <div className="card">
               <div className="cardtitle">e1RM por ejercicio</div>
               {(() => {
@@ -1967,6 +2035,14 @@ const CSS = `
 .chip { padding: 9px 16px; border-radius: 999px; border: 1px solid #D1D1D6; background: #FFF; color: #636366; font: 600 13px 'Inter'; cursor: pointer; transition: all .15s; }
 .chip.on { background: #2C6BED; border-color: #2C6BED; color: #FFF; }
 .chip.dl.on { background: #E8A317; border-color: #E8A317; color: #FFF; }
+/* Semana ya completa: no se esconde, se distingue. Sigue siendo tocable para
+   revisar o reentrenar, pero deja de parecer la que toca. */
+.chip.hecha { background: #F1F8F3; border-color: #BFE3CB; color: #1E7A3D; }
+.chip.hecha.on { background: #1E9E4A; border-color: #1E9E4A; color: #FFF; }
+.chip.parcial { border-color: #F0D69B; color: #8A6A2B; }
+.chip.parcial.on { background: #E8A317; border-color: #E8A317; color: #FFF; }
+.chip-ok { margin-left: 5px; font-size: 11px; }
+.chip-n { margin-left: 5px; font-size: 10px; opacity: .75; font-family: 'DM Mono', monospace; }
 .sessioncards { display: flex; flex-direction: column; gap: 10px; }
 .scard { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 16px 18px; background: #FFF; border: none; border-radius: 14px; cursor: pointer; color: inherit; transition: all .15s; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
 .scard:active { transform: scale(0.98); }
@@ -2229,18 +2305,23 @@ const CSS = `
 .aviso { color: #1F7A3D; }
 /* Semana en curso: rayada, para que no se lea como una caida de rendimiento. */
 .tonbar div.encurso { background: repeating-linear-gradient(45deg, #2C6BED, #2C6BED 4px, #9DBBF5 4px, #9DBBF5 8px); }
-.grupo-row { padding: 10px 0; border-top: 1px solid #F2F2F7; }
-.grupo-row:first-of-type { border-top: none; }
-.grupo-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
-.grupo-nom { font: 600 13px 'Inter'; color: #1C1C1E; }
-.grupo-tot { font-size: 12px; color: #8E8E93; }
-.grupo-barras { display: flex; align-items: flex-end; gap: 6px; height: 46px; }
-.grupo-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; height: 100%; }
-.grupo-b { width: 100%; background: #2C6BED; border-radius: 3px 3px 0 0; min-height: 2px; }
-.grupo-b.encurso { background: repeating-linear-gradient(45deg, #2C6BED, #2C6BED 3px, #9DBBF5 3px, #9DBBF5 6px); }
-/* Semana sin entrenar: gris. Rayada se leia como 'en curso', que es otra cosa. */
-.grupo-b.vacia { background: #E5E5EA; }
-.grupo-lbl { font: 600 9px 'Inter'; color: #AEAEB2; }
+.grupo-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.grupo-chips .chip { padding: 7px 12px; font-size: 12px; }
+/* Comparacion ENTRE grupos: barra horizontal, que es donde el ojo compara bien. */
+.ghrow { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 0; border: 0; background: none; cursor: pointer; text-align: left; }
+.ghnom { flex: 0 0 92px; font: 500 12.5px 'Inter'; color: #1C1C1E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ghbar { flex: 1; height: 16px; background: #F2F2F7; border-radius: 4px; overflow: hidden; }
+.ghbar > span { display: block; height: 100%; background: #2C6BED; border-radius: 4px; }
+.ghval { flex: 0 0 44px; text-align: right; font-size: 12px; color: #48484A; }
+/* Evolucion de UN grupo: vertical, grande, con el valor escrito. */
+.gsem { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
+.gsem-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; height: 100%; }
+.gsem-hueco { flex: 1; width: 100%; display: flex; align-items: flex-end; min-height: 0; }
+.gsem-v { font-size: 10px; color: #48484A; font-weight: 600; }
+.gsem-b { display: block; width: 100%; background: #2C6BED; border-radius: 5px 5px 0 0; min-height: 2px; }
+.gsem-b.encurso { background: repeating-linear-gradient(45deg, #2C6BED, #2C6BED 3px, #9DBBF5 3px, #9DBBF5 6px); }
+.gsem-b.vacia { background: #E5E5EA; }
+.gsem-l { font: 600 10px 'Inter'; color: #AEAEB2; }
 /* Entrenamientos que no llegaron al servidor. El push al terminar es
    fire-and-forget y puede morir sin dejar rastro; esto es lo unico que lo hace
    visible antes de que pasen dias. */
@@ -2296,10 +2377,13 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .med-borrar:hover { color: #C7261B; }
 
 /* Asistencia */
-.asis-barras { display: flex; align-items: flex-end; gap: 4px; height: 110px; margin-top: 4px; }
+.asis-barras { position: relative; display: flex; align-items: flex-end; gap: 4px; height: 130px; margin-top: 4px; }
+.asis-prom { position: absolute; left: 0; right: 0; border-top: 1px dashed #C7C7CC; pointer-events: none; }
+.asis-prom span { position: absolute; right: 0; top: -8px; background: #FFF; padding: 0 3px; font-size: 9px; color: #AEAEB2; }
 .asis-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; height: 100%; min-width: 0; }
+.asis-hueco { flex: 1; width: 100%; display: flex; align-items: flex-end; min-height: 0; }
 .asis-n { font-size: 9px; color: #48484A; font-weight: 600; }
-.asis-b { width: 100%; background: #2C6BED; border-radius: 3px 3px 0 0; min-height: 2px; }
+.asis-b { display: block; width: 100%; background: #2C6BED; border-radius: 3px 3px 0 0; min-height: 2px; }
 .asis-b.bajo { background: #9DBBF5; }
 .asis-b.encurso { background: repeating-linear-gradient(45deg, #2C6BED, #2C6BED 3px, #9DBBF5 3px, #9DBBF5 6px); }
 .asis-m { font: 600 9px 'Inter'; color: #AEAEB2; }
