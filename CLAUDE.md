@@ -317,6 +317,23 @@ La navegacion es RED-primero (un deploy se ve enseguida, y el cache es el
 respaldo sin señal) y los estaticos son CACHE-primero (Next les pone hash: una
 version nueva es una URL nueva).
 
+**Interceptar los estaticos NO alcanza, y esto ya rompio la app instalada.** En
+la PRIMERA visita el service worker se activa DESPUES de que la pagina pidio sus
+scripts, asi que no los ve pasar y no los guarda: quedaba el HTML cacheado y
+cero JavaScript, y la app instalada se quedaba en el splash para siempre. Por
+eso la pagina, al terminar de cargar, le MANDA al service worker la lista de lo
+que uso (`performance.getEntriesByType('resource')`) y recien ahi se guarda. La
+lista sale de lo que el navegador pidio de verdad, no de una escrita a mano que
+se desactualiza en el proximo build.
+
+**Probar el modo offline recargando una pagina ya cargada no prueba nada.** Dos
+trampas que dejaron pasar ese bug: Next pre-renderiza `/`, asi que el texto de la
+pantalla esta en el HTML cacheado aunque el JS no cargue nunca —hay que
+comprobar que la app REACCIONE—; y Chrome sirve los scripts de SU cache HTTP
+aunque el service worker no tenga nada, asi que hay que vaciarlo
+(`Network.clearBrowserCache` por CDP) antes de cortar la red. `check_pwa.py`
+hace las dos cosas.
+
 **En desarrollo el service worker NO se registra**, y si quedo uno de una prueba
 anterior se desregistra solo. Es el gotcha de "un puerto, un proyecto" elevado:
 un SW sirve assets viejos y la app compila, responde 200 y muestra otra cosa.

@@ -104,8 +104,14 @@ def main() -> int:
         check("no hay ninguna respuesta de /api/ guardada",
               not any("/api/" in u for u in enCache),
               str([u for u in enCache if "/api/" in u][:3]))
-        check("si estan los estaticos", any("/_next/static/" in u or "icon-192" in u for u in enCache),
-              f"{len(enCache)} entradas en cache")
+        # Contar. El check anterior aceptaba "hay algo estatico" y pasaba con
+        # cero chunks de JavaScript, que es exactamente como quedaba la app
+        # instalada: HTML cacheado y ni una linea de codigo.
+        chunks = [u for u in enCache if "/_next/static/" in u and u.endswith(".js")]
+        pedidos = pg.evaluate("""performance.getEntriesByType('resource')
+            .map(r => r.name).filter(n => n.includes('/_next/static/') && n.endsWith('.js')).length""")
+        check("los scripts de la app quedan cacheados", len(chunks) >= max(1, pedidos - 1),
+              f"{len(chunks)} en cache y la pagina pidio {pedidos}: sin ellos abre el cascaron y nada mas")
 
         print("\nSIN RED")
         # El caso real: el telefono en el subsuelo del gimnasio.
@@ -116,6 +122,20 @@ def main() -> int:
 
         texto = pg.inner_text("body")
         check("la app abre sin red", "Entrenar" in texto, texto[:200])
+
+        # Que aparezca "Entrenar" NO alcanza: Next pre-renderiza `/` como HTML
+        # estatico, asi que ese texto esta en el shell cacheado aunque el
+        # JavaScript no cargue nunca. La app instalada se quedaba en el splash y
+        # este test pasaba igual. Lo unico que prueba que React esta vivo es que
+        # la app REACCIONE.
+        pg.get_by_text("Progreso").first.click()
+        pg.wait_for_timeout(1200)
+        check("la app RESPONDE sin red (React hidrato)",
+              "e1RM" in pg.inner_text("body"),
+              "el HTML esta cacheado pero el JavaScript no: cascaron muerto")
+        pg.get_by_text("Entrenar").first.click()
+        pg.wait_for_timeout(800)
+        texto = pg.inner_text("body")
         check("y sin pantalla de error", "Application error" not in texto and "sin conexión a internet" not in texto.lower(),
               texto[:200])
         check("los programas locales siguen estando",
