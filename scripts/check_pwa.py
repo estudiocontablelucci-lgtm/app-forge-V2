@@ -209,6 +209,41 @@ def main() -> int:
         check("la navegacion fue a la red, no al cache", fresco > 0,
               "transferSize 0: sirvio el shell cacheado teniendo red")
 
+        print("\nla red que no falla, solo CUELGA (el caso del telefono)")
+        # `set_offline` hace fallar los pedidos al instante; el telefono sin
+        # senal hace otra cosa: los deja colgados, y `navigator.onLine` sigue
+        # diciendo que hay wifi. Ese es el caso que dejaba a la app afirmando
+        # "con conexión" un rato largo. Se simula tomando las rutas de /api/ y
+        # no contestandolas nunca.
+        colgados: list = []
+        ctx.route("**/api/**", lambda route: colgados.append(route))
+        pg.goto(base, wait_until="domcontentloaded", timeout=30000)
+        pg.wait_for_timeout(6000)
+        texto = pg.inner_text("body")
+        check("con la red colgada la app lo dice igual", "Sin conexión" in texto,
+              "sigue afirmando que hay conexion porque nadie pregunto, solo espero")
+
+        if args.cookies:
+            pg.locator(".acct").first.click()
+            pg.wait_for_timeout(5000)
+            perfil = pg.inner_text("body")
+            check("y el Perfil no dice lo contrario", "sin conexión" in perfil.lower(),
+                  perfil[:200])
+            pg.go_back()
+            pg.wait_for_timeout(1000)
+
+        # Los pedidos retenidos hay que soltarlos ANTES de cerrar el navegador:
+        # si quedan pendientes, Playwright llena la salida de TargetClosedError
+        # y una corrida en verde parece rota.
+        for r in colgados:
+            try:
+                r.abort()
+            except Exception:
+                pass
+        colgados.clear()
+        ctx.unroute("**/api/**")
+        pg.goto("about:blank")
+
         nav.close()
 
     if fallas:
