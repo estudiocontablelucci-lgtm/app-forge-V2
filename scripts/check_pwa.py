@@ -143,8 +143,9 @@ def main() -> int:
               "no se ve ni el programa ni el estado vacio")
         # Sin red no se puede confirmar la sesion, pero decir "Entrar" es
         # afirmar que no tenes cuenta, que es otra cosa.
-        check("no dice 'Entrar' teniendo cuenta", "Entrar" not in texto.replace("Entrenar", ""),
-              "la app se declara deslogueada solo porque no hay red")
+        if args.cookies:
+            check("no dice 'Entrar' teniendo cuenta", "Entrar" not in texto.replace("Entrenar", ""),
+                  "la app se declara deslogueada solo porque no hay red")
 
         if args.shots:
             pg.screenshot(path=f"{args.shots}/pwa-offline.png")
