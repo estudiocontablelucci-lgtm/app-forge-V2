@@ -4,9 +4,11 @@ App de tracking de entrenamiento para gimnasio. Reemplaza el sistema de Google S
 
 ## Live
 
-Pendiente de conectar a Vercel. La URL de GitHub Pages
-(`estudiocontablelucci-lgtm.github.io/app-forge-V2/`) quedo congelada en la fase 3:
-GitHub Pages solo sirve archivos estaticos y no puede correr NextAuth ni la API de sync.
+**https://forge-v2-five.vercel.app** — instalable como PWA y abre sin conexion.
+
+La URL vieja de GitHub Pages (`estudiocontablelucci-lgtm.github.io/app-forge-V2/`) quedo
+congelada en la fase 3: GitHub Pages solo sirve archivos estaticos y no puede correr
+NextAuth ni la API de sync.
 
 > El deploy sale de `main`. Una rama feature commiteada **no** esta en produccion
 > hasta que se mergea y se pushea a `main`.
@@ -21,8 +23,8 @@ GitHub Pages solo sirve archivos estaticos y no puede correr NextAuth ni la API 
 - NextAuth v4: Google OAuth + magic link por Resend
 - Vercel (region `dub1`, junto a la base)
 
-> Fase 4 a medias, a proposito: la infraestructura esta y verificada, pero la UI todavia
-> lee y escribe en localStorage. Falta el puente (`/api/sync` + migracion inicial).
+> El atleta es offline-first: mientras entrena manda el localStorage, y `/api/sync` sube al
+> terminar la sesion y baja al abrir. El entrenador trabaja online, contra el servidor.
 
 ## Features actuales
 
@@ -30,6 +32,8 @@ GitHub Pages solo sirve archivos estaticos y no puede correr NextAuth ni la API 
 - **Programa**: 33 ejercicios (Ciclo 2 DUP, 3 sesiones), editable, semanas y deload configurables
 - **Import Excel**: wizard de 3 pasos (subir, mapear columnas, vista previa) con plantilla descargable
 - **Superserie blocks**: 2-4 ejercicios agrupados en la misma pantalla
+- **Tecnicas de ejecucion**: dropset con sus escalones, que suman al tonelaje y al e1RM.
+  El color distingue lo que agrupa ejercicios de lo que pasa adentro de una serie
 - **Health check**: sueno/estres/energia pre-sesion (1-5)
 - **Entrenamiento activo**: inputs KG/REPS/RIR, referencia de la semana anterior, notas por ejercicio
 - **Timer de descanso**: arranca solo al cerrar la vuelta; en superserie espera a que la serie
@@ -39,19 +43,25 @@ GitHub Pages solo sirve archivos estaticos y no puede correr NextAuth ni la API 
 - **Export a Excel**: hoja `Sesiones` (una fila por sesion) + hoja `Series` (una fila por set,
   con kg/reps/RIR/e1RM) — el grano que sirve para tabla dinamica
 - **Progreso**: e1RM Brzycki por ejercicio, tonelaje semanal con deltas
-- **Deload**: series-1 automatico
+- **Deload**: configurable por programa (porcentaje, metodo y piso de series)
 - **Re-entry flow**: revisar/editar una sesion ya registrada o empezarla de cero
+- **Seccion de entrenador** (`/entrenador`): invitar, asignar, adaptar el programa y ver
+  como le esta yendo a cada alumno. Responsive de verdad, con su propio CSS
+- **Medidas corporales y asistencia**: importadas de la planilla original, con las formulas
+  verificadas contra sus numeros
+- **PWA**: instalable, abre sin red, y el Perfil dice en que estado esta el modo offline
 
 ## Roadmap
 
 1. ~~MVP: programa, entrenamiento, timer, superseries, e1RM~~ Done
 2. ~~Health check, historial, semaforo, superset blocks~~ Done
 3. ~~Programas multiples, descripciones por ejercicio, import Excel, export del historial~~ Done
-4. **En curso** — Persistencia real (Turso) + auth (NextAuth) + multi-device
-   Hecho: shell Next.js, base en Turso, schema v01+v02, capa de datos, auth.
-   Falta: `/api/sync`, cablear la UI, migrar el localStorage existente.
-5. Roles coach/atleta + dashboard del entrenador
-6. PWA offline (service worker + sync engine)
+4. ~~Persistencia real (Turso) + auth (NextAuth) + multi-device~~ Done
+5. ~~Roles coach/atleta + seccion del entrenador con metricas~~ Done
+6. ~~PWA offline: instalable, abre sin red~~ Done
+7. ~~Tecnicas de ejecucion: dropset en el programa y en Entrenar~~ Done
+
+Sin fase 8 definida. Lo pendiente esta en `CONTEXT.md`.
 
 El producto apunta a entrenadores con muchos alumnos: el entrenador carga el programa,
 define las referencias **por alumno** y analiza las metricas; el alumno registra el
@@ -94,7 +104,7 @@ npm run migrate                    # aplica db/*.sql sobre db/local.db
 DATABASE_URL=libsql://... TURSO_AUTH_TOKEN=... npm run migrate   # contra Turso
 ```
 
-Las migraciones son numeradas (`db/v01_init.sql`, `db/v02_auth.sql`) y el runner es
+Las migraciones son numeradas (`db/v01_init.sql` a `db/v07_dropset.sql`) y el runner es
 idempotente: saltea lo ya aplicado. Una migracion aplicada **no se edita** — se agrega
 la siguiente.
 
@@ -114,9 +124,15 @@ npm run verify          # corre todas las verificaciones
   round-trip de ids y merge del lado del cliente
 - `verify:deload` — deload configurable y referencias por semana
 - `verify:catalog` — migracion al catalogo (33 ejercicios), deduplicacion e idempotencia
-- `verify:ui` — abre la app en un navegador headless y falla si alguna ruta no hidrata o tira
-  errores de consola. Necesita el server levantado (`npm run dev`) y `playwright` en el Python
-  del sistema. No entra en `npm run verify` porque depende de que la app este corriendo.
+- `verify:tecnicas` — el dropset viaja adentro de su serie y no la duplica
+
+Con navegador, fuera de `npm run verify` porque necesitan la app levantada:
+
+- `verify:ui` — falla si alguna ruta no hidrata o tira errores de consola
+- `verify:pwa` — instalable y abre SIN RED, contra `next start`. Corta la red de verdad y
+  ademas simula la que solo CUELGA, que es lo que hace un telefono sin senal
+- `verify:tecnicas-ui` — los escalones no se abren antes de tiempo y el descanso los espera
+- `scripts/check_coach_ui.py` — la seccion de entrenador, con dos sesiones reales
 
 > `verify:ui` existe por un caso real: la app compilaba, respondia 200 y se veia en blanco. Era
 > un service worker de otro proyecto que habia quedado registrado en `localhost:3000` — los
@@ -136,3 +152,4 @@ divergir del codigo que corre en produccion.
 | `forge-arquitectura.md` | Diseno tecnico completo: schema target, modelo coach/atleta, wireframes |
 | `db/v01_init.sql` | Schema del dominio (supersede la seccion 3.2 de forge-arquitectura.md) |
 | `db/v02_auth.sql` | Tablas de NextAuth sobre el schema propio |
+| `docs/e4-seccion-entrenador.md` | La seccion de entrenador: decisiones y errores que ya mordieron |
