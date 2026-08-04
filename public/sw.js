@@ -10,9 +10,16 @@
  *
  * ============================ REGLAS ============================
  *
- * 1. NAVEGACION -> red primero, cache como respaldo.
+ * 1. NAVEGACION -> red primero, cache como respaldo, PERO CON RELOJ.
  *    Asi un deploy nuevo se ve enseguida. El respaldo es lo que hace que la
  *    app abra en el subsuelo del gimnasio.
+ *
+ *    Lo del reloj no es un detalle. Sin señal, `fetch` no falla rapido: el
+ *    sistema tarda en darse por vencido, y mientras tanto la app instalada se
+ *    queda en el splash. Se veia como "abre en blanco, salgo, vuelvo a entrar y
+ *    ahora si" — la segunda vez el service worker ya estaba caliente. Ahora si
+ *    el navegador dice que no hay red se va derecho al cache, y si dice que si
+ *    pero no contesta en dos segundos, tambien.
  *
  * 2. ESTATICOS (/_next/static, iconos, manifest) -> cache primero.
  *    Next les pone un hash en el nombre: una version nueva es una URL nueva,
@@ -95,22 +102,46 @@ async function deCacheORed(req) {
   return res;
 }
 
+/** Lo que haya guardado para esta navegacion. */
+async function shellGuardado(cache, req) {
+  // `ignoreVary`: Next responde con `Vary: RSC, Next-Router-State-Tree...` y
+  // un arranque en frio no manda las mismas cabeceras que la visita que se
+  // cacheo. Sin esto el match falla y la app queda en blanco teniendo el HTML
+  // guardado. `ignoreSearch` cubre el start_url con parametros.
+  const opciones = { ignoreVary: true, ignoreSearch: true };
+  return (await cache.match(req, opciones)) || (await cache.match(SHELL, opciones));
+}
+
+const ESPERA_RED = 2000;
+
 async function deRedOCache(req) {
   const cache = await caches.open(CACHE);
+
+  // Si el navegador ya sabe que no hay red, no se le pide permiso al reloj.
+  if (self.navigator && self.navigator.onLine === false) {
+    const guardado = await shellGuardado(cache, req);
+    if (guardado) return guardado;
+  }
+
   try {
-    const res = await fetch(req);
-    if (res && res.ok) cache.put(SHELL, res.clone()).catch(() => {});
+    // La red compite contra un reloj: pasado el plazo gana lo guardado. Es la
+    // diferencia entre abrir en un segundo y quedarse en el splash.
+    const res = await Promise.race([
+      fetch(req),
+      new Promise((_, rechazar) => setTimeout(() => rechazar(new Error("tarde")), ESPERA_RED)),
+    ]);
+    if (res && res.ok) {
+      // Bajo SU url y tambien como shell. Sin lo primero, `/entrenador` sin red
+      // caia al shell de `/` y se dibujaba la app del atleta con la direccion
+      // del entrenador en la barra: peor que un error, porque no se nota.
+      cache.put(req, res.clone()).catch(() => {});
+      cache.put(SHELL, res.clone()).catch(() => {});
+      podar(cache);
+    }
     return res;
   } catch {
     // Sin red: la ultima version que se vio, o el shell.
-    // `ignoreVary`: Next responde con `Vary: RSC, Next-Router-State-Tree...` y
-    // un arranque en frio no manda las mismas cabeceras que la visita que se
-    // cacheo. Sin esto el match falla y la app queda en blanco teniendo el HTML
-    // guardado. `ignoreSearch` cubre el start_url con parametros.
-    const opciones = { ignoreVary: true, ignoreSearch: true };
-    return (await cache.match(req, opciones))
-      || (await cache.match(SHELL, opciones))
-      || Response.error();
+    return (await shellGuardado(cache, req)) || Response.error();
   }
 }
 

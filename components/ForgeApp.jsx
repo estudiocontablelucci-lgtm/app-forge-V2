@@ -7,7 +7,7 @@ import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from 
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
 import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
-import { deltaE1rm, resumenCiclo } from "@/lib/progreso";
+import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
 import MedidasScreen from "./MedidasScreen";
@@ -360,6 +360,14 @@ export default function ForgeApp() {
   catalogRef.current = catalog;
   const borradosRef = useRef(borrados);
   borradosRef.current = borrados;
+  // El listener de "atras" se registra una sola vez: lee el estado por ref para
+  // no re-suscribirse en cada pestaña que se toca.
+  const tabRef = useRef(tab); tabRef.current = tab;
+  const sessionRef = useRef(session); sessionRef.current = session;
+  const showProfileRef = useRef(showProfile); showProfileRef.current = showProfile;
+  const showMedidasRef = useRef(showMedidas); showMedidasRef.current = showMedidas;
+  const showAsistenciaRef = useRef(showAsistencia); showAsistenciaRef.current = showAsistencia;
+  const importWizardRef = useRef(importWizard); importWizardRef.current = importWizard;
 
   /**
    * Sincroniza en los dos sentidos: baja lo que hay en la nube y sube las
@@ -745,6 +753,52 @@ export default function ForgeApp() {
     }
   }
 
+  /**
+   * El boton "atras" de Android.
+   *
+   * Una PWA instalada no tiene barra de navegacion: el unico atras es el del
+   * sistema, y por defecto se sale de la app de una. Estando a mitad de un
+   * entrenamiento eso es perder la sesion por un gesto reflejo.
+   *
+   * Se apila un estado en el historial y se retrocede POR DENTRO: primero se
+   * cierran las pantallas superpuestas, despues se vuelve a Entrenar, y recien
+   * ahi el atras pregunta si se quiere salir. La confirmacion dura unos
+   * segundos: si se aprieta atras de nuevo mientras esta en pantalla, se sale.
+   */
+  const [confirmarSalida, setConfirmarSalida] = useState(false);
+  const salidaRef = useRef(false);
+  salidaRef.current = confirmarSalida;
+
+  useEffect(() => {
+    if (!loaded) return;
+    const marcar = () => window.history.pushState({ forge: true }, "");
+    marcar();
+
+    const alVolver = () => {
+      // Cada rama consume el gesto y vuelve a apilar, asi que el historial no
+      // se agota mientras haya algo hacia donde retroceder adentro.
+      const quedarse = () => marcar();
+
+      if (importWizardRef.current) { setImportWizard(null); return quedarse(); }
+      if (showMedidasRef.current) { setShowMedidas(false); return quedarse(); }
+      if (showAsistenciaRef.current) { setShowAsistencia(false); return quedarse(); }
+      if (showProfileRef.current) { setShowProfile(false); return quedarse(); }
+      // Mitad de un entrenamiento: el atras pide confirmacion como el boton de
+      // salir de la pantalla, no descarta nada en silencio.
+      if (sessionRef.current !== null) { setConfirmAction("exit"); return quedarse(); }
+      if (tabRef.current !== "entrenar") { setTab("entrenar"); return quedarse(); }
+
+      // Ya en Entrenar: el primer atras avisa, el segundo sale.
+      if (salidaRef.current) return;   // no se re-apila: el gesto sale de la app
+      setConfirmarSalida(true);
+      setTimeout(() => setConfirmarSalida(false), 2500);
+      quedarse();
+    };
+
+    window.addEventListener("popstate", alVolver);
+    return () => window.removeEventListener("popstate", alVolver);
+  }, [loaded]);
+
   // Sin programas, la pestaña Programa SIEMPRE muestra la lista: el detalle de
   // un programa que no existe es una pantalla en blanco donde deberia estar el
   // primer paso.
@@ -802,6 +856,29 @@ export default function ForgeApp() {
   }, [loaded, weeks, semanasHechas]);
 
   /**
+   * Bienestar: los tres numeros que la app pide antes de cada sesion.
+   *
+   * Se venian preguntando todos los dias y solo se veian dentro del detalle de
+   * una sesion suelta, que es el unico lugar donde no significan nada. El
+   * tonelaje de ese dia sale del historial y no de `logs`, para que cada punto
+   * corresponda a la sesion que se estaba respondiendo.
+   */
+  const datosBienestar = useMemo(() => {
+    const tonelajeDe = (h) => {
+      let t = 0;
+      for (const ex of h.exercises || []) {
+        for (const st of ex.sets || []) {
+          const kg = parseFloat(st.kg), reps = parseInt(st.reps);
+          if (isNum(kg) && reps) t += kg * reps;
+        }
+      }
+      return t || null;
+    };
+    const propias = history.filter((h) => !h.programId || h.programId === activeProgramId);
+    return bienestar(propias, tonelajeDe);
+  }, [history, activeProgramId]);
+
+  /**
    * Tonelaje por grupo muscular y semana.
    *
    * El total semanal dice cuanto se movio; este dice DONDE. Es lo que permite
@@ -855,6 +932,7 @@ export default function ForgeApp() {
         <style>{CSS}</style>
         <div className="phone">
           <ProfileScreen
+            perfilLocal={perfilLocal}
             onClose={() => setShowProfile(false)}
             syncState={syncState}
             onSync={sincronizar}
@@ -1236,6 +1314,61 @@ export default function ForgeApp() {
                 </p>;
               })()}
             </div>
+
+            {datosBienestar.sesiones.length >= 2 && (
+              <div className="card">
+                <div className="cardtitle">Cómo llegaste a entrenar</div>
+                <p className="fhint" style={{ marginBottom: 10 }}>
+                  Lo que respondés antes de cada sesión. Ojo con el estrés: 5 es mucho,
+                  al revés que los otros dos.
+                </p>
+                {(() => {
+                  const ult = datosBienestar.sesiones.slice(-14);
+                  return (
+                    <>
+                      <div className="bien-graf">
+                        {ult.map((s, i) => (
+                          <div key={i} className="bien-col" title={`${weekLabel(s.week)} · ${s.session}`}>
+                            {BIENESTAR.map(({ id }) => (
+                              <span key={id} className={`bien-p ${id}`}
+                                style={{ bottom: `${((s[id] ?? 0) - 1) / 4 * 100}%`, opacity: s[id] ? 1 : 0 }} />
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="bien-leyenda">
+                        {BIENESTAR.map(({ id, label }) => (
+                          <span key={id} className="bien-item">
+                            <span className={`bien-p ${id}`} />
+                            {label} <b className="mono">{datosBienestar.promedios[id] ?? "—"}</b>
+                          </span>
+                        ))}
+                      </div>
+                      {(() => {
+                        // Solo se afirma algo cuando hay con que: pocas sesiones
+                        // o respuestas siempre iguales no son una conclusion.
+                        const lineas = BIENESTAR.map(({ id, label, bueno }) => {
+                          const r = datosBienestar.contraTonelaje[id];
+                          const f = fuerzaCorrelacion(r);
+                          if (!f || f === "sin relación clara") return null;
+                          const masVolumen = bueno === "alto" ? r > 0 : r < 0;
+                          return `${label.toLowerCase()}: los días que ${bueno === "alto" ? "llegaste mejor" : "llegaste más estresado"} moviste ${masVolumen ? "más" : "menos"} volumen`;
+                        }).filter(Boolean);
+                        if (!lineas.length) {
+                          return <p className="fhint" style={{ marginTop: 10 }}>
+                            Todavía no hay una relación clara con el volumen que movés. Con más sesiones
+                            registradas se va a ver, si es que la hay.
+                          </p>;
+                        }
+                        return <p className="fhint" style={{ marginTop: 10 }}>
+                          Contra el tonelaje de cada día — {lineas.join("; ")}.
+                        </p>;
+                      })()}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
 
             <div className="card">
               <div className="cardtitle">Medidas corporales</div>
@@ -1633,6 +1766,10 @@ export default function ForgeApp() {
           setProgramListView(false);
           setImportWizard(null);
         }} />}
+
+        {confirmarSalida && (
+          <div className="salir-aviso">Tocá atrás otra vez para salir de FORGE</div>
+        )}
 
         <nav className="tabbar">
           {[["programa", "Programa", "▤"], ["entrenar", "Entrenar", "◉"], ["historial", "Historial", "☰"], ["progreso", "Progreso", "↗"]].map(([id, label, icon]) => (
@@ -2341,6 +2478,19 @@ const CSS = `
 .gsem-b.encurso { background: repeating-linear-gradient(45deg, #2C6BED, #2C6BED 3px, #9DBBF5 3px, #9DBBF5 6px); }
 .gsem-b.vacia { background: #E5E5EA; }
 .gsem-l { font: 600 10px 'Inter'; color: #AEAEB2; }
+
+/* Bienestar: tres series de 1 a 5 sobre la misma grilla. Puntos y no barras
+   porque son escalas, no cantidades: apilarlas sugeriria una suma que no existe. */
+.bien-graf { position: relative; display: flex; gap: 3px; height: 96px; padding: 6px 0; border-bottom: 1px solid #E5E5EA; }
+.bien-col { position: relative; flex: 1; min-width: 0; }
+.bien-p { position: absolute; left: 50%; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; }
+.bien-p.sleep { background: #2C6BED; }
+.bien-p.energy { background: #34C759; }
+.bien-p.stress { background: #FF9500; }
+.bien-leyenda { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font: 400 12px 'Inter'; color: #636366; }
+.bien-item { display: inline-flex; align-items: center; gap: 5px; }
+.bien-item .bien-p { position: static; margin: 0; }
+.bien-item b { color: #1C1C1E; }
 /* Entrenamientos que no llegaron al servidor. El push al terminar es
    fire-and-forget y puede morir sin dejar rastro; esto es lo unico que lo hace
    visible antes de que pasen dias. */
@@ -2349,6 +2499,8 @@ const CSS = `
 .sinsubir p { margin: 3px 0 0; font: 400 12px 'Inter'; color: #8A6A2B; line-height: 1.4; }
 .sinsubir-btn { flex-shrink: 0; padding: 9px 14px; border-radius: 10px; border: 0; background: #E8A317; color: #fff; font: 600 13px 'Inter'; cursor: pointer; }
 .sinsubir-btn:disabled { opacity: .6; }
+/* Aviso de salida: flotante sobre la tabbar, se va solo. */
+.salir-aviso { position: fixed; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 40; padding: 10px 18px; border-radius: 999px; background: rgba(28,28,30,.92); color: #fff; font: 600 13px 'Inter'; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
 .hist-pend { margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: #FFF0D0; color: #8A6A2B; font: 600 10px 'Inter'; text-transform: uppercase; letter-spacing: .05em; vertical-align: middle; }
 /* El mismo boton, pero como enlace: la puerta a la seccion de entrenador. */
 a.btn-ghost { display: flex; align-items: center; justify-content: center; text-decoration: none; }
@@ -2412,6 +2564,12 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .asis-fila-m { flex: 1; font: 600 13px 'Inter'; }
 .asis-mini { padding: 3px 9px; border-radius: 999px; border: 1px solid #E5E5EA; background: #fff; color: #8E8E93; font: 600 11px 'Inter'; cursor: pointer; }
 .asis-mini:hover { border-color: #2C6BED; color: #2C6BED; }
+.asis-anio { border-top: 1px solid #F2F2F7; }
+.asis-anio:first-of-type { border-top: none; }
+.asis-anio-head { display: flex; align-items: baseline; justify-content: space-between; width: 100%; padding: 11px 0; border: 0; background: none; cursor: pointer; }
+.asis-anio-n { font: 700 14px 'Inter'; color: #1C1C1E; }
+.asis-anio-r { font-size: 12px; color: #8E8E93; }
+.asis-anio .asis-fila { padding-left: 14px; }
 .invite-banner { position: absolute; top: 62px; left: 16px; right: 16px; z-index: 25; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #EEF3FE; border: 1px solid #B9CDF5; font: 400 13px 'Inter'; color: #1F4B99; line-height: 1.4; }
 .invite-acciones { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .invite-ver { color: #2C6BED; font-weight: 600; text-decoration: none; white-space: nowrap; }

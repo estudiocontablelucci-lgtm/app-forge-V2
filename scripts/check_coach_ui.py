@@ -220,8 +220,8 @@ def main() -> int:
         # despues que lo escrito llegue a la pantalla del entrenador.
         print("\nnota del alumno")
 
-        a.get_by_text("Entrenar").first.click()
-        a.wait_for_timeout(600)
+        a.locator(".tabbar button").nth(1).click()
+        a.wait_for_timeout(800)
         # Una semana que todavia no entreno: sobre una ya entrenada la app abre
         # el dialogo de re-entrenamiento en vez del health check, que es lo
         # correcto pero no es el camino que se quiere probar aca.
@@ -506,14 +506,14 @@ def main() -> int:
         check("hay un programa activo elegido", activo["id"] is not None,
               f"activeProgramId={activo['id']} con {activo['n']} programas")
 
-        pa.get_by_text("Historial").first.click()
+        pa.locator(".tabbar button").nth(2).click()
         pa.wait_for_timeout(1200)
         hist = pa.inner_text("body")
         check("el Historial muestra las sesiones sincronizadas",
               "sesiones registradas" in hist and "0 sesiones" not in hist,
               f"{activo['hist']} sesiones en local pero la pantalla dice: {hist[:120]}")
 
-        pa.get_by_text("Progreso").first.click()
+        pa.locator(".tabbar button").nth(3).click()
         pa.wait_for_timeout(1200)
         prog_txt = pa.inner_text("body")
         check("Progreso separa la semana en curso de las cerradas",
@@ -531,8 +531,8 @@ def main() -> int:
               "falta el resumen del ciclo")
         # Entrenar: la semana por defecto y el estado de cada chip. Arrancar
         # siempre en la 1 es un riesgo real: se registra encima de lo ya hecho.
-        pa.get_by_text("Entrenar").first.click()
-        pa.wait_for_timeout(1000)
+        pa.locator(".tabbar button").nth(1).click()
+        pa.wait_for_timeout(1200)
         chips = pa.evaluate("[...document.querySelectorAll('.weekchips .chip')].map(c => ({cls: c.className, txt: c.innerText.trim()}))")
         activo = next((c for c in chips if " on" in c["cls"] or c["cls"].endswith("on")), None)
         check("hay una semana seleccionada al abrir", activo is not None, str(chips))
@@ -543,8 +543,8 @@ def main() -> int:
         check("una semana completa se distingue", any("hecha" in c["cls"] for c in chips),
               f"ningun chip marcado como completo: {[c['cls'] for c in chips]}")
 
-        pa.get_by_text("Progreso").first.click()
-        pa.wait_for_timeout(1000)
+        pa.locator(".tabbar button").nth(3).click()
+        pa.wait_for_timeout(1200)
 
         # Grupo muscular: selector, no doce mini-graficos apilados.
         check("el tonelaje por grupo se compara entre grupos", pa.locator(".ghrow").count() > 1,
