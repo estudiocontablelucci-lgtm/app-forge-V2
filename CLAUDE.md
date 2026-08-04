@@ -50,8 +50,9 @@ app-forge-v2/
 │   ├── formulas.js        # brzycki, keyOf, isNum — fuente unica (UI y server)
 │   ├── auth/              # options, adapter propio, envio Resend, interop v4
 │   ├── coach/             # metrics.js (funciones puras) + invite-email.js
+│   ├── medidas.js         # medidas corporales: derivadas, proporciones, asimetrias
 │   ├── sync/              # ids.js (prefijos), service.js, client.js
-│   └── repo/              # users, programs, training, coaching, catalog
+│   └── repo/              # users, programs, training, coaching, catalog, medidas
 ├── db/
 │   ├── v01_init.sql       # dominio multi-tenant
 │   ├── v02_auth.sql       # tablas de NextAuth
@@ -72,6 +73,7 @@ app-forge-v2/
 │   ├── verify-coaching.mjs    # vinculo coach-alumno, cupos, baja
 │   ├── verify-catalog-sync.mjs # identidad del ejercicio entre dispositivos
 │   ├── verify-coach-editor.mjs # lo que el coach edita llega al alumno
+│   ├── verify-medidas.mjs     # formulas contra los numeros reales de la planilla
 │   ├── verify-coach-metrics.mjs # metricas de la ficha + camino coach->alumno
 │   ├── check_ui.py            # headless: falla si una ruta no hidrata
 │   └── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
@@ -250,6 +252,24 @@ cuando son de terceros. Antes de onboardear un alumno real hace falta consentimi
 la tabla `health_consents` existe para registrarlo, pero todavia no hay UI que lo pida.
 
 ---
+
+## Medidas corporales
+
+`body_measurements` guarda todo en `values_json`, asi que agregar una
+circunferencia NO necesita migracion: el conjunto de campos lo define
+`lib/medidas.js` y la base solo lo transporta.
+
+Las formulas salen de la planilla original y estan verificadas contra sus
+numeros, no reconstruidas de memoria. Dos que importan:
+
+- **El FFMI es el NORMALIZADO** (corregido a 1.80 m): `magra/h² + 6.1 × (1.8 − h)`.
+  El crudo da 21.12 donde la planilla dice 21.49.
+- **La masa grasa MEDIDA le gana a la calculada.** La bascula la da; calcularla
+  del porcentaje da 63.93 de masa magra donde la planilla dice 63.95.
+
+La asimetria entre lados es `(I − D) / D`. No es un adorno: da -4.8% en el brazo,
+que es exactamente el numero que motiva el protocolo ASIM-IZQ del SEED. La
+planilla medía el problema y el programa tenia la solucion, pero nada los unia.
 
 ## Zonas protegidas
 

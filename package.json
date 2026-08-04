@@ -21,9 +21,10 @@
     "verify:metrics": "node scripts/verify-coach-metrics.mjs",
     "verify:editor": "node scripts/verify-coach-editor.mjs",
     "verify:identidad": "node scripts/verify-identidad.mjs",
+    "verify:medidas": "node scripts/verify-medidas.mjs",
     "backfill:email": "node scripts/backfill-email-canon.mjs",
     "verify:ui": "python scripts/check_ui.py",
-    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor && npm run verify:identidad"
+    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor && npm run verify:identidad && npm run verify:medidas"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
