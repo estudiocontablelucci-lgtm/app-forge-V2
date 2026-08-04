@@ -12,7 +12,7 @@ App de tracking de entrenamiento para gimnasio. Reemplaza Google Sheets con una 
 | Lenguaje | JSX (sin TypeScript por ahora) |
 | Estilos | CSS-in-JS embebido (string en constante `CSS`) |
 | Persistencia | localStorage (`forge-v2`) como fuente de verdad mientras se entrena, sincronizado con Turso |
-| Base de datos | Turso / libSQL — base `forge` (org `gabriellucci`), schema v01–v04 aplicados |
+| Base de datos | Turso / libSQL — base `forge` (org `gabriellucci`), schema v01–v05 aplicados |
 | Auth | NextAuth v4 — Google OAuth + magic link por Resend |
 | Deploy | Vercel (region `dub1`, junto a la base) |
 | Linter | oxlint |
@@ -57,6 +57,7 @@ app-forge-v2/
 │   ├── v02_auth.sql       # tablas de NextAuth
 │   ├── v03_coach.sql      # tabla exercises + program_exercises.exercise_id
 │   ├── v04_catalogo_por_usuario.sql # el catalogo es del usuario, no del coach
+│   ├── v05_email_canon.sql # la cuenta es la casilla, no la grafia
 │   └── *.db               # bases locales (gitignored)
 ├── public/                # assets estaticos
 ├── scripts/               # utilidades node (no entran al bundle)
@@ -324,17 +325,23 @@ la lapida se suelta cuando el servidor deja de devolver ese programa.
 nombre de usuario no cuentan: invitar a `abc@gmail.com` y registrarse como
 `a.bc@gmail.com` es la misma persona y el mail llega igual. Ver `lib/email-id.js`.
 La canonicalizacion es por dominio a proposito: sacar los puntos en un dominio
-cualquiera uniria a dos personas distintas. **No aplica a `users`**: la identidad
-de la cuenta sigue siendo el email exacto, asi que alguien que entre con dos
-grafias distintas todavia puede terminar con dos cuentas. Eso es deuda de auth.
+cualquiera uniria a dos personas distintas. Desde la v05 aplica tambien a `users`: `email_canon` es la clave de
+comparacion y `email` sigue siendo lo que la persona escribio. Las dos puertas
+que resuelven o crean usuarios —`findOrCreate` y el adapter de NextAuth—
+preguntan por casilla y preguntan ANTES de insertar, porque `ON CONFLICT (email)`
+solo protege contra la misma grafia y esa nunca fue la que fallaba.
+
+El fallback exacto se queda: sin el, una cuenta anterior al backfill dejaria de
+encontrarse y su dueno entraria a una nueva y vacia. El backfill
+(`npm run backfill:email`) se niega a fusionar — si dos cuentas resultan la misma
+casilla lo informa y no escribe nada, porque unir dos historiales es una decision
+de producto.
 
 ### Deuda conocida
 
 - **`health_consents` se graba pero no hay UI que lo pida ni que lo revoque.**
   Postergado por decision explicita (2026-08-02): el trato con los alumnos es
   personal y la app es una herramienta, no el vinculo.
-- **La identidad de `users` es el email exacto.** Dos grafias del mismo Gmail
-  crean dos cuentas. Las invitaciones ya no se ven afectadas, el login si.
 
 ---
 
