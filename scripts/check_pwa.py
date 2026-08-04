@@ -166,6 +166,21 @@ def main() -> int:
         check("una ruta ya visitada vuelve ELLA sin red", "Entrenador" in pg.inner_text("body"),
               pg.inner_text("body")[:150])
 
+        print("\nla app se entera de que hay red, sin reiniciarla")
+        # El pull automatico corre UNA vez al abrir. Si esa vez no habia señal
+        # nadie lo reintentaba: la app se quedaba con lo local hasta reiniciar
+        # del todo, aunque la conexion hubiera vuelto hacia rato.
+        pg.goto(base, wait_until="domcontentloaded", timeout=30000)
+        pg.wait_for_timeout(2500)
+        check("sin red lo dice en pantalla", "Sin conexión" in pg.inner_text("body"),
+              "no hay ningun indicador de que falta la red")
+
+        ctx.set_offline(False)
+        pg.wait_for_timeout(4000)
+        check("al volver la red el aviso se va solo",
+              "Sin conexión" not in pg.inner_text("body"),
+              "sigue diciendo que no hay red con la red de vuelta")
+
         print("\nvuelve la red")
         ctx.set_offline(False)
         pg.goto(base, wait_until="networkidle", timeout=30000)

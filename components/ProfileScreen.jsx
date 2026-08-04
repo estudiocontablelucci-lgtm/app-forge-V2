@@ -10,7 +10,7 @@ import { useSession, signOut } from "next-auth/react";
  * ejercicios con `refKg: "BW"` (dominadas, fondos), que hoy quedan fuera del
  * progreso porque no hay con que multiplicar.
  */
-export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal }) {
+export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal, hayRed = true }) {
   const { data: session } = useSession();
   const [user, setUser] = useState(null);
   const [nombre, setNombre] = useState("");
@@ -65,9 +65,17 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
         // Sin red el perfil no se puede pedir, pero eso no es una pantalla
         // vacia: se muestra lo ultimo que se supo y se avisa que esta viejo.
         if (!vigente) return;
-        if (perfilLocal) {
-          setUser({ displayName: perfilLocal.name, email: perfilLocal.email, role: null, bodyWeightKg: null });
-          setNombre(perfilLocal.name || "");
+        // Si el padre todavia no lo tiene en memoria, se lee del disco: en la
+        // primera apertura sin red el perfil salia vacio y recien aparecia al
+        // segundo intento.
+        let local = perfilLocal;
+        if (!local) {
+          try { local = JSON.parse(localStorage.getItem("forge-v2") || "{}").perfilLocal || null; } catch { local = null; }
+        }
+        const perfilLocalEfectivo = local;
+        if (perfilLocalEfectivo) {
+          setUser({ displayName: perfilLocalEfectivo.name, email: perfilLocalEfectivo.email, role: null, bodyWeightKg: null });
+          setNombre(perfilLocalEfectivo.name || "");
           setEstado("sin-red");
         } else {
           setEstado("error");
@@ -134,7 +142,17 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
           servidor: estaba adentro, asi que la unica pantalla que explica por que
           la app no anda sin conexion solo aparecia CON conexion. */}
       <div className="card">
-        <div className="flabel">Modo sin conexión</div>
+        {/* El titulo describe una CAPACIDAD, no el estado de la conexion. Decia
+            "Modo sin conexión: listo" y se leia como "estás sin conexión": con
+            la red ya de vuelta, la app parecia trabada. El estado real va
+            primero y aparte. */}
+        <div className="flabel">Conexión</div>
+        <p className="fhint" style={{ marginBottom: 12 }}>
+          Ahora mismo: <strong>{hayRed ? "con conexión" : "sin conexión"}</strong>.
+          {hayRed ? " Todo se sincroniza normalmente." : " Podés entrenar igual; se sube cuando vuelva."}
+        </p>
+
+        <div className="flabel">Funciona sin conexión</div>
         {!offline && <p className="fhint">Revisando…</p>}
         {offline?.estado === "no-soportado" && (
           <p className="fhint">Este navegador no lo soporta. Probá con Chrome o Safari.</p>
@@ -153,8 +171,8 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
         {offline?.estado === "listo" && (
           <p className="fhint">
             {offline.archivos > 5
-              ? <>Listo: <strong>{offline.archivos} archivos guardados</strong>. La app abre sin conexión.</>
-              : <>Activo pero con solo {offline.archivos} archivos. Abrí la app con conexión una vez más
+              ? <>Preparado — <strong>{offline.archivos} archivos guardados</strong>. Si te quedás sin señal, la app abre igual.</>
+              : <>Preparándose: solo {offline.archivos} archivos. Abrí la app con conexión una vez más
                  para que termine de guardar lo que falta.</>}
             {offline.instalada ? " Estás usando la app instalada." : " Estás en el navegador, no en la app instalada."}
           </p>
