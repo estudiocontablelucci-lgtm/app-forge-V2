@@ -282,6 +282,15 @@
   background: #EBF2FF; color: #2C6BED; font: 600 10px 'Inter';
   text-transform: uppercase; letter-spacing: .05em; cursor: help;
 }
+/* Tecnica intraserie (dropset y familia). Mismo violeta que en la app del
+   atleta: el entrenador prescribe y el alumno ejecuta, asi que si el color no
+   fuera el mismo estarian hablando de dos cosas distintas. Nunca de la familia
+   del semaforo, que significa rendimiento y no ejecucion. */
+.ed-tec {
+  flex-shrink: 0; padding: 2px 8px; border-radius: 999px;
+  background: #F3EDFC; color: #5E2BAA; border: 1px solid #7A3FD4;
+  font: 700 10px 'Inter'; text-transform: uppercase; letter-spacing: .05em;
+}
 .ed-nota-btn { margin-top: 10px; padding: 0; border: 0; background: none; color: #2C6BED; font: 600 12px 'Inter'; cursor: pointer; }
 .ed-nota { margin-top: 6px; height: auto; padding: 10px 12px; resize: vertical; line-height: 1.5; }
 

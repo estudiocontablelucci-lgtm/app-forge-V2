@@ -280,6 +280,14 @@ def main() -> int:
               pagina.locator(".ed-entrenado").count() > 0,
               "ningun ejercicio marcado como ya entrenado")
         check("guardar arranca deshabilitado", pagina.get_by_text("Guardar").first.is_disabled())
+        # El coach PRESCRIBE la tecnica y el alumno la ejecuta. Si el chip no
+        # estuviera tambien de este lado, estaria pidiendo algo que no puede ver.
+        check("puede prescribir una tecnica",
+              pagina.locator(".ed-campos select").count() > 0,
+              "no hay selector de tecnica en el editor")
+        check("y la que ya tiene el programa se ve marcada",
+              pagina.locator(".ed-tec").count() > 0,
+              "el ejercicio con dropset no se distingue de uno normal")
 
         # Cambiar las series del primer ejercicio y guardar. El valor nuevo se
         # deriva del actual: la suite se corre muchas veces sobre la misma base

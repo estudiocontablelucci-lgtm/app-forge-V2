@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { agregarAlCatalogo, normalizar } from "@/lib/catalog";
+// Alias obligatorio: `normalizar` ya es la del catalogo en este archivo.
+import { TECNICAS, defDe, normalizar as normalizarTecnica } from "@/lib/tecnicas";
 
 /**
  * Editar el programa desde la seccion de entrenador.
@@ -87,7 +89,7 @@ export default function EditorPrograma({ programaId, alumno, onCerrar, onGuardad
       id: `nuevo-${Math.random().toString(36).slice(2, 9)}`,
       session: sesion, order: 999, name: "", group: "", exerciseId: null,
       sets: 3, repsMin: 8, repsMax: 12, refKg: null, tempo: "", rest: 90, rir: "2-3",
-      superset: null, unit: "reps", description: "", tieneSeries: false,
+      superset: null, technique: null, unit: "reps", description: "", tieneSeries: false,
     }],
   }));
 
@@ -260,6 +262,7 @@ function FilaEjercicio({ ex, n, ultimo, catalog, onElegir, onCrear, onEditar, on
         {ex.tieneSeries && !ex.sustituyeA && (
           <span className="ed-entrenado" title="Ya lo entrenó: cambiarlo por otro cuenta como sustitución">entrenado</span>
         )}
+        {(() => { const t = defDe(ex); return t ? <span className="ed-tec">↓ {t.nombre}{t.pasos > 1 ? ` ×${t.pasos}` : ""}</span> : null; })()}
         <input className="cinput ed-ex" list="catalogo-coach" value={texto} placeholder="Buscar o crear ejercicio…"
           onChange={(ev) => setTexto(ev.target.value)} onBlur={resolver}
           onKeyDown={(ev) => { if (ev.key === "Enter") ev.currentTarget.blur(); }} />
@@ -300,6 +303,22 @@ function FilaEjercicio({ ex, n, ultimo, catalog, onElegir, onCrear, onEditar, on
         <label><span>RIR</span>
           <input className="cinput mono" value={ex.rir ?? ""} placeholder="2-3"
             onChange={(e) => onEditar({ rir: e.target.value })} /></label>
+        {/* El coach prescribe la tecnica; el alumno la registra. Si el chip no
+            estuviera tambien aca, el entrenador estaria pidiendo algo que no
+            puede ver. */}
+        <label><span>Técnica</span>
+          <select className="cinput" value={ex.technique?.tipo ?? ""}
+            onChange={(e) => onEditar({ technique: e.target.value ? normalizarTecnica({ tipo: e.target.value }) : null })}>
+            <option value="">— sin técnica —</option>
+            {Object.values(TECNICAS).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+          </select></label>
+        {ex.technique?.tipo && (
+          <label><span>Bajadas</span>
+            <select className="cinput" value={ex.technique.pasos}
+              onChange={(e) => onEditar({ technique: normalizarTecnica({ ...ex.technique, pasos: Number(e.target.value) }) })}>
+              {[1, 2, 3].map((k) => <option key={k} value={k}>{k}</option>)}
+            </select></label>
+        )}
       </div>
 
       <button className="ed-nota-btn" onClick={() => setVerNota((v) => !v)}>
