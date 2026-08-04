@@ -220,7 +220,7 @@ export default function ForgeApp() {
   const [syncing, setSyncing] = useState(false);
 
   // Sesion: si hay, se sincroniza; si no, la app funciona igual solo con localStorage.
-  const { data: authSession } = useSession();
+  const { data: authSession, update: actualizarSesion } = useSession();
   const signedIn = Boolean(authSession?.user?.id);
 
   /**
@@ -233,6 +233,23 @@ export default function ForgeApp() {
    * el aviso de "sin subir" no aparecia nunca — justo en el caso para el que se
    * escribio.
    */
+  /**
+   * Si HAY red ahora mismo. Distinto de "el modo sin conexion esta listo", que
+   * es una capacidad y no un estado — confundir las dos cosas hacia que la app
+   * pareciera trabada sin conexion cuando la conexion ya habia vuelto.
+   */
+  const [hayRed, setHayRed] = useState(true);
+  useEffect(() => {
+    const actualizar = () => setHayRed(navigator.onLine !== false);
+    actualizar();
+    window.addEventListener("online", actualizar);
+    window.addEventListener("offline", actualizar);
+    return () => {
+      window.removeEventListener("online", actualizar);
+      window.removeEventListener("offline", actualizar);
+    };
+  }, []);
+
   const [perfilLocal, setPerfilLocal] = useState(null);
   useEffect(() => {
     if (!signedIn) return;
@@ -453,9 +470,30 @@ export default function ForgeApp() {
     setSyncing(false);
   };
 
+  /**
+   * Cuando vuelve la red, ponerse al dia solo.
+   *
+   * El pull automatico corre UNA vez al abrir. Si esa vez no habia señal, no lo
+   * reintentaba nadie: la app se quedaba mostrando solo lo local hasta reiniciar
+   * del todo, aunque la conexion hubiera vuelto hacia rato. Tambien se refresca
+   * la sesion, porque sin red `useSession` concluyo "no autenticado" y esa
+   * conclusion no se corrige sola.
+   */
+  const sincronizarRef = useRef(null);
+  useEffect(() => {
+    if (!loaded) return;
+    const alVolver = async () => {
+      try { await actualizarSesion(); } catch { /* la sesion se resuelve sola despues */ }
+      sincronizarRef.current?.();
+    };
+    window.addEventListener("online", alVolver);
+    return () => window.removeEventListener("online", alVolver);
+  }, [loaded, actualizarSesion]);
+
   // Pull automatico al entrar, una sola vez por login.
   const pulled = useRef(false);
   useEffect(() => {
+    sincronizarRef.current = sincronizar;
     if (!loaded || !signedIn || pulled.current) return;
     pulled.current = true;
     sincronizar();
@@ -933,6 +971,7 @@ export default function ForgeApp() {
         <div className="phone">
           <ProfileScreen
             perfilLocal={perfilLocal}
+            hayRed={hayRed}
             onClose={() => setShowProfile(false)}
             syncState={syncState}
             onSync={sincronizar}
@@ -987,6 +1026,13 @@ export default function ForgeApp() {
         {tab === "entrenar" && session === null && (
           <div className="screen">
             <header className="top"><div className="brand">FORGE</div><h1>Entrenar</h1><p className="sub">{activeProgram?.name || "Sin programa"}</p></header>
+
+            {!hayRed && (
+              <div className="sinred">
+                <strong>Sin conexión</strong>
+                <p>Podés entrenar igual. Lo que registres se sube solo cuando vuelva la señal.</p>
+              </div>
+            )}
 
             {sinSubir.length > 0 && (
               <div className="sinsubir">
@@ -2499,6 +2545,10 @@ const CSS = `
 .sinsubir p { margin: 3px 0 0; font: 400 12px 'Inter'; color: #8A6A2B; line-height: 1.4; }
 .sinsubir-btn { flex-shrink: 0; padding: 9px 14px; border-radius: 10px; border: 0; background: #E8A317; color: #fff; font: 600 13px 'Inter'; cursor: pointer; }
 .sinsubir-btn:disabled { opacity: .6; }
+/* Estado REAL de la conexion, distinto de "el modo offline esta listo". */
+.sinred { padding: 11px 14px; margin-bottom: 14px; border-radius: 12px; background: #F2F2F7; border: 1px solid #E1E1E6; }
+.sinred strong { display: block; font: 600 13.5px 'Inter'; color: #48484A; }
+.sinred p { margin: 3px 0 0; font: 400 12px 'Inter'; color: #8E8E93; line-height: 1.4; }
 /* Aviso de salida: flotante sobre la tabbar, se va solo. */
 .salir-aviso { position: fixed; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 40; padding: 10px 18px; border-radius: 999px; background: rgba(28,28,30,.92); color: #fff; font: 600 13px 'Inter'; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
 .hist-pend { margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: #FFF0D0; color: #8A6A2B; font: 600 10px 'Inter'; text-transform: uppercase; letter-spacing: .05em; vertical-align: middle; }

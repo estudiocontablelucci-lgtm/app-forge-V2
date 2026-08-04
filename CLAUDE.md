@@ -352,6 +352,18 @@ comparten cache, asi que el que espera puede dejarlo listo antes de tomar el
 control. Sin eso, la primera apertura despues de una actualizacion era en blanco
 — justo lo que le paso a la app ya instalada al recibir el arreglo anterior.
 
+**"Hay red ahora" y "el modo offline esta listo" son dos cosas distintas.** El
+Perfil decia "Modo sin conexión: listo" y se leia como "estas sin conexion": con
+la red ya de vuelta, la app parecia trabada. Ahora el estado real va primero y
+aparte ("Ahora mismo: con conexión") y la capacidad se llama "Funciona sin
+conexión". El aviso de que falta la red aparece en Entrenar, no escondido en el
+Perfil.
+
+**Al volver la red la app se pone al dia sola** (`online` en ForgeApp: refresca
+la sesion y sincroniza). El pull automatico corre UNA vez al abrir; si esa vez no
+habia señal, nadie lo reintentaba y la app se quedaba con lo local hasta
+reiniciar del todo.
+
 **El Perfil muestra el estado del modo offline** (sin registrar / esperando /
 listo, con el conteo de archivos). Diagnosticar esto en un telefono sin devtools
 es imposible, y "no abre sin conexion" son tres problemas distintos con tres
