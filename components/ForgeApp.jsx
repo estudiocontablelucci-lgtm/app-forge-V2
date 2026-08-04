@@ -223,6 +223,24 @@ export default function ForgeApp() {
   const { data: authSession } = useSession();
   const signedIn = Boolean(authSession?.user?.id);
 
+  /**
+   * Este dispositivo tiene cuenta, aunque ahora mismo no se pueda confirmar.
+   *
+   * Sin red, `/api/auth/session` falla y `useSession` responde "no autenticado".
+   * Es correcto como estado momentaneo y es un error como conclusion: quien
+   * termina de entrenar en el subsuelo del gimnasio SI tiene cuenta, y su sesion
+   * tiene que quedar marcada para subir. Con `signedIn` a secas no se marcaba y
+   * el aviso de "sin subir" no aparecia nunca — justo en el caso para el que se
+   * escribio.
+   */
+  const [perfilLocal, setPerfilLocal] = useState(null);
+  useEffect(() => {
+    if (!signedIn) return;
+    const { name, email, image } = authSession.user;
+    setPerfilLocal((p) => (p?.email === email && p?.name === name ? p : { name, email, image }));
+  }, [signedIn, authSession]);
+  const conCuenta = signedIn || Boolean(perfilLocal);
+
   // Derived: active program, sessions, exercises
   const activeProgram = programs.find((p) => p.id === activeProgramId) || programs[0];
   // Config de deload del programa. Los programas creados antes de que esto
@@ -300,12 +318,13 @@ export default function ForgeApp() {
       setActiveProgramId(s.activeProgramId || s.programs?.[0]?.id || null);
       if (s.catalog) setCatalog(s.catalog);
       if (s.borrados) setBorrados(s.borrados);
+      if (s.perfilLocal) setPerfilLocal(s.perfilLocal);
       setLogs(s.logs || {});
       setHistory(s.history || []);
     }
     setLoaded(true);
   }, []);
-  useEffect(() => { if (loaded) saveState({ programs, catalog, activeProgramId, logs, history, borrados }); }, [programs, catalog, activeProgramId, logs, history, borrados, loaded]);
+  useEffect(() => { if (loaded) saveState({ programs, catalog, activeProgramId, logs, history, borrados, perfilLocal }); }, [programs, catalog, activeProgramId, logs, history, borrados, perfilLocal, loaded]);
 
   /**
    * Siempre tiene que haber un programa activo si hay programas.
@@ -558,7 +577,7 @@ export default function ForgeApp() {
         for (let i = 1; i <= setsFor(exercise, week, deloadCfg); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
         return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week, deloadCfg) };
       });
-      const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, note: sessionNote.trim() || null, exercises: exerciseData, pendiente: signedIn };
+      const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, note: sessionNote.trim() || null, exercises: exerciseData, pendiente: conCuenta };
       // Replace existing entry for same week+session, or add new
       setHistory((H) => {
         const existing = H.findIndex((h) => h.week === week && h.session === session);
@@ -854,7 +873,7 @@ export default function ForgeApp() {
         {/* Cuenta: se esconde durante el entrenamiento activo, que usa toda la pantalla */}
         {!(tab === "entrenar" && session !== null) && (
           <>
-            <AccountButton onOpenProfile={() => setShowProfile(true)} />
+            <AccountButton onOpenProfile={() => setShowProfile(true)} perfilLocal={perfilLocal} />
             <AvisoInvitacion />
           </>
         )}
