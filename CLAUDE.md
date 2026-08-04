@@ -12,7 +12,7 @@ App de tracking de entrenamiento para gimnasio. Reemplaza Google Sheets con una 
 | Lenguaje | JSX (sin TypeScript por ahora) |
 | Estilos | CSS-in-JS embebido (string en constante `CSS`) |
 | Persistencia | localStorage (`forge-v2`) como fuente de verdad mientras se entrena, sincronizado con Turso |
-| Base de datos | Turso / libSQL — base `forge` (org `gabriellucci`), schema v01–v05 aplicados |
+| Base de datos | Turso / libSQL — base `forge` (org `gabriellucci`), schema v01–v06 aplicados |
 | Auth | NextAuth v4 — Google OAuth + magic link por Resend |
 | Deploy | Vercel (region `dub1`, junto a la base) |
 | Linter | oxlint |
@@ -51,14 +51,16 @@ app-forge-v2/
 │   ├── auth/              # options, adapter propio, envio Resend, interop v4
 │   ├── coach/             # metrics.js (funciones puras) + invite-email.js
 │   ├── medidas.js         # medidas corporales: derivadas, proporciones, asimetrias
+│   ├── asistencia.js      # dias de gimnasio por mes, promedios, racha
 │   ├── sync/              # ids.js (prefijos), service.js, client.js
-│   └── repo/              # users, programs, training, coaching, catalog, medidas
+│   └── repo/              # users, programs, training, coaching, catalog, medidas, asistencia
 ├── db/
 │   ├── v01_init.sql       # dominio multi-tenant
 │   ├── v02_auth.sql       # tablas de NextAuth
 │   ├── v03_coach.sql      # tabla exercises + program_exercises.exercise_id
 │   ├── v04_catalogo_por_usuario.sql # el catalogo es del usuario, no del coach
 │   ├── v05_email_canon.sql # la cuenta es la casilla, no la grafia
+│   ├── v06_asistencia.sql # meses de asistencia anteriores a la app
 │   └── *.db               # bases locales (gitignored)
 ├── public/                # assets estaticos
 ├── scripts/               # utilidades node (no entran al bundle)
@@ -74,6 +76,8 @@ app-forge-v2/
 │   ├── verify-catalog-sync.mjs # identidad del ejercicio entre dispositivos
 │   ├── verify-coach-editor.mjs # lo que el coach edita llega al alumno
 │   ├── verify-medidas.mjs     # formulas contra los numeros reales de la planilla
+│   ├── verify-asistencia.mjs  # promedios contra los de la planilla
+│   ├── import-asistencia.mjs  # carga los meses viejos desde el .xlsx
 │   ├── verify-coach-metrics.mjs # metricas de la ficha + camino coach->alumno
 │   ├── check_ui.py            # headless: falla si una ruta no hidrata
 │   └── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
@@ -270,6 +274,27 @@ numeros, no reconstruidas de memoria. Dos que importan:
 La asimetria entre lados es `(I − D) / D`. No es un adorno: da -4.8% en el brazo,
 que es exactamente el numero que motiva el protocolo ASIM-IZQ del SEED. La
 planilla medía el problema y el programa tenia la solucion, pero nada los unia.
+
+## Asistencia
+
+Dos preguntas distintas que la planilla tenia y conviene no mezclar:
+
+- **Adherencia** (`lib/coach/metrics.js`): sesiones hechas contra programadas en
+  los ultimos 7 dias. Es la de la ficha del entrenador.
+- **Asistencia** (`lib/asistencia.js`): dias de gimnasio por mes, con promedio
+  historico y promedio desde un corte. Es la larga, la que dice si el habito se
+  sostiene.
+
+**DIAS, no sesiones.** Entrenar dos veces un martes es un dia de gimnasio.
+
+Se combinan dos fuentes: lo que la app registro se calcula del historial y NO se
+guarda, y los meses previos se cargan a mano (`attendance_months`). Lo manual
+manda sobre lo calculado —el mes en que se empezo a usar la app tiene tres
+sesiones y nueve dias reales— y no se toma el maximo, porque corregir hacia
+abajo tiene que ser posible.
+
+Un mes sin entrenar es un CERO y no un hueco; el mes en curso queda fuera de los
+promedios. Las dos cosas mueven el promedio para arriba si se hacen mal.
 
 ## Zonas protegidas
 
