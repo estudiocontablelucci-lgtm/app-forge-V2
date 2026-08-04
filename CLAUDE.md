@@ -386,9 +386,22 @@ barra de navegacion, asi que por defecto el atras salia de la app — a mitad de
 un entrenamiento eso es perder la sesion por un gesto reflejo.
 
 **`navigator.onLine` dice si hay INTERFAZ de red, no si se llega a internet.**
-Con wifi sin salida contesta que si. Sirve para enterarse de los CAMBIOS
-(eventos `online`/`offline`), pero la palabra final la da lo que pase de verdad
-al sincronizar: `marcarRed(r.ok || r.motivo !== "sin-red")`.
+Con wifi sin salida contesta que si. Sirve para enterarse de los CAMBIOS y para
+el CORTE (si dice que no hay interfaz, no hay red y punto: falsos negativos no
+existen). Para la vuelta hay que PREGUNTAR: `hayServidor()` consulta
+`/api/ping` con reloj de 2,5s.
+
+**Esperar a que algo falle no es enterarse.** Sin senal `fetch` no falla
+rapido, asi que la app afirmaba "con conexión" varios segundos con el telefono
+en modo avion. Todo lo que informa estado de red lleva reloj: el ping, el
+pedido del Perfil y `pullAll`. Los PUSH no: abandonar una escritura que el
+servidor quiza acepto es otra cosa.
+
+**Cortar la red en un test no reproduce estar sin senal.** `set_offline` hace
+fallar los pedidos al instante; el telefono los deja COLGADOS y
+`navigator.onLine` sigue diciendo que hay wifi. Por eso este bug pasaba los
+tests. `check_pwa.py` simula el caso real reteniendo las rutas de `/api/` sin
+contestarlas nunca.
 
 **El boton de cuenta no puede esperar a que next-auth resuelva.** Tenia
 `if (status === "loading") return null` para evitar un parpadeo, y sin red esa

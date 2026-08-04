@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
-import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos } from "@/lib/sync/client";
+import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos, hayServidor } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
 import AccountButton from "./AccountButton";
@@ -238,19 +238,34 @@ export default function ForgeApp() {
    * es una capacidad y no un estado — confundir las dos cosas hacia que la app
    * pareciera trabada sin conexion cuando la conexion ya habia vuelto.
    */
-  const [hayRed, setHayRed] = useState(true);
+  // Arranca sabiendo. Empezaba en `true` y se corregia despues, asi que el
+  // telefono en modo avion abria la app afirmando tener conexion y recien se
+  // desdecia cuando algo fallaba — que sin senal tarda, porque `fetch` no falla
+  // rapido.
+  const [hayRed, setHayRed] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine !== false);
   useEffect(() => {
     // `navigator.onLine` dice si hay INTERFAZ de red, no si se llega a
-    // internet: con wifi sin salida contesta que si. Sirve como primera
-    // aproximacion y para enterarse de los cambios, pero la palabra final la
-    // tiene lo que pase de verdad al sincronizar (`marcarRed`).
-    const actualizar = () => setHayRed(navigator.onLine !== false);
-    actualizar();
-    window.addEventListener("online", actualizar);
-    window.addEventListener("offline", actualizar);
+    // internet: con wifi sin salida contesta que si. Sirve para enterarse de
+    // los CAMBIOS al instante; para saber si de verdad se llega, se PREGUNTA.
+    let vigente = true;
+    const preguntar = async () => {
+      const r = await hayServidor();
+      if (vigente) setHayRed(r);
+    };
+    const alCambiar = () => {
+      // El corte se cree de una (no hay falsos negativos). La vuelta se
+      // verifica: "hay wifi" no es "hay internet".
+      if (navigator.onLine === false) setHayRed(false);
+      else preguntar();
+    };
+    preguntar();
+    window.addEventListener("online", alCambiar);
+    window.addEventListener("offline", alCambiar);
     return () => {
-      window.removeEventListener("online", actualizar);
-      window.removeEventListener("offline", actualizar);
+      vigente = false;
+      window.removeEventListener("online", alCambiar);
+      window.removeEventListener("offline", alCambiar);
     };
   }, []);
 

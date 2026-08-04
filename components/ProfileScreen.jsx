@@ -52,8 +52,13 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
   useEffect(() => {
     let vigente = true;
     (async () => {
+      // Con reloj. Sin senal este pedido no falla rapido, y mientras colgaba la
+      // pantalla seguia mostrando el estado anterior: el Perfil afirmaba "con
+      // conexión" con el telefono en modo avion.
+      const corte = new AbortController();
+      const reloj = setTimeout(() => corte.abort(), 2500);
       try {
-        const r = await fetch("/api/profile");
+        const r = await fetch("/api/profile", { signal: corte.signal });
         if (!r.ok) throw new Error(String(r.status));
         const { user } = await r.json();
         if (!vigente) return;
@@ -80,6 +85,8 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
         } else {
           setEstado("error");
         }
+      } finally {
+        clearTimeout(reloj);
       }
     })();
     return () => { vigente = false; };
