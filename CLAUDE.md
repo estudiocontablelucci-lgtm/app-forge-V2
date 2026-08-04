@@ -63,6 +63,9 @@ app-forge-v2/
 │   ├── v06_asistencia.sql # meses de asistencia anteriores a la app
 │   └── *.db               # bases locales (gitignored)
 ├── public/                # assets estaticos
+│   ├── sw.js              # service worker escrito a mano (leer sus reglas)
+│   ├── manifest.webmanifest
+│   └── icon-*.png         # generados con `npm run gen:iconos`
 ├── scripts/               # utilidades node (no entran al bundle)
 │   ├── gen-programa-xlsx.mjs  # genera el .xlsx del SEED para importar por el wizard
 │   ├── migrate.mjs            # aplica db/*.sql en orden, idempotente
@@ -80,6 +83,8 @@ app-forge-v2/
 │   ├── import-asistencia.mjs  # carga los meses viejos desde el .xlsx
 │   ├── verify-coach-metrics.mjs # metricas de la ficha + camino coach->alumno
 │   ├── check_ui.py            # headless: falla si una ruta no hidrata
+│   ├── check_pwa.py           # headless: instalable y ABRE SIN RED (contra next start)
+│   ├── gen_iconos.py          # rasteriza favicon.svg a los PNG del manifest
 │   └── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
 ├── data/                  # .xlsx generados (gitignored — datos personales)
 ├── forge-arquitectura.md  # documento de diseno tecnico completo
@@ -296,6 +301,38 @@ abajo tiene que ser posible.
 Un mes sin entrenar es un CERO y no un hueco; el mes en curso queda fuera de los
 promedios. Las dos cosas mueven el promedio para arriba si se hacen mal.
 
+## PWA (fase 6)
+
+`public/sw.js` esta escrito a mano y sus reglas estan en su encabezado. Las dos
+que no se negocian:
+
+- **`/api/**` NUNCA se cachea.** Ahi vive la sesion y los datos de otras
+  personas; una respuesta de sesion cacheada es la app mintiendo sobre quien sos.
+- **No se llama a `skipWaiting()`.** Tomar el control de una pestaña abierta
+  puede hacer que React pida un chunk que la version nueva ya no tiene — y eso
+  pasaria a mitad de una serie. Un dia de demora en actualizar es barato;
+  perder una sesion registrada no.
+
+La navegacion es RED-primero (un deploy se ve enseguida, y el cache es el
+respaldo sin señal) y los estaticos son CACHE-primero (Next les pone hash: una
+version nueva es una URL nueva).
+
+**En desarrollo el service worker NO se registra**, y si quedo uno de una prueba
+anterior se desregistra solo. Es el gotcha de "un puerto, un proyecto" elevado:
+un SW sirve assets viejos y la app compila, responde 200 y muestra otra cosa.
+Para probarlo: `?sw=1` en dev, o `npm run build && npm start` (que es lo que
+verifica `npm run verify:pwa`).
+
+**Si el service worker rompe algo en produccion**, el escape es deployar un
+`sw.js` cuyo unico contenido sea `self.registration.unregister()`: los
+navegadores revalidan ese archivo en cada navegacion y se despublica solo.
+
+**Sin red, `/api/auth/session` falla y next-auth responde "no autenticado".** Es
+correcto como estado momentaneo y falso como conclusion. La app guarda el ultimo
+perfil conocido (`perfilLocal`) y lo usa para dos cosas: no decir "Entrar" a
+alguien que tiene cuenta, y marcar como pendiente de subir la sesion que se
+termino sin señal — que era justo el caso para el que se escribio ese aviso.
+
 ## Zonas protegidas
 
 - Logica de `brzycki` (en `lib/formulas.js`) y semaforo — no modificar sin consulta
@@ -344,7 +381,7 @@ Tres reglas que valen mas que su implementacion:
    merge con el localStorage existente~~ Done
 5. ~~Roles coach/atleta: invitaciones, asignacion y seccion de entrenador con
    metricas (E1-E4)~~ Done
-6. PWA offline
+6. ~~PWA offline: instalable, abre sin red, sin romper el deploy~~ Done
 
 ### Dos cosas del sync que ya rompieron
 
