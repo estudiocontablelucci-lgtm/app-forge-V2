@@ -529,6 +529,32 @@ def main() -> int:
         check("resume cuantos ejercicios subieron",
               "subieron en el ciclo" in prog_txt or "subió en el ciclo" in prog_txt,
               "falta el resumen del ciclo")
+        # Entrenar: la semana por defecto y el estado de cada chip. Arrancar
+        # siempre en la 1 es un riesgo real: se registra encima de lo ya hecho.
+        pa.get_by_text("Entrenar").first.click()
+        pa.wait_for_timeout(1000)
+        chips = pa.evaluate("[...document.querySelectorAll('.weekchips .chip')].map(c => ({cls: c.className, txt: c.innerText.trim()}))")
+        activo = next((c for c in chips if " on" in c["cls"] or c["cls"].endswith("on")), None)
+        check("hay una semana seleccionada al abrir", activo is not None, str(chips))
+        # Lo que importa no es cual, es que NO sea una ya terminada: ahi es
+        # donde se registra encima de lo que ya se entreno.
+        check("la semana elegida no es una ya terminada",
+              activo and "hecha" not in activo["cls"], str(activo))
+        check("una semana completa se distingue", any("hecha" in c["cls"] for c in chips),
+              f"ningun chip marcado como completo: {[c['cls'] for c in chips]}")
+
+        pa.get_by_text("Progreso").first.click()
+        pa.wait_for_timeout(1000)
+
+        # Grupo muscular: selector, no doce mini-graficos apilados.
+        check("el tonelaje por grupo se compara entre grupos", pa.locator(".ghrow").count() > 1,
+              f"{pa.locator('.ghrow').count()} filas de grupo")
+        if pa.locator(".ghrow").count():
+            pa.locator(".ghrow").first.click()
+            pa.wait_for_timeout(600)
+            check("al elegir un grupo se ve su evolucion semanal", pa.locator(".gsem-col").count() >= 4,
+                  f"{pa.locator('.gsem-col').count()} columnas")
+
         # Los nombres largos no pueden desaparecer detras de puntos suspensivos.
         cortados = pa.evaluate(
             "[...document.querySelectorAll('.e1name > .txt')].filter(x => x.scrollHeight > x.clientHeight + 2).length")

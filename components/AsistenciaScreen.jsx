@@ -83,6 +83,23 @@ export default function AsistenciaScreen({ onClose }) {
   const ultimos = res ? res.serie.slice(-14) : [];
   const max = Math.max(...ultimos.map((x) => x.dias), 1);
 
+  /**
+   * Escala truncada, con el piso a la vista.
+   *
+   * Arrancando en cero, doce meses entre 9 y 13 dias son doce barras iguales:
+   * el grafico ocupa lugar y no responde nada. El piso se calcula sobre los
+   * meses CERRADOS (el que esta en curso siempre esta abajo y aplastaria la
+   * escala) y se escribe en pantalla, porque una escala truncada sin decirlo
+   * exagera las diferencias sin que se note.
+   */
+  const cerrados = ultimos.filter((x) => x.mes !== res?.mesActual?.mes && x.dias > 0);
+  const piso = cerrados.length >= 2 ? Math.max(0, Math.min(...cerrados.map((x) => x.dias)) - 2) : 0;
+  const alto = (v) => {
+    if (!v) return 2;
+    const rango = Math.max(1, max - piso);
+    return Math.max(5, Math.min(100, ((v - piso) / rango) * 100));
+  };
+
   return (
     <div className="screen">
       <button className="volver-top" onClick={onClose}>← Volver</button>
@@ -145,17 +162,30 @@ export default function AsistenciaScreen({ onClose }) {
           <div className="card">
             <div className="cardtitle">Últimos meses</div>
             <div className="asis-barras">
+              {/* Linea del promedio: sin una referencia, cada barra se compara
+                  solo contra la de al lado. */}
+              {res.promedio > piso && (
+                <div className="asis-prom" style={{ bottom: `calc(14px + (100% - 30px) * ${alto(res.promedio) / 100})` }}>
+                  <span className="mono">{res.promedio}</span>
+                </div>
+              )}
               {ultimos.map((x) => (
                 <div key={x.mes} className="asis-col" title={`${etiquetaMes(x.mes)}: ${x.dias} días`}>
                   <span className="asis-n mono">{x.dias || ""}</span>
-                  <div className={`asis-b ${x.dias >= (res.promedio ?? 0) ? "" : "bajo"} ${x.mes === res.mesActual?.mes ? "encurso" : ""}`}
-                    style={{ height: `${x.dias ? Math.max(6, (x.dias / max) * 100) : 2}%` }} />
+                  {/* El hueco es lo que mide 100%: si el % fuera de la columna
+                      entera, la barra mas alta se comeria el numero y la etiqueta
+                      y todas las de arriba quedarian aplastadas contra el techo. */}
+                  <span className="asis-hueco">
+                    <span className={`asis-b ${x.dias >= (res.promedio ?? 0) ? "" : "bajo"} ${x.mes === res.mesActual?.mes ? "encurso" : ""}`}
+                      style={{ height: `${alto(x.dias)}%` }} />
+                  </span>
                   <span className="asis-m">{etiquetaMes(x.mes).split(" ")[0]}</span>
                 </div>
               ))}
             </div>
             <p className="fhint" style={{ marginTop: 8 }}>
-              Las barras claras están por debajo de tu promedio. La rayada es el mes en curso.
+              Las claras están por debajo de tu promedio; la rayada es el mes en curso.
+              {piso > 0 && <> La escala arranca en <strong>{piso}</strong> días, no en cero, para que se noten las diferencias.</>}
             </p>
           </div>
 
