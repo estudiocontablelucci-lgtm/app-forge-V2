@@ -153,6 +153,23 @@ def main() -> int:
         if args.cookies:
             check("no dice 'Entrar' teniendo cuenta", "Entrar" not in texto.replace("Entrenar", ""),
                   "la app se declara deslogueada solo porque no hay red")
+            # El boton de cuenta no se dibujaba hasta que next-auth resolviera,
+            # y sin red esa consulta se cuelga: desaparecia hasta minimizar la
+            # app y volver.
+            check("el botón de cuenta aparece igual", pg.locator(".acct").count() > 0,
+                  "no hay boton de cuenta: espera una sesion que sin red no llega")
+
+            # Y el Perfil tiene que abrir y decir la verdad sobre la conexion.
+            pg.locator(".acct").first.click()
+            pg.wait_for_timeout(2500)
+            perfil = pg.inner_text("body")
+            # `.flabel` va en mayuscula por CSS y inner_text devuelve lo
+            # RENDERIZADO. Es la tercera vez que este detalle cuesta una corrida.
+            check("el Perfil abre sin red", "CONEXIÓN" in perfil.upper(), perfil[:150])
+            check("y dice que NO hay conexión", "sin conexión" in perfil.lower(),
+                  "con la red cortada afirma que hay conexion")
+            pg.go_back()
+            pg.wait_for_timeout(1200)
 
         if args.shots:
             pg.screenshot(path=f"{args.shots}/pwa-offline.png")

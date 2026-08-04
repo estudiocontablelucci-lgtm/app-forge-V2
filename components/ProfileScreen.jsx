@@ -147,9 +147,13 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
             la red ya de vuelta, la app parecia trabada. El estado real va
             primero y aparte. */}
         <div className="flabel">Conexión</div>
+        {/* Con la evidencia propia incluida: si el pedido de esta misma pantalla
+            fallo por falta de red, decir "con conexión" seria contradecirse. */}
         <p className="fhint" style={{ marginBottom: 12 }}>
-          Ahora mismo: <strong>{hayRed ? "con conexión" : "sin conexión"}</strong>.
-          {hayRed ? " Todo se sincroniza normalmente." : " Podés entrenar igual; se sube cuando vuelva."}
+          Ahora mismo: <strong>{hayRed && estado !== "sin-red" ? "con conexión" : "sin conexión"}</strong>.
+          {hayRed && estado !== "sin-red"
+            ? " Todo se sincroniza normalmente."
+            : " Podés entrenar igual; se sube cuando vuelva."}
         </p>
 
         <div className="flabel">Funciona sin conexión</div>
