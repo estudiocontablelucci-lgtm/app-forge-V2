@@ -423,6 +423,50 @@ perfil conocido (`perfilLocal`) y lo usa para dos cosas: no decir "Entrar" a
 alguien que tiene cuenta, y marcar como pendiente de subir la sesion que se
 termino sin señal — que era justo el caso para el que se escribio ese aviso.
 
+## Tecnicas de ejecucion (fase 7)
+
+Hay DOS ejes y la app los venia mezclando. Confundirlos lleva a modelar el
+dropset como ejercicios sueltos, que encadena el e1RM de dos cosas distintas:
+
+- Lo que **agrupa ejercicios** (superserie, tri-set) es una relacion entre
+  filas: FK `superset_with`. Ya existia.
+- Lo que pasa **adentro de una serie** (dropset y familia) no tiene a quien
+  apuntar: es un nivel mas de registro. Eso es `lib/tecnicas.js`.
+
+**La columna `program_exercises.technique` existe desde la v01** con el
+comentario `'DS' | 'ASIM-IZQ'`, y el repo ya la leia y la escribia — nunca la
+escribio nadie. Guarda JSON (`{tipo, pasos, aplica}`) y tolera el string suelto,
+para que una base vieja no quede ilegible. Agregar rest-pause o myo-reps es
+agregar una entrada a `TECNICAS`, no una migracion.
+
+**Los escalones viven DENTRO de la serie** (`set_logs.steps_json`, v07). Como
+series aparte romperian el conteo, el tonelaje por serie y el e1RM. Mismo
+criterio que `body_measurements.values_json`: el conjunto de campos lo define la
+app y la base solo lo transporta.
+
+**Suman en el tonelaje y entran al e1RM.** Lo segundo es seguro por
+construccion y no por criterio: la semana toma el MAXIMO y un escalon tiene
+menos peso, asi que no puede bajar el numero. La unica forma de que gane es que
+haya sido el mejor esfuerzo de la semana. (Ojo: Brzycki pierde precision arriba
+de ~12 reps, pero eso ya valia para cualquier serie — la tecnica no lo empeora.)
+
+**Entre escalones NO hay descanso**, ese es el punto. `serieCerrada()` decide
+cuando arranca el timer: con la serie principal cargada pero escalones
+pendientes, no arranca. Sin eso, sonaba justo cuando hay que bajar el peso y
+seguir.
+
+**El color codifica la FAMILIA, no la tecnica.** Teal `#0E8F9E` agrupa
+ejercicios, violeta `#7A3FD4` pasa adentro de la serie, y cual es exactamente lo
+dice el chip con el nombre — que ademas es lo que hace que no dependa solo del
+color. Ninguno puede salir de la familia del semaforo (verde/amarillo/rojo): el
+semaforo dice COMO TE FUE y la tecnica dice COMO SE HACE. La superserie era
+naranja `#F5A623`, a un paso del amarillo del semaforo, y por eso cambio.
+
+**La tecnica no puede ser texto libre.** En el Excel entra por alias
+(`porAlias`), igual que `superset: ["superserie","superset","ss"]`. Lo que no se
+reconoce entra como nada: pintar de violeta algo que nadie sabe ejecutar es peor
+que no pintarlo.
+
 ## Zonas protegidas
 
 - Logica de `brzycki` (en `lib/formulas.js`) y semaforo — no modificar sin consulta
@@ -472,6 +516,8 @@ Tres reglas que valen mas que su implementacion:
 5. ~~Roles coach/atleta: invitaciones, asignacion y seccion de entrenador con
    metricas (E1-E4)~~ Done
 6. ~~PWA offline: instalable, abre sin red, sin romper el deploy~~ Done
+7. ~~Tecnicas de ejecucion: dropset en el programa y en Entrenar, con escalones
+   que suman al tonelaje y al e1RM~~ Done
 
 ### Dos cosas del sync que ya rompieron
 

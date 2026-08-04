@@ -67,7 +67,9 @@ const local = {
   exercises: [
     { id: "e1", session: "A", order: 1, name: "Press banca", group: "Pecho", sets: 3, refKg: 60, repsMin: 8, repsMax: 10, rir: "2-3", rest: 150, unit: "reps" },
     { id: "e2", session: "A", order: 2, name: "Remo con barra", group: "Espalda", sets: 3, refKg: 50, repsMin: 8, repsMax: 10, rir: "2-3", rest: 120, unit: "reps" },
-    { id: "e3", session: "A", order: 3, name: "Press militar", group: "Hombro", sets: 3, refKg: 32.5, repsMin: 8, repsMax: 10, rir: "2", rest: 120, unit: "reps" },
+    // Con dropset a proposito: es lo que permite mirar la tecnica en un
+    // navegador de verdad, que es donde aparecieron los ultimos bugs.
+    { id: "e3", session: "A", order: 3, name: "Press militar", group: "Hombro", sets: 3, refKg: 32.5, repsMin: 8, repsMax: 10, rir: "2", rest: 120, unit: "reps", technique: { tipo: "dropset", pasos: 2, aplica: "ultima" } },
     { id: "e4", session: "B", order: 1, name: "Sentadilla pendular", group: "Cuadriceps", sets: 3, refKg: 80, repsMin: 8, repsMax: 10, rir: "2-3", rest: 180, unit: "reps" },
     { id: "e5", session: "B", order: 2, name: "Hip thrust", group: "Gluteo", sets: 3, refKg: 90, repsMin: 8, repsMax: 12, rir: "2-3", rest: 150, unit: "reps" },
     { id: "e6", session: "C", order: 1, name: "Dominadas", group: "Espalda", sets: 3, refKg: "BW", repsMin: 5, repsMax: 8, rir: "1-2", rest: 180, unit: "reps" },

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
+import { TECNICAS, defDe, pasosDe, pasosDeLog, pasoHecho, serieCerrada, normalizar as normalizarTecnica, porAlias as tecnicaPorAlias } from "@/lib/tecnicas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
 import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos, hayServidor } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
@@ -158,23 +159,41 @@ let saveT = null;
 function saveState(s) { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem("forge-v2", JSON.stringify(s)); } catch {} }, 500); }
 
 /* ---------- Mini components ---------- */
-function ExSetRow({ ex, n, week, logs, onSetChange, deload }) {
+function ExSetRow({ ex, n, week, logs, onSetChange, onPasoChange, deload, totalSets }) {
   const k = keyOf(week, ex.id, n);
   const l = logs[k] || {};
   const handleChange = (field, val) => onSetChange(ex, n, field, val);
   // Pre-fill KG with refKg on first focus if empty
   const refSemana = refFor(ex, week);
   const prefillKg = () => { if ((l.kg === undefined || l.kg === "") && isNum(refSemana)) handleChange("kg", String(refSemana)); };
+  // Los escalones aparecen recien cuando la serie principal tiene reps: antes
+  // son ruido, y en el telefono el ejercicio entero deja de entrar en pantalla.
+  const nPasos = pasosDe(ex, n, totalSets);
+  const abiertos = nPasos && String(l.reps ?? "").trim() !== "";
+  const ps = pasosDeLog(l);
   return (
-    <div className={`setrow ${l.done ? "done" : ""}`}>
-      <span className="setn mono">S{n}</span>
-      <input className="nf mono" inputMode="decimal" placeholder={isNum(refSemana) ? String(refSemana) : refSemana === "BW" ? "0" : "—"}
-        value={l.kg ?? ""} onFocus={prefillKg} onChange={(e) => handleChange("kg", e.target.value)} />
-      <input className="nf mono" inputMode="numeric" placeholder={String(repsFor(ex, week, deload).max)}
-        value={l.reps ?? ""} onChange={(e) => handleChange("reps", e.target.value)} />
-      <input className="nf mono" inputMode="decimal" placeholder={ex.rir || "—"}
-        value={l.rir ?? ""} onChange={(e) => handleChange("rir", e.target.value)} />
-    </div>
+    <>
+      <div className={`setrow ${l.done ? "done" : ""}`}>
+        <span className="setn mono">S{n}</span>
+        <input className="nf mono" inputMode="decimal" placeholder={isNum(refSemana) ? String(refSemana) : refSemana === "BW" ? "0" : "—"}
+          value={l.kg ?? ""} onFocus={prefillKg} onChange={(e) => handleChange("kg", e.target.value)} />
+        <input className="nf mono" inputMode="numeric" placeholder={String(repsFor(ex, week, deload).max)}
+          value={l.reps ?? ""} onChange={(e) => handleChange("reps", e.target.value)} />
+        <input className="nf mono" inputMode="decimal" placeholder={ex.rir || "—"}
+          value={l.rir ?? ""} onChange={(e) => handleChange("rir", e.target.value)} />
+      </div>
+      {abiertos ? Array.from({ length: nPasos }, (_, i) => i).map((i) => (
+        <div key={i} className={`setrow paso ${pasoHecho(ps[i]) ? "done" : ""}`}>
+          <span className="setn mono">↓{i + 1}</span>
+          <input className="nf mono" inputMode="decimal" placeholder="—"
+            value={ps[i]?.kg ?? ""} onChange={(e) => onPasoChange(ex, n, i, "kg", e.target.value)} />
+          <input className="nf mono" inputMode="numeric" placeholder="—"
+            value={ps[i]?.reps ?? ""} onChange={(e) => onPasoChange(ex, n, i, "reps", e.target.value)} />
+          {/* Un escalon no lleva RIR: se hace al fallo, ese es el punto. */}
+          <span className="nf-off mono">—</span>
+        </div>
+      )) : null}
+    </>
   );
 }
 
@@ -554,10 +573,22 @@ export default function ForgeApp() {
 
   // Descanso: arranca cuando se completa la vuelta. En superserie, recién al
   // cerrar la serie N de todos los ejercicios del bloque (ese es el punto de la SS).
-  function maybeStartRest(exercise, setN) {
+  function maybeStartRest(exercise, setN, logsAhora = logs) {
+    // Una serie con dropset no esta cerrada hasta el ultimo escalon: entre
+    // escalones NO hay descanso, ese es el punto de la tecnica. Si el timer
+    // arrancara al cerrar la serie principal, sonaria justo cuando hay que
+    // bajar el peso y seguir.
+    const total = setsFor(exercise, week, deloadCfg);
+    if (!serieCerrada(exercise, setN, total, logsAhora[keyOf(week, exercise.id, setN)])) return;
     const b = blocks.find((bl) => bl.exercises.some((e) => e.id === exercise.id));
     const mates = b && b.type === "superset" ? b.exercises : [exercise];
-    const roundDone = mates.every((e) => e.id === exercise.id || setN > setsFor(e, week, deloadCfg) || isDone(logs[keyOf(week, e.id, setN)]));
+    const roundDone = mates.every((e) => {
+      if (e.id === exercise.id) return true;
+      const t = setsFor(e, week, deloadCfg);
+      if (setN > t) return true;
+      const l = logsAhora[keyOf(week, e.id, setN)];
+      return isDone(l) && serieCerrada(e, setN, t, l);
+    });
     if (!roundDone) return;
     const rest = Math.max(0, ...mates.map((e) => e.rest || 0));
     if (!rest) return;
@@ -578,6 +609,30 @@ export default function ForgeApp() {
     // Solo en la transición vacío → con dato, así editar una serie vieja no lo relanza.
     const justLogged = field === "reps" && String(val).trim() !== "" && !String(prev.reps ?? "").trim();
     if (justLogged) maybeStartRest(exercise, setN);
+  }
+
+  /**
+   * Un escalon de un dropset. Vive DENTRO de la serie, no al lado: el conteo de
+   * series, el tonelaje por serie y el e1RM siguen leyendo `kg`/`reps` de la
+   * serie principal sin enterarse de que hay escalones.
+   */
+  function onPasoChange(exercise, setN, i, field, val) {
+    const k = keyOf(week, exercise.id, setN);
+    const p = logs[k] || {};
+    const prev = pasosDeLog(p)[i] || {};
+    const ps = [...pasosDeLog(p)];
+    while (ps.length <= i) ps.push({});
+    ps[i] = { ...ps[i], [field]: val };
+    // Se arma el estado siguiente ACA y no dentro del updater: el updater corre
+    // despues, asi que leerlo desde adentro para decidir el descanso miraria el
+    // estado viejo.
+    const siguiente = { ...logs, [k]: { ...p, pasos: ps } };
+    setLogs(siguiente);
+    // Mismo criterio que la serie: el primer dato en REPS lo da por hecho. El
+    // descanso arranca recien cuando el ULTIMO escalon esta cargado, asi que se
+    // evalua contra el estado que se acaba de escribir y no contra el viejo.
+    const justLogged = field === "reps" && String(val).trim() !== "" && !String(prev.reps ?? "").trim();
+    if (justLogged) maybeStartRest(exercise, setN, siguiente);
   }
 
   function prevWeekSummary(exercise) {
@@ -645,7 +700,15 @@ export default function ForgeApp() {
       const exs = program.filter((e) => e.session === session);
       const exerciseData = exs.map((exercise) => {
         const sets = [];
-        for (let i = 1; i <= setsFor(exercise, week, deloadCfg); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
+        for (let i = 1; i <= setsFor(exercise, week, deloadCfg); i++) {
+          const l = logs[keyOf(week, exercise.id, i)];
+          if (!l || !isDone(l)) continue;
+          // Los escalones son parte de la serie, no series nuevas: si se
+          // guardaran sueltos romperian el conteo y encadenarian e1RM distintos.
+          const pasos = pasosDeLog(l).filter(pasoHecho)
+            .map((p) => ({ kg: parseFloat(p.kg) || null, reps: parseInt(p.reps) || null }));
+          sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null, ...(pasos.length ? { pasos } : {}) });
+        }
         return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week, deloadCfg) };
       });
       const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, note: sessionNote.trim() || null, exercises: exerciseData, pendiente: conCuenta };
@@ -711,8 +774,19 @@ export default function ForgeApp() {
       // `isNum` era false para todo y la pantalla de Progreso quedaba vacia
       // aunque hubiera series cargadas. "BW" da NaN y queda fuera del tonelaje,
       // que es lo correcto: no hay carga externa que sumar.
-      const kg = parseFloat(l.kg), reps = parseInt(l.reps);
-      if (isNum(kg) && reps) { tonnage[w] = (tonnage[w] || 0) + kg * reps; const e1 = brzycki(kg, reps); if (e1) { e1rms[exId] = e1rms[exId] || {}; e1rms[exId][w] = Math.max(e1rms[exId][w] || 0, e1); } }
+      // Los escalones de un dropset son parte de la MISMA serie, asi que entran
+      // por el mismo camino. En el tonelaje suman —es trabajo real que antes no
+      // se contaba— y en el e1RM no pueden hacer dano: la semana toma el MAXIMO,
+      // y un escalon con menos peso da un Brzycki mas bajo. Si alguna vez gana,
+      // es porque ese fue el mejor esfuerzo de la semana.
+      const cargas = [{ kg: parseFloat(l.kg), reps: parseInt(l.reps) },
+        ...pasosDeLog(l).map((p) => ({ kg: parseFloat(p?.kg), reps: parseInt(p?.reps) }))];
+      for (const { kg, reps } of cargas) {
+        if (!isNum(kg) || !reps) continue;
+        tonnage[w] = (tonnage[w] || 0) + kg * reps;
+        const e1 = brzycki(kg, reps);
+        if (e1) { e1rms[exId] = e1rms[exId] || {}; e1rms[exId][w] = Math.max(e1rms[exId][w] || 0, e1); }
+      }
     }
     return { tonnage, e1rms };
   }, [logs, program, exercisesFueraDelPrograma]);
@@ -932,8 +1006,11 @@ export default function ForgeApp() {
       let t = 0;
       for (const ex of h.exercises || []) {
         for (const st of ex.sets || []) {
-          const kg = parseFloat(st.kg), reps = parseInt(st.reps);
-          if (isNum(kg) && reps) t += kg * reps;
+          // Los escalones del dropset suman: es carga movida igual.
+          for (const c of [st, ...(Array.isArray(st.pasos) ? st.pasos : [])]) {
+            const kg = parseFloat(c.kg), reps = parseInt(c.reps);
+            if (isNum(kg) && reps) t += kg * reps;
+          }
         }
       }
       return t || null;
@@ -956,10 +1033,12 @@ export default function ForgeApp() {
       const [w, exId] = k.split("|");
       const ex = program.find((e) => e.id === exId) || exercisesFueraDelPrograma.get(exId);
       if (!ex || ex.unit === "pasos") continue;
-      const kg = parseFloat(l.kg), reps = parseInt(l.reps);
-      if (!isNum(kg) || !reps) continue;
       const g = ex.group || "Sin grupo";
-      (out[g] ||= {})[w] = (out[g][w] || 0) + kg * reps;
+      for (const c of [l, ...pasosDeLog(l)]) {
+        const kg = parseFloat(c?.kg), reps = parseInt(c?.reps);
+        if (!isNum(kg) || !reps) continue;
+        (out[g] ||= {})[w] = ((out[g] || {})[w] || 0) + kg * reps;
+      }
     }
     return out;
   }, [logs, program, exercisesFueraDelPrograma]);
@@ -1156,11 +1235,12 @@ export default function ForgeApp() {
             )}
 
             {block.exercises.map((ex, exI) => (
-              <div key={ex.id} className={`excard ${block.type === "superset" ? "ss-grouped" : ""} ${exI === 0 && block.type === "superset" ? "ss-first" : ""} ${exI === block.exercises.length - 1 && block.type === "superset" ? "ss-last" : ""}`}>
+              <div key={ex.id} className={`excard ${defDe(ex) ? "con-tec" : ""} ${block.type === "superset" ? "ss-grouped" : ""} ${exI === 0 && block.type === "superset" ? "ss-first" : ""} ${exI === block.exercises.length - 1 && block.type === "superset" ? "ss-last" : ""}`}>
                 <div className="excard-head">
                   <div>
                     <div className="eyebrow">{ex.group}{block.type === "superset" && <span className="ss-idx"> · {exI + 1}/{block.exercises.length}</span>}</div>
                     <h2 className={ex.description ? "has-desc" : ""} onClick={() => ex.description && setDescModal(ex)}>{ex.name}{ex.description ? <span className="desc-hint">i</span> : null}</h2>
+                    {(() => { const t = defDe(ex); return t ? <span className="tecchip">↓ {t.nombre}{t.pasos > 1 ? ` ×${t.pasos}` : ""}</span> : null; })()}
                   </div>
                   {(() => { const pv = prevWeekSummary(ex); return pv?.e1rm ? <span className="pv-mini mono" title={weekLabel(pv.pw)}>e1RM {pv.e1rm}</span> : null; })()}
                 </div>
@@ -1168,16 +1248,25 @@ export default function ForgeApp() {
                   Ref: {refLine(ex, week, deloadCfg)}{ex.tempo ? <><span className="sep">|</span> T {ex.tempo}</> : null}<span className="sep">|</span> D {fmtRest(ex.rest)}{ex.rir ? <><span className="sep">|</span> RIR {ex.rir}</> : null}
                 </div>
 
+                {(() => { const t = defDe(ex); return t ? <p className="tec-ayuda">{t.ayuda}</p> : null; })()}
+
                 <div className="sets">
                   <div className="setshead"><span></span><span>{ex.refKg === "BW" ? "+KG" : "KG"}</span><span>{ex.unit === "pasos" ? "PASOS" : "REPS"}</span><span>RIR</span></div>
                   {Array.from({ length: setsFor(ex, week, deloadCfg) }, (_, i) => i + 1).map((n) => (
-                    <ExSetRow key={n} ex={ex} n={n} week={week} logs={logs} onSetChange={onSetChange} deload={deloadCfg} />
+                    <ExSetRow key={n} ex={ex} n={n} week={week} logs={logs} onSetChange={onSetChange}
+                      onPasoChange={onPasoChange} deload={deloadCfg} totalSets={setsFor(ex, week, deloadCfg)} />
                   ))}
                 </div>
 
                 {(() => {
                   let best = 0;
-                  for (let i = 1; i <= setsFor(ex, week, deloadCfg); i++) { const l = logs[keyOf(week, ex.id, i)]; if (isDone(l) && isNum(parseFloat(l.kg)) && parseInt(l.reps)) best = Math.max(best, brzycki(parseFloat(l.kg), parseInt(l.reps)) || 0); }
+                  for (let i = 1; i <= setsFor(ex, week, deloadCfg); i++) {
+                    const l = logs[keyOf(week, ex.id, i)];
+                    if (!isDone(l)) continue;
+                    for (const c of [l, ...pasosDeLog(l)]) {
+                      if (isNum(parseFloat(c?.kg)) && parseInt(c?.reps)) best = Math.max(best, brzycki(parseFloat(c.kg), parseInt(c.reps)) || 0);
+                    }
+                  }
                   return best > 0 ? <div className="ex-footer"><span className="e1rmnow mono">e1RM: <b>{Math.round(best)}</b></span></div> : null;
                 })()}
               </div>
@@ -1286,12 +1375,12 @@ export default function ForgeApp() {
                 <div key={bi} className={b.type === "superset" ? "prog-ss-group" : ""}>
                   {b.type === "superset" && <div className="prog-ss-label">⚡ {b.exercises.length === 2 ? "Superserie" : b.exercises.length === 3 ? "Tri-set" : "Giant set"}</div>}
                   {b.exercises.map((e) => (
-                    <button key={e.id} className={`prow ${b.type === "superset" ? "in-ss" : ""}`} onClick={() => {
+                    <button key={e.id} className={`prow ${defDe(e) ? "con-tec" : ""} ${b.type === "superset" ? "in-ss" : ""}`} onClick={() => {
                       if (session !== null) { alert("Terminá o cancelá la sesión activa para editar el programa."); return; }
                       if (esAsignado) { setDescModal(e); return; }
                       setEditing({ ...e });
                     }}>
-                      <div className="pmain"><div className="pname">{e.name}{e.description && <span className="desc-hint-sm">i</span>}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}</div></div>
+                      <div className="pmain"><div className="pname">{e.name}{e.description && <span className="desc-hint-sm">i</span>}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}{(() => { const t = defDe(e); return t ? <span className="tecchip" style={{ marginLeft: 6 }}>↓ {t.nombre}</span> : null; })()}</div></div>
                       <div className="pnums mono">{e.sets}x{e.repsMin}-{e.repsMax} · {refLine(e, null, deloadCfg).split(" ×")[0]}</div>
                     </button>
                   ))}
@@ -1299,7 +1388,7 @@ export default function ForgeApp() {
               ))}
             </div>
             {session === null && (
-              <button className="addbtn" hidden={esAsignado} onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
+              <button className="addbtn" hidden={esAsignado} onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, technique: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
             )}
           </div>
         )}
@@ -1928,6 +2017,31 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
             <label><span>Unidad</span><select value={draft.unit} onChange={(e) => set("unit", e.target.value)}><option value="reps">reps</option><option value="pasos">pasos</option></select></label>
           </div>
           <label className="ed-full"><span>Superserie con</span><select value={draft.superset ?? ""} onChange={(e) => set("superset", e.target.value || null)}><option value="">— sin superserie —</option>{siblings.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+          {/* La tecnica va JUNTO a la superserie porque son la misma pregunta
+              vista desde dos lados: como se ejecuta. Pero no son lo mismo — una
+              agrupa ejercicios y la otra pasa adentro de una serie — asi que
+              llevan colores de familia distintos. */}
+          <label className="ed-full"><span>Tecnica</span>
+            <select value={draft.technique?.tipo ?? ""} onChange={(e) => set("technique", e.target.value ? normalizarTecnica({ tipo: e.target.value }) : null)}>
+              <option value="">— sin tecnica —</option>
+              {Object.values(TECNICAS).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </select>
+          </label>
+          {draft.technique?.tipo && (
+            <>
+              <label><span>Bajadas</span>
+                <select value={draft.technique.pasos} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, pasos: Number(e.target.value) }))}>
+                  {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label><span>En que series</span>
+                <select value={draft.technique.aplica} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, aplica: e.target.value }))}>
+                  <option value="ultima">Solo la ultima</option>
+                  <option value="todas">Todas</option>
+                </select>
+              </label>
+            </>
+          )}
           <label className="ed-full"><span>Notas / Descripcion</span><textarea className="ed-textarea" rows={3} value={draft.description ?? ""} onChange={(e) => set("description", e.target.value)} placeholder="Postura, agarre, indicaciones del entrenador..." /></label>
         </div>
         <div className="sheetactions">
@@ -1953,6 +2067,7 @@ const FIELD_ALIASES = {
   rest:     ["descanso", "rest", "pausa"],
   rir:      ["rir", "rpe"],
   superset: ["superserie", "superset", "ss"],
+  technique: ["tecnica", "técnica", "technique", "dropset"],
   order:    ["orden", "order", "#", "nro"],
   unit:     ["unidad", "unit", "medida"],
   description: ["descripcion", "descripción", "notas", "notes", "desc"],
@@ -2036,6 +2151,10 @@ function parseExcelData(rows, mapping) {
       rest: mapping.rest != null ? parseRestValue(row[mapping.rest]) : 90,
       rir: mapping.rir != null ? String(row[mapping.rir] || "").trim() : "",
       superset: mapping.superset != null ? String(row[mapping.superset] || "").trim() || null : null,
+      // La tecnica no puede ser texto libre: si no se reconoce, entra como nada
+      // y el ejercicio se dibuja normal. Pintar de violeta algo que nadie sabe
+      // ejecutar es peor que no pintarlo.
+      technique: mapping.technique != null ? normalizarTecnica({ tipo: tecnicaPorAlias(row[mapping.technique]) }) : null,
       unit: mapping.unit != null && String(row[mapping.unit] || "").trim().toLowerCase().startsWith("paso") ? "pasos" : "reps",
       description: mapping.description != null ? String(row[mapping.description] || "").trim() : "",
     });
@@ -2054,20 +2173,20 @@ function parseExcelData(rows, mapping) {
 }
 
 function downloadTemplate() {
-  const header = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Unidad", "Descripcion"];
+  const header = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Tecnica", "Unidad", "Descripcion"];
   const examples = [
-    ["A", 1, "Sentadilla", "Cuadriceps", 4, 8, 10, 100, "2-0-1-0", "150", "2-3", "", "reps", "Barra alta, rodillas hacia afuera"],
-    ["A", 2, "Press plano", "Pecho", 3, 8, 10, 70, "2-0-1-0", "2'30\"", "2-3", "", "reps", ""],
-    ["A", 3, "Remo con barra", "Espalda", 3, 8, 10, 60, "2-0-1-1", "2'", "2-3", "", "reps", "Agarre prono, tirar al ombligo"],
-    ["A", 4, "Curl biceps", "Biceps", 3, 10, 12, 12.5, "2-0-1-0", "60", "1-2", "Extension triceps", "reps", ""],
-    ["A", 5, "Extension triceps", "Triceps", 3, 10, 12, "", "2-0-1-0", "60", "1-2", "Curl biceps", "reps", ""],
-    ["B", 1, "Peso muerto", "Isquios", 4, 6, 8, 120, "2-0-1-0", "3'", "2-3", "", "reps", "Convencional, espalda neutra"],
-    ["B", 2, "Dominadas", "Espalda", 3, 4, 8, "BW", "2-0-1-0", "180", "2-3", "", "reps", ""],
-    ["B", 3, "Caminata granjero", "Core", 3, 40, 60, "25kg/m", "", "120", "", "", "pasos", "Unidad 'pasos' para medir distancia en vez de repeticiones"],
+    ["A", 1, "Sentadilla", "Cuadriceps", 4, 8, 10, 100, "2-0-1-0", "150", "2-3", "", "", "reps", "Barra alta, rodillas hacia afuera"],
+    ["A", 2, "Press plano", "Pecho", 3, 8, 10, 70, "2-0-1-0", "2'30\"", "2-3", "", "", "reps", ""],
+    ["A", 3, "Remo con barra", "Espalda", 3, 8, 10, 60, "2-0-1-1", "2'", "2-3", "", "", "reps", "Agarre prono, tirar al ombligo"],
+    ["A", 4, "Curl biceps", "Biceps", 3, 10, 12, 12.5, "2-0-1-0", "60", "1-2", "Extension triceps", "", "reps", ""],
+    ["A", 5, "Extension triceps", "Triceps", 3, 10, 12, "", "2-0-1-0", "60", "1-2", "Curl biceps", "dropset", "reps", "La ultima serie con dos bajadas de peso, sin descanso"],
+    ["B", 1, "Peso muerto", "Isquios", 4, 6, 8, 120, "2-0-1-0", "3'", "2-3", "", "", "reps", "Convencional, espalda neutra"],
+    ["B", 2, "Dominadas", "Espalda", 3, 4, 8, "BW", "2-0-1-0", "180", "2-3", "", "", "reps", ""],
+    ["B", 3, "Caminata granjero", "Core", 3, 40, 60, "25kg/m", "", "120", "", "", "", "pasos", "Unidad 'pasos' para medir distancia en vez de repeticiones"],
   ];
   const ws = XLSX.utils.aoa_to_sheet([header, ...examples]);
   // Column widths
-  ws["!cols"] = [{ wch: 8 }, { wch: 6 }, { wch: 22 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 }, { wch: 8 }, { wch: 35 }];
+  ws["!cols"] = [{ wch: 8 }, { wch: 6 }, { wch: 22 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 }, { wch: 10 }, { wch: 8 }, { wch: 35 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Programa");
   XLSX.writeFile(wb, "forge-plantilla-programa.xlsx");
@@ -2173,6 +2292,7 @@ function ImportWizard({ wizard, setWizard, onImport }) {
       { key: "rest", label: "Descanso", required: false },
       { key: "rir", label: "RIR", required: false },
       { key: "superset", label: "Superserie", required: false },
+      { key: "technique", label: "Tecnica (dropset)", required: false },
       { key: "order", label: "Orden", required: false },
       { key: "unit", label: "Unidad (reps/pasos)", required: false },
       { key: "description", label: "Descripcion", required: false },
@@ -2309,14 +2429,30 @@ const CSS = `
 .dot.cur { outline: 2px solid rgba(44,107,237,.4); outline-offset: 1px; }
 .finish-btn { padding: 6px 14px; border-radius: 8px; border: none; background: #2C6BED; color: #FFF; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; }
 
-.ssbanner { background: #FFF3E0; border: 1px solid #F5A623; color: #C75000; font-size: 14px; font-weight: 700; padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; }
+.ssbanner { background: #E8F6F8; border: 1px solid #0E8F9E; color: #0A6F7B; font-size: 14px; font-weight: 700; padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; }
+
+/* Tecnicas intraserie (dropset y familia).
+   Violeta, y nunca de la familia del semaforo: el semaforo dice COMO TE FUE y
+   la tecnica dice COMO SE HACE. El color codifica la FAMILIA; cual es
+   exactamente lo dice el chip, que ademas es lo que hace que no dependa solo
+   del color. */
+.tecchip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700;
+  letter-spacing: .3px; text-transform: uppercase; padding: 3px 8px; border-radius: 999px;
+  background: #F3EDFC; color: #5E2BAA; border: 1px solid #7A3FD4; }
+.excard.con-tec { border-left: 3px solid #7A3FD4; }
+.prow.con-tec { border-left: 3px solid #7A3FD4; }
+.setrow.paso { background: #FAF7FE; }
+.setrow.paso .setn { color: #7A3FD4; font-weight: 700; }
+.setrow.paso .nf { border-color: #E3D6F7; }
+.nf-off { display: flex; align-items: center; justify-content: center; color: #C7C7CC; font-size: 15px; }
+.tec-ayuda { font-size: 12px; color: #5E2BAA; background: #F3EDFC; border-radius: 8px; padding: 6px 10px; margin: 0 0 8px; }
 
 /* Exercise card — single and superset grouped */
 .excard { background: #FFF; border: none; border-radius: 16px; padding: 20px 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 10px; }
 .excard.ss-grouped { border-radius: 0; margin-bottom: 0; box-shadow: none; border-bottom: 1px solid #F2F2F7; }
-.excard.ss-first { border-radius: 16px 16px 0 0; border-left: 3px solid #F5A623; }
-.excard.ss-grouped:not(.ss-first):not(.ss-last) { border-left: 3px solid #F5A623; }
-.excard.ss-last { border-radius: 0 0 16px 16px; border-bottom: none; border-left: 3px solid #F5A623; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.excard.ss-first { border-radius: 16px 16px 0 0; border-left: 3px solid #0E8F9E; }
+.excard.ss-grouped:not(.ss-first):not(.ss-last) { border-left: 3px solid #0E8F9E; }
+.excard.ss-last { border-radius: 0 0 16px 16px; border-bottom: none; border-left: 3px solid #0E8F9E; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .excard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .pv-mini { font-size: 11px; color: #2C6BED; font-weight: 600; white-space: nowrap; padding-top: 4px; }
 .ss-idx { font-weight: 400; color: #AEAEB2; }
@@ -2358,8 +2494,8 @@ const CSS = `
 
 /* Programa list */
 .plist { display: flex; flex-direction: column; gap: 8px; }
-.prog-ss-group { background: #FFF; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); border-left: 3px solid #F5A623; overflow: hidden; }
-.prog-ss-label { font-size: 12px; font-weight: 700; color: #C75000; padding: 8px 14px 4px; background: #FFF8F0; }
+.prog-ss-group { background: #FFF; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); border-left: 3px solid #0E8F9E; overflow: hidden; }
+.prog-ss-label { font-size: 12px; font-weight: 700; color: #0A6F7B; padding: 8px 14px 4px; background: #E8F6F8; }
 .prow { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 14px 16px; background: #FFF; border: none; border-radius: 12px; color: inherit; cursor: pointer; transition: background .15s; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
 .prow.in-ss { border-radius: 0; box-shadow: none; border-bottom: 1px solid #F2F2F7; }
 .prow.in-ss:last-child { border-bottom: none; }
