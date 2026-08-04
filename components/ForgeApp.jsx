@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
-import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, marcarParaAlumnos } from "@/lib/sync/client";
+import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
@@ -301,6 +301,29 @@ export default function ForgeApp() {
   }, []);
   useEffect(() => { if (loaded) saveState({ programs, catalog, activeProgramId, logs, history, borrados }); }, [programs, catalog, activeProgramId, logs, history, borrados, loaded]);
 
+  /**
+   * Siempre tiene que haber un programa activo si hay programas.
+   *
+   * `activeProgram` caia a `programs[0]` cuando el id era null, asi que la
+   * pantalla se veia bien — pero `activeProgramId` seguia nulo y TODO lo que
+   * compara contra ese id quedaba mirando a nadie: el filtro del Historial
+   * (que mostraba cero sesiones), `updateActiveProgram` (que no editaba nada) y
+   * el conteo de semanas. Le pasaba a cualquiera cuyos programas llegaran por
+   * sincronizacion en vez de crearlos a mano, que desde que las cuentas
+   * arrancan vacias es el caso normal de un alumno.
+   */
+  useEffect(() => {
+    if (!loaded) return;
+    if (!programs.length) { if (activeProgramId !== null) setActiveProgramId(null); return; }
+    if (programs.some((p) => p.id === activeProgramId)) return;
+    // Si hay uno prescrito por un entrenador, ese es el que corresponde
+    // entrenar. `programs[0]` era el primero que hubiera llegado, que no
+    // significa nada. Solo aplica cuando no hay nada elegido: una vez que el
+    // usuario elige, se respeta.
+    const asignado = programs.find((p) => p.readOnly);
+    setActiveProgramId((asignado || programs[0]).id);
+  }, [loaded, programs, activeProgramId]);
+
   // El historial se lee dentro de sincronizar() sin que sea una dependencia:
   // asi el boton siempre ve el estado actual y la funcion no se recrea en cada
   // serie que se registra.
@@ -375,16 +398,24 @@ export default function ForgeApp() {
     const pendientes = sesionesPendientes(historyRef.current, histRemoto);
 
     let subidas = 0;
+    const fallaron = [];
     for (const h of pendientes) {
       const prog = programsRef.current.find((p) => p.id === h.programId) || programsRef.current[0];
       if (!prog) continue;
       const res = await pushSession({ program: prog, entry: h, catalog: catalogRef.current });
-      if (res.ok) subidas++;
+      if (res.ok) { subidas++; marcarSubida(h); } else fallaron.push(h);
+    }
+    // Lo que bajo del servidor ya esta subido por definicion: si una sesion
+    // volvio en el pull, la marca de pendiente que tuviera es vieja.
+    const enLaNube = new Set(histRemoto.map(claveSesion));
+    if (enLaNube.size) {
+      setHistory((H) => H.map((h) => (h.pendiente && enLaNube.has(claveSesion(h)) ? { ...h, pendiente: false } : h)));
     }
 
     const partes = [`${histRemoto.length} en la nube`];
     if (subidas) partes.push(`${subidas} subida${subidas === 1 ? "" : "s"} recién`);
     if (programasSubidos) partes.push(`${programasSubidos} programa${programasSubidos === 1 ? "" : "s"}`);
+    if (fallaron.length) partes.push(`${fallaron.length} sin subir`);
     setSyncState(`Sincronizado · ${partes.join(" · ")}.`);
     setSyncing(false);
   };
@@ -508,6 +539,11 @@ export default function ForgeApp() {
 
   function confirmHealth() { setSavedHealth(healthCheck); setSessionStart(Date.now()); setHealthCheck(null); }
 
+  /** Saca la marca de "sin subir" de una sesion que el servidor ya confirmo. */
+  function marcarSubida(entry) {
+    setHistory((H) => H.map((h) => (claveSesion(h) === claveSesion(entry) ? { ...h, pendiente: false } : h)));
+  }
+
   function handleConfirmOk() {
     if (confirmAction === "finish") {
       const exs = program.filter((e) => e.session === session);
@@ -516,7 +552,7 @@ export default function ForgeApp() {
         for (let i = 1; i <= setsFor(exercise, week, deloadCfg); i++) { const l = logs[keyOf(week, exercise.id, i)]; if (l && isDone(l)) sets.push({ setN: i, kg: parseFloat(l.kg) || null, reps: parseInt(l.reps) || null, rir: parseFloat(l.rir) || null }); }
         return { id: exercise.id, name: exercise.name, group: exercise.group, sets, sem: semaphore(exercise, logs, week, deloadCfg) };
       });
-      const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, note: sessionNote.trim() || null, exercises: exerciseData };
+      const entry = { id: uid(), programId: activeProgramId, week, session, sessionName: sessName(session), date: Date.now(), duration: sessionStart ? Math.round((Date.now() - sessionStart) / 60000) : null, health: savedHealth, note: sessionNote.trim() || null, exercises: exerciseData, pendiente: signedIn };
       // Replace existing entry for same week+session, or add new
       setHistory((H) => {
         const existing = H.findIndex((h) => h.week === week && h.session === session);
@@ -535,6 +571,10 @@ export default function ForgeApp() {
             : r.motivo === "sin-red"
               ? "Sin conexión: quedó guardado local, se sube la próxima vez."
               : "No se pudo subir. Queda guardado local.");
+          // Se desmarca SOLO si el servidor confirmo. El push es fire-and-forget
+          // a proposito —hay que poder salir de la pantalla sin señal— y por eso
+          // mismo puede morir sin avisar si el telefono se bloquea justo despues.
+          if (r.ok) marcarSubida(entry);
         });
       }
     }
@@ -685,6 +725,56 @@ export default function ForgeApp() {
   // primer paso.
   const verListaDeProgramas = programListView || programs.length === 0;
 
+  // Entrenamientos cerrados que el servidor todavia no confirmo. El push al
+  // terminar es fire-and-forget y puede morir sin dejar rastro —el telefono se
+  // bloquea, la app pasa a segundo plano— asi que el unico aviso posible es
+  // este. Antes el error existia y se mostraba en Perfil, una pantalla que
+  // nadie mira al salir del gimnasio.
+  const sinSubir = history.filter((h) => h.pendiente);
+
+  /**
+   * Cuantas sesiones tiene hecha cada semana, y si ya esta cerrada.
+   *
+   * Los indicadores NO esperan a que la semana termine: se actualizan serie por
+   * serie. Por eso una semana a medias se ve como un derrumbe al lado de las
+   * completas — no muestra menos rendimiento, muestra menos semana. Esto es lo
+   * que permite decirlo en pantalla en vez de que haya que deducirlo.
+   */
+  const semanasHechas = useMemo(() => {
+    const porSemana = {};
+    for (const h of history) {
+      if (h.programId && h.programId !== activeProgramId) continue;
+      const w = String(h.week);
+      (porSemana[w] ||= new Set()).add(h.session);
+    }
+    const total = sessions.length || 1;
+    return Object.fromEntries(
+      Object.entries(porSemana).map(([w, ss]) => [w, { hechas: ss.size, total, cerrada: ss.size >= total }]),
+    );
+  }, [history, activeProgramId, sessions.length]);
+
+  /**
+   * Tonelaje por grupo muscular y semana.
+   *
+   * El total semanal dice cuanto se movio; este dice DONDE. Es lo que permite
+   * ver que un grupo se quedo atras mientras el total sube — que es justo lo
+   * que el total esconde. Sale de la planilla, que lo tenia y la app no.
+   */
+  const tonelajePorGrupo = useMemo(() => {
+    const out = {};
+    for (const [k, l] of Object.entries(logs)) {
+      if (!l.done) continue;
+      const [w, exId] = k.split("|");
+      const ex = program.find((e) => e.id === exId) || exercisesFueraDelPrograma.get(exId);
+      if (!ex || ex.unit === "pasos") continue;
+      const kg = parseFloat(l.kg), reps = parseInt(l.reps);
+      if (!isNum(kg) || !reps) continue;
+      const g = ex.group || "Sin grupo";
+      (out[g] ||= {})[w] = (out[g][w] || 0) + kg * reps;
+    }
+    return out;
+  }, [logs, program, exercisesFueraDelPrograma]);
+
   // Blocks for Programa tab (must be before early return)
   const progBlocks = useMemo(() => getBlocks(program.filter((e) => e.session === activeProgSession)), [program, activeProgSession]);
 
@@ -751,6 +841,18 @@ export default function ForgeApp() {
         {tab === "entrenar" && session === null && (
           <div className="screen">
             <header className="top"><div className="brand">FORGE</div><h1>Entrenar</h1><p className="sub">{activeProgram?.name || "Sin programa"}</p></header>
+
+            {sinSubir.length > 0 && (
+              <div className="sinsubir">
+                <div>
+                  <strong>{sinSubir.length} entrenamiento{sinSubir.length === 1 ? "" : "s"} sin subir</strong>
+                  <p>Está{sinSubir.length === 1 ? "" : "n"} guardado{sinSubir.length === 1 ? "" : "s"} en este teléfono. Si no sube, no lo ve tu entrenador ni aparece en otro dispositivo.</p>
+                </div>
+                <button className="sinsubir-btn" onClick={sincronizar} disabled={syncing}>
+                  {syncing ? "Subiendo…" : "Subir ahora"}
+                </button>
+              </div>
+            )}
 
             {/* Sin programa no hay nada que entrenar: un selector de semanas y
                 sesiones vacias parece una app rota, no una cuenta nueva. */}
@@ -988,7 +1090,13 @@ export default function ForgeApp() {
             {histProg.map((h) => (
               <div key={h.id} className="hist-card">
                 <button className="hist-head" onClick={() => setExpandedLog(expandedLog === h.id ? null : h.id)}>
-                  <div className="hist-left"><div className="hist-title">{weekLabel(h.week)} · {h.sessionName || sessName(h.session)}</div><div className="hist-meta">{fmtDate(h.date)}{h.duration ? ` · ${h.duration} min` : ""}</div></div>
+                  <div className="hist-left">
+                    <div className="hist-title">
+                      {weekLabel(h.week)} · {h.sessionName || sessName(h.session)}
+                      {h.pendiente && <span className="hist-pend" title="Guardado en este teléfono, todavía no subió">sin subir</span>}
+                    </div>
+                    <div className="hist-meta">{fmtDate(h.date)}{h.duration ? ` · ${h.duration} min` : ""}</div>
+                  </div>
                   {h.health && <div className="hist-health mono"><span>😴{h.health.sleep}</span><span>😤{h.health.stress}</span><span>⚡{h.health.energy}</span></div>}
                   <span className="hist-chev">{expandedLog === h.id ? "▲" : "▼"}</span>
                 </button>
@@ -1014,10 +1122,69 @@ export default function ForgeApp() {
             <header className="top"><div className="brand">FORGE</div><h1>Progreso</h1><p className="sub">e1RM (Brzycki) y tonelaje del ciclo</p></header>
             <div className="card">
               <div className="cardtitle">Tonelaje semanal</div>
+              {/* Una semana a medias NO se compara contra una completa: se marca
+                  rayada y dice cuantas sesiones lleva. El % contra la anterior
+                  solo se muestra entre semanas CERRADAS — comparar 1 sesion
+                  contra 3 da un -60% que no significa nada. */}
               {(() => { const vals = weeks.map((w) => metrics.tonnage[String(w)] || 0); const max = Math.max(...vals, 1);
-                return weeks.map((w, i) => { const v = vals[i]; const prev = i > 0 ? vals[i - 1] : 0; const delta = prev > 0 && v > 0 ? Math.round(((v - prev) / prev) * 100) : null;
-                  return (<div key={w} className="tonrow"><span className="tonlbl">{w === "DL" ? "DL" : `S${w}`}</span><div className="tonbar"><div style={{ width: `${(v / max) * 100}%` }} /></div><span className="tonval mono">{v > 0 ? `${round1(v / 1000)}t` : "—"}</span><span className={`tondelta mono ${delta > 0 ? "up" : delta < 0 ? "dn" : ""}`}>{delta !== null ? `${delta > 0 ? "+" : ""}${delta}%` : ""}</span></div>);
+                return weeks.map((w, i) => {
+                  const v = vals[i];
+                  const est = semanasHechas[String(w)];
+                  const cerrada = est?.cerrada;
+                  const prevEst = i > 0 ? semanasHechas[String(weeks[i - 1])] : null;
+                  const prev = i > 0 ? vals[i - 1] : 0;
+                  const comparable = cerrada && prevEst?.cerrada && prev > 0 && v > 0;
+                  const delta = comparable ? Math.round(((v - prev) / prev) * 100) : null;
+                  return (
+                    <div key={w} className="tonrow">
+                      <span className="tonlbl">{w === "DL" ? "DL" : `S${w}`}</span>
+                      <div className="tonbar"><div className={cerrada ? "" : "encurso"} style={{ width: `${(v / max) * 100}%` }} /></div>
+                      <span className="tonval mono">{v > 0 ? `${round1(v / 1000)}t` : "—"}</span>
+                      <span className={`tondelta mono ${delta > 0 ? "up" : delta < 0 ? "dn" : ""}`}>
+                        {delta !== null ? `${delta > 0 ? "+" : ""}${delta}%` : est ? `${est.hechas}/${est.total}` : ""}
+                      </span>
+                    </div>
+                  );
                 }); })()}
+              {(() => {
+                const abierta = weeks.find((w) => semanasHechas[String(w)] && !semanasHechas[String(w)].cerrada);
+                if (!abierta) return null;
+                const e = semanasHechas[String(abierta)];
+                return <p className="fhint" style={{ marginTop: 10 }}>
+                  {weekLabel(abierta)} está en curso: {e.hechas} de {e.total} sesiones. Su barra va a seguir creciendo.
+                </p>;
+              })()}
+            </div>
+
+            <div className="card">
+              <div className="cardtitle">Tonelaje por grupo muscular</div>
+              <p className="fhint" style={{ marginBottom: 10 }}>Dónde se movió el volumen. El total dice cuánto; esto dice dónde.</p>
+              {Object.keys(tonelajePorGrupo).length === 0
+                ? <div className="empty">Registrá series para verlo.</div>
+                : Object.entries(tonelajePorGrupo)
+                    .sort((a, b) => Object.values(b[1]).reduce((x, y) => x + y, 0) - Object.values(a[1]).reduce((x, y) => x + y, 0))
+                    .map(([grupo, porSem]) => {
+                      const vals = weeks.map((w) => porSem[String(w)] || 0);
+                      const max = Math.max(...vals, 1);
+                      const total = vals.reduce((a, b) => a + b, 0);
+                      return (
+                        <div key={grupo} className="grupo-row">
+                          <div className="grupo-head">
+                            <span className="grupo-nom">{grupo}</span>
+                            <span className="grupo-tot mono">{round1(total / 1000)}t</span>
+                          </div>
+                          <div className="grupo-barras">
+                            {weeks.map((w, i) => (
+                              <div key={w} className="grupo-col" title={`${weekLabel(w)}: ${Math.round(vals[i])} kg`}>
+                                <div className={`grupo-b ${!vals[i] ? "vacia" : semanasHechas[String(w)]?.cerrada ? "" : "encurso"}`}
+                                  style={{ height: `${vals[i] ? Math.max(6, (vals[i] / max) * 100) : 2}%` }} />
+                                <span className="grupo-lbl">{w === "DL" ? "DL" : `S${w}`}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
             </div>
             <div className="card">
               <div className="cardtitle">e1RM por ejercicio</div>
@@ -1960,6 +2127,29 @@ const CSS = `
 .prog-grupo-ayuda { margin: 0 0 8px; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; }
 .prog-coach { display: inline-block; margin-right: 8px; padding: 2px 8px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 600 11px 'Inter'; }
 .aviso { color: #1F7A3D; }
+/* Semana en curso: rayada, para que no se lea como una caida de rendimiento. */
+.tonbar div.encurso { background: repeating-linear-gradient(45deg, #2C6BED, #2C6BED 4px, #9DBBF5 4px, #9DBBF5 8px); }
+.grupo-row { padding: 10px 0; border-top: 1px solid #F2F2F7; }
+.grupo-row:first-of-type { border-top: none; }
+.grupo-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+.grupo-nom { font: 600 13px 'Inter'; color: #1C1C1E; }
+.grupo-tot { font-size: 12px; color: #8E8E93; }
+.grupo-barras { display: flex; align-items: flex-end; gap: 6px; height: 46px; }
+.grupo-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; height: 100%; }
+.grupo-b { width: 100%; background: #2C6BED; border-radius: 3px 3px 0 0; min-height: 2px; }
+.grupo-b.encurso { background: repeating-linear-gradient(45deg, #2C6BED, #2C6BED 3px, #9DBBF5 3px, #9DBBF5 6px); }
+/* Semana sin entrenar: gris. Rayada se leia como 'en curso', que es otra cosa. */
+.grupo-b.vacia { background: #E5E5EA; }
+.grupo-lbl { font: 600 9px 'Inter'; color: #AEAEB2; }
+/* Entrenamientos que no llegaron al servidor. El push al terminar es
+   fire-and-forget y puede morir sin dejar rastro; esto es lo unico que lo hace
+   visible antes de que pasen dias. */
+.sinsubir { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 14px; border-radius: 12px; background: #FFF7E6; border: 1px solid #F0D69B; }
+.sinsubir strong { display: block; font: 600 13.5px 'Inter'; color: #7A5600; }
+.sinsubir p { margin: 3px 0 0; font: 400 12px 'Inter'; color: #8A6A2B; line-height: 1.4; }
+.sinsubir-btn { flex-shrink: 0; padding: 9px 14px; border-radius: 10px; border: 0; background: #E8A317; color: #fff; font: 600 13px 'Inter'; cursor: pointer; }
+.sinsubir-btn:disabled { opacity: .6; }
+.hist-pend { margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: #FFF0D0; color: #8A6A2B; font: 600 10px 'Inter'; text-transform: uppercase; letter-spacing: .05em; vertical-align: middle; }
 /* El mismo boton, pero como enlace: la puerta a la seccion de entrenador. */
 a.btn-ghost { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 /* Salir del perfil, arriba de todo. Cerrar sesion queda visualmente aparte:

@@ -487,6 +487,40 @@ def main() -> int:
               "Fullbody 3x · básico" not in p1.inner_text("body"),
               "el programa borrado reaparecio")
 
+        # ---------- historial y progreso de quien NO creo sus programas ----------
+        # `activeProgramId` quedaba en null cuando los programas llegaban por
+        # sincronizacion en vez de crearse a mano. `activeProgram` caia a
+        # programs[0] y la pantalla se veia bien, pero todo lo que compara
+        # contra el id miraba a nadie: el Historial mostraba cero sesiones.
+        print("\nprogramas que llegaron por sync")
+        d3 = navegador.new_context(viewport=CELULAR)
+        sesion(d3, cookies["ana"], base)
+        pa, err_a, _ = abrir(d3, f"{base}/")
+        pa.wait_for_timeout(2500)
+        check("la app abre sin errores", not err_a, str(err_a))
+
+        activo = pa.evaluate("""() => {
+            const s = JSON.parse(localStorage.getItem('forge-v2') || '{}');
+            return { id: s.activeProgramId, n: (s.programs || []).length, hist: (s.history || []).length };
+        }""")
+        check("hay un programa activo elegido", activo["id"] is not None,
+              f"activeProgramId={activo['id']} con {activo['n']} programas")
+
+        pa.get_by_text("Historial").first.click()
+        pa.wait_for_timeout(1200)
+        hist = pa.inner_text("body")
+        check("el Historial muestra las sesiones sincronizadas",
+              "sesiones registradas" in hist and "0 sesiones" not in hist,
+              f"{activo['hist']} sesiones en local pero la pantalla dice: {hist[:120]}")
+
+        pa.get_by_text("Progreso").first.click()
+        pa.wait_for_timeout(1200)
+        prog_txt = pa.inner_text("body")
+        check("Progreso separa la semana en curso de las cerradas",
+              "en curso" in prog_txt.lower(), "no avisa que hay una semana a medias")
+        check("hay tonelaje por grupo muscular",
+              "grupo muscular" in prog_txt.lower(), "falta el desglose por grupo")
+
         # ---------- un alumno no entra al espacio de entrenador ----------
         print("\npermisos")
         r = ctx3.request.get(f"{base}/api/coach/alumno?alumno={datos['ana']['id']}")
