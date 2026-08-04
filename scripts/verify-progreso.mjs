@@ -7,7 +7,7 @@
  * una semana salteada, el deload, y la semana que se esta entrenando ahora.
  * Todos ellos, mal resueltos, muestran un retroceso donde no lo hay.
  */
-import { deltaE1rm, resumenCiclo } from "../lib/progreso.js";
+import { deltaE1rm, resumenCiclo, bienestar, correlacion, fuerzaCorrelacion } from "../lib/progreso.js";
 
 const fallas = [];
 const check = (label, fn) => {
@@ -135,6 +135,68 @@ check("los provisionales se cuentan aparte", () => {
 check("sin filas no inventa un resumen", () => {
   const r = resumenCiclo([]);
   if (r.total !== 0 || r.suben !== 0) return JSON.stringify(r);
+  return true;
+});
+
+console.log("\nbienestar");
+
+const SESIONES = [
+  { date: 1, week: "1", session: "A", health: { sleep: 5, stress: 1, energy: 5 } },
+  { date: 2, week: "1", session: "B", health: { sleep: 2, stress: 5, energy: 2 } },
+  { date: 3, week: "2", session: "A", health: { sleep: 4, stress: 2, energy: 4 } },
+  { date: 4, week: "2", session: "B", health: { sleep: 3, stress: 4, energy: 3 } },
+  { date: 5, week: "3", session: "A", health: { sleep: 5, stress: 1, energy: 5 } },
+];
+const TON = { 1: 9000, 2: 5000, 3: 8000, 4: 6500, 5: 9500 };
+
+check("promedia los tres indicadores", () => {
+  const b = bienestar(SESIONES, (h) => TON[h.date]);
+  if (b.promedios.sleep !== 3.8) return `sueño ${b.promedios.sleep}`;
+  if (b.promedios.stress !== 2.6) return `estres ${b.promedios.stress}`;
+  return true;
+});
+
+check("el estres correlaciona AL REVES que sueño y energia", () => {
+  // 5 es mucho estres: si se comparara de frente, la conclusion seria la
+  // contraria a la real.
+  const b = bienestar(SESIONES, (h) => TON[h.date]);
+  if (!(b.contraTonelaje.sleep > 0.8)) return `sueño vs tonelaje ${b.contraTonelaje.sleep}`;
+  if (!(b.contraTonelaje.stress < -0.8)) return `estres vs tonelaje ${b.contraTonelaje.stress}`;
+  return true;
+});
+
+check("sin variacion NO hay correlacion", () => {
+  // Contestar 4 de sueño todos los dias no dice nada del rendimiento, y
+  // dividir por cero diria que si.
+  const iguales = SESIONES.map((s) => ({ ...s, health: { ...s.health, sleep: 4 } }));
+  const b = bienestar(iguales, (h) => TON[h.date]);
+  if (b.contraTonelaje.sleep !== null) return `dio ${b.contraTonelaje.sleep}`;
+  return true;
+});
+
+check("con pocas sesiones no arriesga una conclusion", () => {
+  if (correlacion([1, 2, 3], [1, 2, 3]) !== null) return "correlaciono con 3 puntos";
+  if (correlacion([1, 2, 3, 4], [1, 2, 3, 4]) !== 1) return "con 4 deberia poder";
+  return true;
+});
+
+check("una relacion debil se describe como tal", () => {
+  if (fuerzaCorrelacion(0.15) !== "sin relación clara") return fuerzaCorrelacion(0.15);
+  if (fuerzaCorrelacion(-0.85) !== "relación inversa fuerte") return fuerzaCorrelacion(-0.85);
+  if (fuerzaCorrelacion(null) !== null) return "invento una descripcion sin datos";
+  return true;
+});
+
+check("las sesiones sin health check no rompen la serie", () => {
+  const b = bienestar([...SESIONES, { date: 6, week: "3", session: "B" }], (h) => TON[h.date] ?? null);
+  if (b.sesiones.length !== 5) return `${b.sesiones.length} sesiones`;
+  return true;
+});
+
+check("la serie sale ordenada por fecha", () => {
+  const desordenadas = [...SESIONES].reverse();
+  const b = bienestar(desordenadas, () => null);
+  if (b.sesiones[0].fecha !== 1) return "no ordeno";
   return true;
 });
 

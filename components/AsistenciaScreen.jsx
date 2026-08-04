@@ -53,6 +53,32 @@ export default function AsistenciaScreen({ onClose }) {
     return out;
   }, [res]);
 
+  /** Los meses agrupados por año, del mas nuevo al mas viejo. */
+  const porAnio = useMemo(() => {
+    if (!res?.serie.length) return [];
+    const mapa = new Map();
+    for (const x of res.serie) {
+      const a = x.mes.slice(0, 4);
+      if (!mapa.has(a)) mapa.set(a, []);
+      mapa.get(a).push(x);
+    }
+    return [...mapa.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([anio, meses]) => {
+      const total = meses.reduce((s, x) => s + x.dias, 0);
+      return {
+        anio,
+        meses: [...meses].reverse(),
+        total,
+        promedio: Math.round((total / meses.length) * 10) / 10,
+      };
+    });
+  }, [res]);
+
+  const [anioAbierto, setAnioAbierto] = useState(null);
+  useEffect(() => {
+    // El año en curso abierto; los anteriores, plegados.
+    if (porAnio.length && anioAbierto === null) setAnioAbierto(porAnio[0].anio);
+  }, [porAnio, anioAbierto]);
+
   const manualDe = useMemo(
     () => new Set((datos?.manual || []).map((m) => m.mes)),
     [datos],
@@ -218,13 +244,25 @@ export default function AsistenciaScreen({ onClose }) {
             <p className="fhint" style={{ marginBottom: 10 }}>
               Se calculan solos con lo que registrás. Cargá a mano solo los que la app no vivió.
             </p>
-            {[...res.serie].reverse().map((x) => (
-              <div key={x.mes} className="asis-fila">
-                <span className="asis-fila-m">{etiquetaMes(x.mes)}</span>
-                <span className="mono">{x.dias} días</span>
-                {manualDe.has(x.mes)
-                  ? <button className="asis-mini" onClick={() => volverAlAutomatico(x.mes)} title="Volver al cálculo automático">a mano ×</button>
-                  : <button className="asis-mini" onClick={() => setEditando({ mes: x.mes, dias: String(x.dias) })}>corregir</button>}
+            {/* Por año, y solo el actual abierto. Una lista plana de meses no
+                tiene techo: a los tres años son treinta y seis filas para llegar
+                al boton de abajo. El resumen del año cerrado dice mas que sus
+                doce filas. */}
+            {porAnio.map(({ anio, meses, total, promedio }) => (
+              <div key={anio} className="asis-anio">
+                <button className="asis-anio-head" onClick={() => setAnioAbierto(anioAbierto === anio ? null : anio)}>
+                  <span className="asis-anio-n">{anioAbierto === anio ? "▾" : "▸"} {anio}</span>
+                  <span className="asis-anio-r mono">{total} días · {promedio}/mes</span>
+                </button>
+                {anioAbierto === anio && meses.map((x) => (
+                  <div key={x.mes} className="asis-fila">
+                    <span className="asis-fila-m">{etiquetaMes(x.mes)}</span>
+                    <span className="mono">{x.dias} días</span>
+                    {manualDe.has(x.mes)
+                      ? <button className="asis-mini" onClick={() => volverAlAutomatico(x.mes)} title="Volver al cálculo automático">a mano ×</button>
+                      : <button className="asis-mini" onClick={() => setEditando({ mes: x.mes, dias: String(x.dias) })}>corregir</button>}
+                  </div>
+                ))}
               </div>
             ))}
             <button className="btn-secondary" style={{ marginTop: 12 }}

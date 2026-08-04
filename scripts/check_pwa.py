@@ -89,6 +89,13 @@ def main() -> int:
         check("queda registrado y controlando la pagina", True)
         check("la app carga sin errores", not errores, str(errores))
 
+        # Se pasa por la seccion de entrenador CON red, para que quede cacheada
+        # bajo su propia url y el test de mas abajo signifique algo.
+        pg.goto(f"{base}/entrenador", wait_until="networkidle", timeout=30000)
+        pg.wait_for_timeout(2500)
+        pg.goto(base, wait_until="networkidle", timeout=30000)
+        pg.wait_for_timeout(2000)
+
         print("\nla API nunca se cachea")
         # Una respuesta de sesion servida de cache es la app mintiendo sobre
         # quien sos.
@@ -128,13 +135,13 @@ def main() -> int:
         # JavaScript no cargue nunca. La app instalada se quedaba en el splash y
         # este test pasaba igual. Lo unico que prueba que React esta vivo es que
         # la app REACCIONE.
-        pg.get_by_text("Progreso").first.click()
+        pg.locator(".tabbar button").nth(3).click()
         pg.wait_for_timeout(1200)
         check("la app RESPONDE sin red (React hidrato)",
               "e1RM" in pg.inner_text("body"),
               "el HTML esta cacheado pero el JavaScript no: cascaron muerto")
-        pg.get_by_text("Entrenar").first.click()
-        pg.wait_for_timeout(800)
+        pg.locator(".tabbar button").nth(1).click()
+        pg.wait_for_timeout(1000)
         texto = pg.inner_text("body")
         check("y sin pantalla de error", "Application error" not in texto and "sin conexión a internet" not in texto.lower(),
               texto[:200])
@@ -150,11 +157,13 @@ def main() -> int:
         if args.shots:
             pg.screenshot(path=f"{args.shots}/pwa-offline.png")
 
-        # Navegar a otra pantalla sin red tiene que seguir andando: es una SPA,
-        # pero la ruta del entrenador es otra pagina.
+        # La ruta del entrenador es otra pagina, no una pantalla de la SPA. Si
+        # se visito con red, tiene que volver ELLA y no el shell del atleta: con
+        # la direccion /entrenador en la barra y la app del atleta dibujada, el
+        # error no se nota.
         pg.goto(f"{base}/entrenador", wait_until="domcontentloaded", timeout=30000)
-        pg.wait_for_timeout(2000)
-        check("otra ruta tambien abre sin red", "Entrenador" in pg.inner_text("body"),
+        pg.wait_for_timeout(2500)
+        check("una ruta ya visitada vuelve ELLA sin red", "Entrenador" in pg.inner_text("body"),
               pg.inner_text("body")[:150])
 
         print("\nvuelve la red")

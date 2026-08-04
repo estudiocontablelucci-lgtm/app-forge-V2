@@ -357,6 +357,27 @@ listo, con el conteo de archivos). Diagnosticar esto en un telefono sin devtools
 es imposible, y "no abre sin conexion" son tres problemas distintos con tres
 arreglos distintos.
 
+**La navegacion tiene RELOJ.** Sin señal `fetch` no falla rapido —el sistema
+tarda en darse por vencido— y mientras tanto la app instalada se queda en el
+splash. Se veia como "abre en blanco, salgo, vuelvo a entrar y ahora si". Si
+`navigator.onLine` dice que no hay red se va derecho al cache; si dice que si
+pero no contesta en 2 segundos, tambien.
+
+**Cada navegacion se guarda bajo SU url ademas de como shell.** Sin lo primero,
+`/entrenador` sin red caia al shell de `/` y dibujaba la app del atleta con la
+direccion del entrenador en la barra: peor que un error, porque no se nota.
+
+**El boton atras de Android** se maneja apilando estado en el historial
+(`popstate` en ForgeApp): cierra pantallas superpuestas, despues vuelve a
+Entrenar, y recien ahi pregunta si se quiere salir. Una PWA instalada no tiene
+barra de navegacion, asi que por defecto el atras salia de la app — a mitad de
+un entrenamiento eso es perder la sesion por un gesto reflejo.
+
+**Ojo con `get_by_text` en los tests de navegador.** "Como llegaste a entrenar"
+contiene "entrenar", asi que `get_by_text("Entrenar").first` dejo de ser la
+pestaña y varias suites se rompieron a la vez. Las pestañas se tocan por
+`.tabbar button` y su indice.
+
 **Si el service worker rompe algo en produccion**, el escape es deployar un
 `sw.js` cuyo unico contenido sea `self.registration.unregister()`: los
 navegadores revalidan ese archivo en cada navegacion y se despublica solo.

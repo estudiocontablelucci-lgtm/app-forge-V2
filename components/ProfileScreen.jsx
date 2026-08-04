@@ -10,7 +10,7 @@ import { useSession, signOut } from "next-auth/react";
  * ejercicios con `refKg: "BW"` (dominadas, fondos), que hoy quedan fuera del
  * progreso porque no hay con que multiplicar.
  */
-export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
+export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal }) {
   const { data: session } = useSession();
   const [user, setUser] = useState(null);
   const [nombre, setNombre] = useState("");
@@ -47,7 +47,7 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
       });
     })();
     return () => { vigente = false; };
-  }, []);
+  }, [perfilLocal]);
 
   useEffect(() => {
     let vigente = true;
@@ -62,11 +62,20 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
         setPeso(user.bodyWeightKg == null ? "" : String(user.bodyWeightKg));
         setEstado("listo");
       } catch {
-        if (vigente) setEstado("error");
+        // Sin red el perfil no se puede pedir, pero eso no es una pantalla
+        // vacia: se muestra lo ultimo que se supo y se avisa que esta viejo.
+        if (!vigente) return;
+        if (perfilLocal) {
+          setUser({ displayName: perfilLocal.name, email: perfilLocal.email, role: null, bodyWeightKg: null });
+          setNombre(perfilLocal.name || "");
+          setEstado("sin-red");
+        } else {
+          setEstado("error");
+        }
       }
     })();
     return () => { vigente = false; };
-  }, []);
+  }, [perfilLocal]);
 
   const guardar = async () => {
     setEstado("guardando");
@@ -111,6 +120,47 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
         </div>
       )}
 
+      {estado === "sin-red" && (
+        <div className="vacio-card">
+          <p className="vacio-t">Sin conexión</p>
+          <p className="vacio-p">
+            Esto es lo último que sabemos de tu cuenta. Los cambios de nombre o peso
+            necesitan conexión; el resto de la app funciona igual.
+          </p>
+        </div>
+      )}
+
+      {/* El estado del modo offline va FUERA del bloque que depende del
+          servidor: estaba adentro, asi que la unica pantalla que explica por que
+          la app no anda sin conexion solo aparecia CON conexion. */}
+      <div className="card">
+        <div className="flabel">Modo sin conexión</div>
+        {!offline && <p className="fhint">Revisando…</p>}
+        {offline?.estado === "no-soportado" && (
+          <p className="fhint">Este navegador no lo soporta. Probá con Chrome o Safari.</p>
+        )}
+        {offline?.estado === "sin-registrar" && (
+          <p className="fhint">No está activo. Abrí la app con conexión y volvé a entrar acá.</p>
+        )}
+        {offline?.estado === "instalando" && <p className="fhint">Preparándose…</p>}
+        {offline?.estado === "esperando" && (
+          <p className="fhint">
+            Hay una versión nueva esperando. <strong>Cerrá la app del todo</strong> (sacala de las
+            apps recientes) y volvé a abrirla con conexión para que tome el control.
+            {" "}Archivos guardados: {offline.archivos}.
+          </p>
+        )}
+        {offline?.estado === "listo" && (
+          <p className="fhint">
+            {offline.archivos > 5
+              ? <>Listo: <strong>{offline.archivos} archivos guardados</strong>. La app abre sin conexión.</>
+              : <>Activo pero con solo {offline.archivos} archivos. Abrí la app con conexión una vez más
+                 para que termine de guardar lo que falta.</>}
+            {offline.instalada ? " Estás usando la app instalada." : " Estás en el navegador, no en la app instalada."}
+          </p>
+        )}
+      </div>
+
       {user && (
         <>
           <div className="card prof-head">
@@ -153,33 +203,6 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
             </p>
           </div>
 
-          <div className="card">
-            <div className="flabel">Modo sin conexión</div>
-            {!offline && <p className="fhint">Revisando…</p>}
-            {offline?.estado === "no-soportado" && (
-              <p className="fhint">Este navegador no lo soporta. Probá con Chrome o Safari.</p>
-            )}
-            {offline?.estado === "sin-registrar" && (
-              <p className="fhint">No está activo. Abrí la app con conexión y volvé a entrar acá.</p>
-            )}
-            {offline?.estado === "instalando" && <p className="fhint">Preparándose…</p>}
-            {offline?.estado === "esperando" && (
-              <p className="fhint">
-                Hay una versión nueva esperando. <strong>Cerrá la app del todo</strong> (sacala de las
-                apps recientes) y volvé a abrirla con conexión para que tome el control.
-                {" "}Archivos guardados: {offline.archivos}.
-              </p>
-            )}
-            {offline?.estado === "listo" && (
-              <p className="fhint">
-                {offline.archivos > 5
-                  ? <>Listo: <strong>{offline.archivos} archivos guardados</strong>. La app abre sin conexión.</>
-                  : <>Activo pero con solo {offline.archivos} archivos. Abrí la app con conexión una vez más
-                     para que termine de guardar lo que falta.</>}
-                {offline.instalada ? " Estás usando la app instalada." : " Estás en el navegador, no en la app instalada."}
-              </p>
-            )}
-          </div>
 
           {/* Un enlace, no una seccion. Entrenar a otros dejo de vivir adentro
               del Perfil: tiene pantalla propia, con ancho de escritorio y un
@@ -192,7 +215,7 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
         </>
       )}
 
-      {!user && <button className="btn-ghost" onClick={onClose}>Volver</button>}
+      {!user && <button className="btn-primary" onClick={onClose}>Volver a entrenar</button>}
     </div>
   );
 }
