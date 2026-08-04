@@ -40,14 +40,33 @@ export default function RegistrarSW() {
      * La lista sale de lo que el navegador REALMENTE pidio, no de una lista
      * escrita a mano que se desactualiza en el proximo build.
      */
-    const avisarLoUsado = () => {
-      const sw = navigator.serviceWorker.controller;
-      if (!sw) return;
+    const avisarLoUsado = async () => {
       const urls = performance.getEntriesByType("resource")
         .map((r) => r.name)
         .filter((n) => /\/_next\/static\/.+\.(?:js|css)$/.test(n)
           || /fonts\.(?:googleapis|gstatic)\.com/.test(n));
-      if (urls.length) sw.postMessage({ tipo: "precache", urls: [...new Set(urls)] });
+      if (!urls.length) return;
+
+      const msg = { tipo: "precache", urls: [...new Set(urls)] };
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) return;
+
+      // Al que manda hoy Y al que va a mandar mañana.
+      //
+      // Sin `skipWaiting`, una version nueva queda ESPERANDO a que se cierren
+      // las pestañas. Si solo se le avisara al que controla, el que espera se
+      // activaria con el cache vacio y la primera apertura sin red seria en
+      // blanco — que es exactamente como quedo la app ya instalada al recibir
+      // este arreglo. Los dos comparten el mismo cache, asi que el que espera
+      // puede dejarlo listo ANTES de tomar el control.
+      reg.active?.postMessage(msg);
+      reg.waiting?.postMessage(msg);
+      const instalando = reg.installing;
+      if (instalando) {
+        instalando.addEventListener("statechange", function alCambiar() {
+          if (this.state === "installed") this.postMessage(msg);
+        });
+      }
     };
 
     const registrar = () => navigator.serviceWorker.register("/sw.js")

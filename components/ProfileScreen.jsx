@@ -18,6 +18,37 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
   const [estado, setEstado] = useState("cargando"); // cargando | listo | guardando | error
   const [error, setError] = useState(null);
 
+  /**
+   * Estado del modo offline, en palabras.
+   *
+   * Existe porque diagnosticar esto en un telefono es imposible sin devtools, y
+   * "no abre sin conexion" puede ser tres cosas distintas: que no haya service
+   * worker, que haya uno viejo esperando, o que este activo pero sin archivos
+   * guardados. Cada una se arregla distinto.
+   */
+  const [offline, setOffline] = useState(null);
+  useEffect(() => {
+    let vigente = true;
+    (async () => {
+      if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+        if (vigente) setOffline({ estado: "no-soportado" });
+        return;
+      }
+      const reg = await navigator.serviceWorker.getRegistration();
+      let archivos = 0;
+      try {
+        for (const n of await caches.keys()) archivos += (await (await caches.open(n)).keys()).length;
+      } catch { /* sin permiso de cache */ }
+      if (!vigente) return;
+      setOffline({
+        estado: !reg ? "sin-registrar" : reg.waiting ? "esperando" : reg.active ? "listo" : "instalando",
+        archivos,
+        instalada: window.matchMedia?.("(display-mode: standalone)")?.matches || false,
+      });
+    })();
+    return () => { vigente = false; };
+  }, []);
+
   useEffect(() => {
     let vigente = true;
     (async () => {
@@ -120,6 +151,34 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing }) {
               Baja lo que esté en la nube y sube las sesiones que hayan quedado
               en el teléfono por falta de señal.
             </p>
+          </div>
+
+          <div className="card">
+            <div className="flabel">Modo sin conexión</div>
+            {!offline && <p className="fhint">Revisando…</p>}
+            {offline?.estado === "no-soportado" && (
+              <p className="fhint">Este navegador no lo soporta. Probá con Chrome o Safari.</p>
+            )}
+            {offline?.estado === "sin-registrar" && (
+              <p className="fhint">No está activo. Abrí la app con conexión y volvé a entrar acá.</p>
+            )}
+            {offline?.estado === "instalando" && <p className="fhint">Preparándose…</p>}
+            {offline?.estado === "esperando" && (
+              <p className="fhint">
+                Hay una versión nueva esperando. <strong>Cerrá la app del todo</strong> (sacala de las
+                apps recientes) y volvé a abrirla con conexión para que tome el control.
+                {" "}Archivos guardados: {offline.archivos}.
+              </p>
+            )}
+            {offline?.estado === "listo" && (
+              <p className="fhint">
+                {offline.archivos > 5
+                  ? <>Listo: <strong>{offline.archivos} archivos guardados</strong>. La app abre sin conexión.</>
+                  : <>Activo pero con solo {offline.archivos} archivos. Abrí la app con conexión una vez más
+                     para que termine de guardar lo que falta.</>}
+                {offline.instalada ? " Estás usando la app instalada." : " Estás en el navegador, no en la app instalada."}
+              </p>
+            )}
           </div>
 
           {/* Un enlace, no una seccion. Entrenar a otros dejo de vivir adentro

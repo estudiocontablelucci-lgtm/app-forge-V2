@@ -340,6 +340,23 @@ un SW sirve assets viejos y la app compila, responde 200 y muestra otra cosa.
 Para probarlo: `?sw=1` en dev, o `npm run build && npm start` (que es lo que
 verifica `npm run verify:pwa`).
 
+**La URL de produccion es `https://forge-v2-five.vercel.app`** (alias del proyecto
+`forge-v2` en Vercel). La CLI esta autenticada: `npx vercel ls` lista los deploys
+y `npx vercel inspect <url>` muestra los alias. Vale verificar contra ESA url
+antes de dar por bueno un arreglo — `check_pwa.py --base <url>` corre entero
+contra produccion.
+
+**Sin `skipWaiting`, la version nueva queda ESPERANDO y su cache arranca vacio.**
+Por eso la pagina le manda la lista de archivos al que controla Y al que espera:
+comparten cache, asi que el que espera puede dejarlo listo antes de tomar el
+control. Sin eso, la primera apertura despues de una actualizacion era en blanco
+— justo lo que le paso a la app ya instalada al recibir el arreglo anterior.
+
+**El Perfil muestra el estado del modo offline** (sin registrar / esperando /
+listo, con el conteo de archivos). Diagnosticar esto en un telefono sin devtools
+es imposible, y "no abre sin conexion" son tres problemas distintos con tres
+arreglos distintos.
+
 **Si el service worker rompe algo en produccion**, el escape es deployar un
 `sw.js` cuyo unico contenido sea `self.registration.unregister()`: los
 navegadores revalidan ese archivo en cada navegacion y se despublica solo.
