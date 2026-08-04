@@ -9,6 +9,7 @@ import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCa
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
+import MedidasScreen from "./MedidasScreen";
 import ExercisePicker from "./ExercisePicker";
 import AvisoInvitacion from "./AvisoInvitacion";
 
@@ -210,6 +211,7 @@ export default function ForgeApp() {
   const [editingProgram, setEditingProgram] = useState(null); // program metadata editor
   const [importWizard, setImportWizard] = useState(null); // { step, data, mapping, preview, name }
   const [showProfile, setShowProfile] = useState(false);
+  const [showMedidas, setShowMedidas] = useState(false);
   const [syncState, setSyncState] = useState(null); // texto para la pantalla de perfil
   const [syncing, setSyncing] = useState(false);
 
@@ -780,6 +782,17 @@ export default function ForgeApp() {
 
   if (!loaded) return <div style={{ background: "#F2F2F7", minHeight: "100vh" }} />;
 
+  // Medidas tapa la app entera igual que el Perfil: es una tarea larga y
+  // sentada, no algo que se consulte entre series.
+  if (showMedidas) {
+    return (
+      <div className="forge">
+        <style>{CSS}</style>
+        <div className="phone"><MedidasScreen onClose={() => setShowMedidas(false)} /></div>
+      </div>
+    );
+  }
+
   // El perfil tapa la app entera (sin tabbar): se sale con "Volver".
   if (showProfile) {
     return (
@@ -1154,6 +1167,15 @@ export default function ForgeApp() {
                   {weekLabel(abierta)} está en curso: {e.hechas} de {e.total} sesiones. Su barra va a seguir creciendo.
                 </p>;
               })()}
+            </div>
+
+            <div className="card">
+              <div className="cardtitle">Medidas corporales</div>
+              <p className="fhint" style={{ marginBottom: 10 }}>
+                Peso, composición, circunferencias y proporciones. El entrenamiento se mide
+                en el gimnasio; el resultado, con una cinta métrica.
+              </p>
+              <button className="btn-secondary" onClick={() => setShowMedidas(true)}>Ver mis medidas</button>
             </div>
 
             <div className="card">
@@ -2162,6 +2184,38 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .vacio-card { background: #FFF; border-radius: 16px; padding: 20px 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
 .vacio-t { font: 600 16px 'Inter'; color: #1C1C1E; margin-bottom: 6px; }
 .vacio-p { font: 400 13px 'Inter'; color: #8E8E93; line-height: 1.5; margin-bottom: 12px; }
+
+/* Medidas corporales */
+.med-grupo { width: 100%; text-align: left; padding: 0; border: 0; background: none; font: 600 14px 'Inter'; color: #1C1C1E; cursor: pointer; }
+.med-campo { margin-bottom: 14px; }
+.med-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.med-dato { background: #F7F7FA; border: 1px solid #ECECF1; border-radius: 12px; padding: 11px 12px; }
+.med-dato-l { font: 600 10px 'Inter'; letter-spacing: .06em; text-transform: uppercase; color: #8E8E93; }
+.med-dato-v { font: 700 20px 'DM Mono', monospace; color: #1C1C1E; margin-top: 3px; }
+.med-dato-v small { font-size: 12px; color: #8E8E93; font-weight: 400; }
+.med-dato-d { font-size: 11px; font-weight: 600; margin-top: 2px; }
+.med-dato-d.bien { color: #1E9E4A; } .med-dato-d.mal { color: #C77700; }
+.med-asim { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #F2F2F7; font-size: 12.5px; }
+.med-asim:first-of-type { border-top: none; }
+.med-asim.alerta { background: #FFF8E7; margin: 0 -8px; padding: 9px 8px; border-radius: 8px; border-top-color: transparent; }
+.med-asim-n { flex: 1; font-weight: 600; color: #1C1C1E; }
+.med-asim-p { font-weight: 700; }
+.med-asim-p.bien { color: #1E9E4A; } .med-asim-p.mal { color: #C77700; }
+.med-prop, .med-ratio, .med-hist { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid #F2F2F7; font-size: 13px; }
+.med-prop:first-of-type, .med-ratio:first-of-type, .med-hist:first-of-type { border-top: none; }
+.med-prop-l { flex: 1; min-width: 0; } .med-ratio > div:first-child { flex: 1; min-width: 0; }
+.med-hist > div:first-child { flex: 1; min-width: 0; }
+/* Son <span> uno al lado del otro: sin block, el nombre y la regla salen
+   pegados ("PechoCintura + 25 cm"). Mismo caso que la lista de alumnos. */
+.med-prop-n, .med-prop-r { display: block; }
+.med-prop-n { font: 600 13px 'Inter'; color: #1C1C1E; }
+.med-prop-r { font: 400 11px 'Inter'; color: #AEAEB2; margin-top: 1px; }
+.med-prop-t { color: #AEAEB2; font-size: 12px; }
+.med-prop-d { font-weight: 700; font-size: 12.5px; min-width: 38px; text-align: right; }
+.med-prop-d.bien { color: #1E9E4A; } .med-prop-d.falta { color: #C77700; }
+.med-ok { color: #1E9E4A; font-weight: 700; } .med-falta { color: #C77700; font-weight: 700; }
+.med-borrar { padding: 4px 10px; border: 0; background: none; color: #C7C7CC; font-size: 18px; cursor: pointer; }
+.med-borrar:hover { color: #C7261B; }
 .invite-banner { position: absolute; top: 62px; left: 16px; right: 16px; z-index: 25; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #EEF3FE; border: 1px solid #B9CDF5; font: 400 13px 'Inter'; color: #1F4B99; line-height: 1.4; }
 .invite-acciones { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .invite-ver { color: #2C6BED; font-weight: 600; text-decoration: none; white-space: nowrap; }
