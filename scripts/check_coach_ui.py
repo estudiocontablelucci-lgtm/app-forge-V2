@@ -521,6 +521,20 @@ def main() -> int:
         check("hay tonelaje por grupo muscular",
               "grupo muscular" in prog_txt.lower(), "falta el desglose por grupo")
 
+        # El Δ del ciclo: sin el, cuatro numeros por fila no responden "voy bien?".
+        deltas = pa.evaluate("[...document.querySelectorAll('.e1delta')].map(x => x.innerText.trim())")
+        check("la tabla de e1RM trae el Δ del ciclo", any(d and d != "·" for d in deltas),
+              f"{deltas[:4]}")
+        check("y el Δ% al lado del absoluto", any("%" in (d or "") for d in deltas), f"{deltas[:4]}")
+        check("resume cuantos ejercicios subieron",
+              "subieron en el ciclo" in prog_txt or "subió en el ciclo" in prog_txt,
+              "falta el resumen del ciclo")
+        # Los nombres largos no pueden desaparecer detras de puntos suspensivos.
+        cortados = pa.evaluate(
+            "[...document.querySelectorAll('.e1name > .txt')].filter(x => x.scrollHeight > x.clientHeight + 2).length")
+        check("los nombres de ejercicio entran en dos lineas", cortados == 0,
+              f"{cortados} nombres siguen cortados")
+
         # ---------- un alumno no entra al espacio de entrenador ----------
         print("\npermisos")
         r = ctx3.request.get(f"{base}/api/coach/alumno?alumno={datos['ana']['id']}")
