@@ -18,6 +18,13 @@
  *    Next les pone un hash en el nombre: una version nueva es una URL nueva,
  *    asi que servirlos de cache no puede devolver algo viejo.
  *
+ *    OJO: interceptar no alcanza. En la PRIMERA visita el service worker se
+ *    activa DESPUES de que la pagina ya pidio sus scripts, asi que esos pedidos
+ *    no pasan por aca y no quedan guardados. La app instalada arrancaba con el
+ *    HTML en cache y sin una sola linea de JavaScript: cargaba el cascaron y se
+ *    quedaba en el splash para siempre. Por eso la pagina, cuando termina de
+ *    cargar, MANDA la lista de lo que uso (mensaje "precache") y se guarda.
+ *
  * 3. /api/** -> NUNCA se cachea. Ni siquiera GET.
  *    Ahi vive la sesion, el historial y los datos de otras personas. Una
  *    respuesta de sesion cacheada es la app mintiendo sobre quien sos.
@@ -96,9 +103,39 @@ async function deRedOCache(req) {
     return res;
   } catch {
     // Sin red: la ultima version que se vio, o el shell.
-    return (await cache.match(req)) || (await cache.match(SHELL)) || Response.error();
+    // `ignoreVary`: Next responde con `Vary: RSC, Next-Router-State-Tree...` y
+    // un arranque en frio no manda las mismas cabeceras que la visita que se
+    // cacheo. Sin esto el match falla y la app queda en blanco teniendo el HTML
+    // guardado. `ignoreSearch` cubre el start_url con parametros.
+    const opciones = { ignoreVary: true, ignoreSearch: true };
+    return (await cache.match(req, opciones))
+      || (await cache.match(SHELL, opciones))
+      || Response.error();
   }
 }
+
+/**
+ * La pagina avisa que archivos necesito para dibujarse.
+ *
+ * Es la unica forma confiable de saberlo: los nombres llevan un hash que cambia
+ * en cada build, asi que un service worker escrito a mano no puede adivinarlos,
+ * y esperar a interceptarlos deja afuera justo los de la primera visita — que
+ * es la unica que importa, porque es cuando la persona instala la app.
+ */
+self.addEventListener("message", (e) => {
+  if (e.data?.tipo !== "precache" || !Array.isArray(e.data.urls)) return;
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.all(e.data.urls.map(async (u) => {
+      try {
+        if (await cache.match(u)) return;                 // ya estaba
+        const res = await fetch(u, { credentials: "same-origin" });
+        if (res.ok) await cache.put(u, res);
+      } catch { /* sin red o URL caida: se reintenta en la proxima carga */ }
+    }));
+    await podar(cache);
+  })());
+});
 
 self.addEventListener("fetch", (e) => {
   const { request } = e;

@@ -29,9 +29,33 @@ export default function RegistrarSW() {
       return;
     }
 
-    // Despues de `load`: registrar durante la carga compite por ancho de banda
-    // con lo que la pantalla necesita para dibujarse.
-    const registrar = () => navigator.serviceWorker.register("/sw.js").catch(() => {});
+    /**
+     * Le dice al service worker que archivos hicieron falta para dibujar esto.
+     *
+     * Sin este paso la app instalada arrancaba con el HTML cacheado y sin nada
+     * de JavaScript: en la PRIMERA visita el service worker se activa despues
+     * de que la pagina ya pidio sus scripts, asi que no los ve pasar y no los
+     * guarda. Y la primera visita es justo cuando la persona instala la app.
+     *
+     * La lista sale de lo que el navegador REALMENTE pidio, no de una lista
+     * escrita a mano que se desactualiza en el proximo build.
+     */
+    const avisarLoUsado = () => {
+      const sw = navigator.serviceWorker.controller;
+      if (!sw) return;
+      const urls = performance.getEntriesByType("resource")
+        .map((r) => r.name)
+        .filter((n) => /\/_next\/static\/.+\.(?:js|css)$/.test(n)
+          || /fonts\.(?:googleapis|gstatic)\.com/.test(n));
+      if (urls.length) sw.postMessage({ tipo: "precache", urls: [...new Set(urls)] });
+    };
+
+    const registrar = () => navigator.serviceWorker.register("/sw.js")
+      .then(() => navigator.serviceWorker.ready)
+      // Un respiro para los chunks que Next pide despues del `load`.
+      .then(() => new Promise((r) => setTimeout(r, 1500)))
+      .then(avisarLoUsado)
+      .catch(() => {});
     if (document.readyState === "complete") registrar();
     else {
       window.addEventListener("load", registrar, { once: true });

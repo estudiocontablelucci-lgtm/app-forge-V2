@@ -27,7 +27,7 @@ _svg = (RAIZ / "public" / "favicon.svg").read_text(encoding="utf-8")
 # chica arriba a la izquierda.
 SVG = re.sub(r'\s(width|height)="[^"]*"', "", _svg, count=2)
 SVG = SVG.replace("<svg", '<svg width="100%" height="100%" preserveAspectRatio="xMidYMid meet"', 1)
-FONDO = "#0D1117"          # el fondo oscuro del ecosistema: el rayo es claro
+FONDO = "#F2F2F7"          # el mismo fondo de la app y del splash del manifest
 SALIDA = RAIZ / "public"
 
 # (archivo, lado, margen) — el margen es la zona segura del icono maskable.
