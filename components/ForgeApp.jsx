@@ -7,6 +7,7 @@ import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from 
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
 import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
+import { deltaE1rm, resumenCiclo } from "@/lib/progreso";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
 import MedidasScreen from "./MedidasScreen";
@@ -757,6 +758,12 @@ export default function ForgeApp() {
     );
   }, [history, activeProgramId, sessions.length]);
 
+  /** La semana que se esta entrenando: la mas avanzada sin cerrar. */
+  const semanaEnCurso = useMemo(() => {
+    const abierta = weeks.find((w) => semanasHechas[String(w)] && !semanasHechas[String(w)].cerrada);
+    return abierta === undefined ? null : abierta;
+  }, [weeks, semanasHechas]);
+
   /**
    * Tonelaje por grupo muscular y semana.
    *
@@ -1230,16 +1237,56 @@ export default function ForgeApp() {
             </div>
             <div className="card">
               <div className="cardtitle">e1RM por ejercicio</div>
-              <div className="e1head mono" style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span></span>{Array.from({ length: activeProgram?.weeks || 4 }, (_, i) => <span key={i}>S{i + 1}</span>)}</div>
-              {filasE1rm.map((e) => {
-                const row = Array.from({ length: activeProgram?.weeks || 4 }, (_, i) => metrics.e1rms[e.id][String(i + 1)]); const nums = row.filter(Boolean);
-                const trend = nums.length >= 2 ? (nums[nums.length - 1] > nums[0] ? "↗" : nums[nums.length - 1] < nums[0] ? "↘" : "→") : "";
-                // El mismo ejercicio puede estar en dos sesiones (o quedar con
-                // nombre repetido tras una edicion). Se agrupa por id, asi que
-                // serian dos filas identicas: la sesion las distingue.
-                const repetido = filasE1rm.filter((o) => o.name === e.name).length > 1;
-                return (<div key={e.id} className={`e1row ${e.retirado ? "retirado" : ""}`} style={{ gridTemplateColumns: `1fr repeat(${activeProgram?.weeks || 4}, 42px)` }}><span className="e1name"><span className="txt">{e.name}</span>{repetido && <span className="e1sess">{e.session}</span>}{e.retirado && <span className="e1out" title="Ya no está en el programa">fuera</span>}<span className={`tr ${trend === "↗" ? "up" : trend === "↘" ? "dn" : ""}`}>{trend}</span></span>{row.map((v, i) => <span key={i} className="mono e1v">{v ? Math.round(v) : "·"}</span>)}</div>);
-              })}
+              {(() => {
+                const nSem = activeProgram?.weeks || 4;
+                const cols = `1fr repeat(${nSem}, 34px) 50px`;
+                const deltas = filasE1rm.map((e) => deltaE1rm(metrics.e1rms[e.id], { semanaEnCurso }));
+                const resumen = resumenCiclo(deltas);
+                return (
+                  <>
+                    <div className="e1head mono" style={{ gridTemplateColumns: cols }}>
+                      <span></span>
+                      {Array.from({ length: nSem }, (_, i) => <span key={i}>S{i + 1}</span>)}
+                      <span>Δ</span>
+                    </div>
+                    {filasE1rm.map((e, idx) => {
+                      const row = Array.from({ length: nSem }, (_, i) => metrics.e1rms[e.id][String(i + 1)]);
+                      const d = deltas[idx];
+                      // El mismo ejercicio puede estar en dos sesiones (o quedar con
+                      // nombre repetido tras una edicion). Se agrupa por id, asi que
+                      // serian dos filas identicas: la sesion las distingue.
+                      const repetido = filasE1rm.filter((o) => o.name === e.name).length > 1;
+                      return (
+                        <div key={e.id} className={`e1row ${e.retirado ? "retirado" : ""}`} style={{ gridTemplateColumns: cols }}>
+                          <span className="e1name">
+                            <span className="txt">{e.name}</span>
+                            {repetido && <span className="e1sess">{e.session}</span>}
+                            {e.retirado && <span className="e1out" title="Ya no está en el programa">fuera</span>}
+                          </span>
+                          {row.map((v, i) => <span key={i} className="mono e1v">{v ? Math.round(v) : "·"}</span>)}
+                          <span className={`e1delta mono ${d.delta > 0 ? "up" : d.delta < 0 ? "dn" : ""} ${d.provisional ? "prov" : ""}`}
+                            title={d.delta === null ? "Hace falta más de una semana con datos"
+                              : `De ${d.primera} a ${d.ultima} kg${d.provisional ? " · la última semana sigue en curso" : ""}`}>
+                            {d.delta === null ? "·" : <>
+                              <b>{d.delta > 0 ? "+" : ""}{d.delta}</b>
+                              <small>{d.pct > 0 ? "+" : ""}{d.pct}%</small>
+                            </>}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {resumen.total > 0 && (
+                      <p className="fhint" style={{ marginTop: 10 }}>
+                        {resumen.suben} {resumen.suben === 1 ? "ejercicio subió" : "ejercicios subieron"}
+                        {resumen.bajan > 0 && `, ${resumen.bajan} bajó${resumen.bajan === 1 ? "" : "n"}`}
+                        {resumen.iguales > 0 && `, ${resumen.iguales} igual${resumen.iguales === 1 ? "" : "es"}`}
+                        {" "}en el ciclo.
+                        {resumen.provisionales > 0 && ` ${resumen.provisionales} con la semana en curso todavía abierta.`}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
               {Object.keys(metrics.e1rms).length === 0 && <div className="empty">Registrá series con kg y reps para ver tu e1RM acá.</div>}
             </div>
           </div>
@@ -2054,17 +2101,28 @@ const CSS = `
 .tonval { font-size: 13px; color: #1C1C1E; text-align: right; font-weight: 500; }
 .tondelta { font-size: 12px; text-align: right; color: #636366; }
 .tondelta.up { color: #34C759; } .tondelta.dn { color: #FF3B30; }
-.e1head { display: grid; grid-template-columns: 1fr repeat(4, 42px); gap: 6px; font-size: 11px; color: #636366; padding-bottom: 8px; border-bottom: 1px solid #E5E5EA; margin-bottom: 6px; }
+.e1head { display: grid; grid-template-columns: 1fr repeat(4, 42px); gap: 5px; font-size: 11px; color: #636366; padding-bottom: 8px; border-bottom: 1px solid #E5E5EA; margin-bottom: 6px; }
 .e1head span { text-align: right; } .e1head span:first-child { text-align: left; }
-.e1row { display: grid; grid-template-columns: 1fr repeat(4, 42px); gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid #F2F2F7; }
+.e1row { display: grid; grid-template-columns: 1fr repeat(4, 42px); gap: 5px; align-items: center; padding: 8px 0; border-bottom: 1px solid #F2F2F7; }
 .e1row:last-child { border-bottom: none; }
 /* Flex para que el badge de sesion o de "fuera" no se lo coma la elipsis:
    se encoge el nombre, no la etiqueta que explica de que fila se trata. */
-.e1name { display: flex; align-items: center; gap: 2px; min-width: 0; font-size: 14px; font-weight: 500; color: #1C1C1E; }
-.e1name > .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.e1name { display: flex; align-items: center; gap: 3px; min-width: 0; font-size: 13.5px; font-weight: 500; color: #1C1C1E; }
+/* Dos lineas antes que puntos suspensivos: "Sentadilla pend..." y "Sentadilla
+   pendular con barra" son la misma fila truncada, y la tabla existe justamente
+   para distinguir ejercicios. */
+.e1name > .txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
 .e1name > .e1sess, .e1name > .e1out, .e1name > .tr { flex: 0 0 auto; }
 .tr { font-size: 13px; } .tr.up { color: #34C759; } .tr.dn { color: #FF3B30; }
 .e1v { font-size: 13px; text-align: right; color: #3A3A3C; }
+/* Δ del ciclo: el numero absoluto arriba y el % abajo. Dos numeros en una
+   columna porque +7 no dice lo mismo en un press de 80 que en un curl de 18. */
+.e1delta { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; color: #8E8E93; }
+.e1delta b { font-size: 13px; font-weight: 700; }
+.e1delta small { font-size: 10px; opacity: .85; }
+.e1delta.up { color: #1E9E4A; } .e1delta.dn { color: #C7261B; }
+/* Provisional: la ultima semana sigue abierta y puede faltar la serie pesada. */
+.e1delta.prov { opacity: .55; font-style: italic; }
 .empty { color: #636366; font-size: 14px; padding: 10px 0; }
 .tabbar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; display: flex; background: rgba(255,255,255,.92); backdrop-filter: blur(16px); border-top: 1px solid #E5E5EA; z-index: 40; }
 .tabbar button { flex: 1; padding: 10px 0 14px; background: none; border: none; color: #636366; font: 500 11px 'Inter'; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; }
