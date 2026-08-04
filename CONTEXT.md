@@ -6,9 +6,9 @@ Estado actual del proyecto y decisiones tomadas.
 
 ## Estado general
 
-**Fase**: Fase 4 cerrada. Proxima: fase 5 (rol entrenador)
+**Fase**: fases 1 a 7 cerradas. Sin fase 8 definida.
 **Deploy**: https://forge-v2-five.vercel.app — push a `main` deploya solo
-**Ultima actualizacion**: 2026-08-02
+**Ultima actualizacion**: 2026-08-04
 
 > El deploy sale de `main`. Una feature no esta en produccion hasta que su rama se
 > mergea a `main` y se pushea — verificar antes de dar una fase por cerrada.
@@ -84,7 +84,7 @@ cuatro semanas. La progresion sale de la autorregulacion, que es lo que hace el 
 | E1 · Schema v03 + capa de datos | Hecha |
 | E2 · Invitar, aceptar con consentimiento, lista de alumnos | Hecha |
 | E3 · Asignar programa y calibrar kilos por alumno | Hecha |
-| E4 · Seccion de entrenador con metricas | **Pendiente — arranca con rediseno** |
+| E4 · Seccion de entrenador con metricas | Hecha |
 
 ### 2026-08-02 — Un programa por alumno, no una plantilla calibrada
 **Decision**: en entrenamiento 1:1 cada alumno tiene su propio programa. El entrenador duplica
@@ -110,19 +110,48 @@ Eso no entra en un modal pensado para editar el nombre y el peso corporal.
 **Formato**: responsive real — una columna en el celular, aprovechando el ancho en la computadora.
 La app del ATLETA sigue siendo mobile-first a 430px; la del entrenador es otra cosa.
 
+## Fase 6 — PWA offline (cerrada)
+
+- [x] Instalable, con manifest e iconos maskable
+- [x] Abre SIN RED: navegacion red-primero con reloj, estaticos cache-primero
+- [x] `/api/**` nunca se cachea y no se llama a `skipWaiting()` — las dos reglas duras
+- [x] El estado del modo offline es visible en el Perfil (diagnosticar esto en un
+      telefono sin devtools es imposible)
+- [x] Boton atras de Android: cierra pantallas, vuelve a Entrenar, y recien ahi pregunta
+- [x] `check_pwa.py` corta la red DE VERDAD, y ademas simula la red que solo CUELGA
+
+## Fase 7 — tecnicas de ejecucion (cerrada)
+
+- [x] `lib/tecnicas.js` como fuente unica: familia, color, alias de import, escalones
+- [x] Dropset en el programa, en el editor del entrenador, en el Excel y en Entrenar
+- [x] Escalones dentro de la serie (`set_logs.steps_json`, v07) — no como series aparte
+- [x] Suman al tonelaje y entran al e1RM
+- [x] El descanso espera al ultimo escalon
+- [x] Los tres dropsets que la planilla ya prescribia, cargados en el Ciclo 2 real
+
 ## Pendiente (futuro)
 
-- [ ] Tabla `exercises` en el schema, con `coach_id` — se disena en fase 5 para migrarla una
-      sola vez. Hoy el catalogo vive en el cliente y el pull lo mantiene al dia
-- [ ] Roles coach/athlete + dashboard trainer
-- [ ] Override de `ref_kg` por asignacion (bloqueante para el caso multi-alumno)
-- [ ] Consentimiento explicito de datos de salud (Ley 25.326) antes de alumnos reales
+- [ ] **Conflicto abierto: el e1RM del dropset.** La app incluye los escalones (indicacion
+      en sesion del 2026-08-04). `programa_tecnicas_ciclo2.md`, seccion 9, dice lo
+      contrario: "suma al tonelaje pero el e1RM se calcula solo con el primer segmento —
+      si no, el descuelgue a carga baja con muchas reps ensucia la estimacion hacia
+      arriba". Ese documento es la fuente de verdad externa segun `CLAUDE.md`. Hoy la app
+      hace lo primero. Cambiarlo es acotado: `metrics` en ForgeApp y el pie de la tarjeta
+- [ ] **Decidir si el dropset se desactiva en deload.** Se acordo que si y quedo sin
+      implementar; hoy aplica a la ultima serie que exista, tambien en descarga. La
+      planilla lo marca en el deload, pero la anotacion se repite mecanicamente en las
+      cinco filas de cada ejercicio, asi que no es evidencia de una decision
+- [ ] Rest-pause, myo-reps y cluster: la planilla los tiene como "disponibles, no
+      aplicados". Son entradas en `TECNICAS`, no una migracion
+- [ ] Consentimiento explicito de datos de salud (Ley 25.326) antes de alumnos reales —
+      postergado por decision explicita: el trato con los alumnos es personal
 - [ ] Plan / limite de alumnos por entrenador (patron `features` JSON, como Tesoreria)
-- [ ] PWA con service worker
+- [ ] Borrar un ejercicio no viaja entre dispositivos del mismo usuario (el programa si)
 - [ ] Exportar programa a Excel (el historial ya se exporta)
-- [ ] Campo `tecnica` en ejercicio (DS / ASIM-IZQ) — hoy viven como texto en `description`
 - [ ] Prediccion de carga (regresion lineal e1RM)
-- [ ] Medidas corporales + proporciones McCallum
+- [ ] Dos diferencias de reps entre la planilla y la app, detectadas al cargar los
+      dropsets y sin tocar: gemelo prensa 45 (planilla 8-10, app 12-15) y apertura
+      maquina (planilla 12-15, app 10-12). Las refs coinciden
 
 ---
 
@@ -194,8 +223,9 @@ siendo `OneDrive/.../Sistema cronobiologico/Claude/rutina_gym.md` + `programa_te
 existente. Para cargar el programa en un navegador con datos, se genera un .xlsx con
 `npm run gen:programa` y se importa por el wizard. El .xlsx queda en `data/` (gitignored: son datos
 personales de salud y el repo es publico).
-**Tecnicas (DS, ASIM-IZQ)**: no hay campo `tecnica` en el modelo — van como texto en `description`,
-visibles con el badge "i" durante el entrenamiento. Suficiente para operar; el campo propio queda pendiente.
+**Tecnicas (DS, ASIM-IZQ)**: iban como texto en `description`. El dropset dejo de ser texto
+en la fase 7 (ver mas abajo); ASIM-IZQ sigue siendo una nota, porque no cambia como se
+registra la serie sino cuantas series lleva un lado.
 
 ### 2026-07 — Timer de descanso: trigger explicito
 **Decision**: el descanso arranca cuando se escribe el primer caracter en REPS (transicion vacio -> con dato).
@@ -326,18 +356,63 @@ provider. Se desenvuelve en `lib/auth/nextauth-interop.js` — importar desde ah
 programs[]          → array de { id, name, weeks, hasDeload, sessions[], exercises[], status, createdAt }
 activeProgramId     → id del programa seleccionado
 logs{}              → hash de sets registrados por key compuesta (week|exId|setN)
+                      cada set puede llevar `pasos[]` — los escalones de un dropset,
+                      que viven DENTRO de la serie y no son series nuevas
 history[]           → array de sesiones completadas con programId
 ```
 Ejercicios incluyen campo `description` (texto libre).
 Migracion automatica de v1 en `migrateState()`.
 
-### Remoto (Turso) — aplicado, todavia sin datos
-16 tablas: las 13 del dominio (v01) + `auth_accounts` y `auth_verification_tokens` (v02) +
-`schema_migrations`. El SQL vive en `db/`; la base es `forge` en la org `gabriellucci`.
+### Remoto (Turso) — en produccion, con datos reales
+19 tablas, migraciones v01 a v07 aplicadas. El SQL vive en `db/`; la base es `forge` en la
+org `gabriellucci`.
 
 La traduccion entre las dos formas vive en `lib/repo/*` y en ningun otro lado.
 
-**Las dos no estan conectadas todavia**: la UI sigue leyendo y escribiendo localStorage. El puente
-(`/api/sync` + migracion inicial del localStorage existente) es lo que falta de la fase 4.
+**Las dos estan conectadas desde la fase 4**: `/api/sync` sube al terminar cada sesion y
+baja al abrir. El atleta sigue siendo offline-first (localStorage manda mientras entrena);
+el entrenador trabaja online contra el servidor.
 
 Ver `forge-arquitectura.md` para el diseno del sync engine y el outbox.
+
+### 2026-08-04 — Un dropset no es otra superserie
+
+**Decision**: dos mecanismos distintos, no uno generalizado. Lo que AGRUPA ejercicios
+(superserie, tri-set) es una relacion entre filas y ya se modelaba con la FK
+`superset_with`. Lo que pasa ADENTRO de una serie (dropset y familia) no tiene a quien
+apuntar: es un nivel mas de registro, `set_logs.steps_json` (v07).
+
+**Motivo**: confundirlos lleva a modelar el dropset como ejercicios sueltos o como series
+aparte. Lo primero encadena el e1RM de dos cosas distintas; lo segundo rompe el conteo de
+series y el tonelaje por serie. Las dos formas de equivocarse tienen el mismo origen.
+
+**Lo que ya estaba**: `program_exercises.technique` existe desde la v01 con el comentario
+`'DS' | 'ASIM-IZQ'`, y el repo la leia y la escribia. Nunca la escribio nadie. Ahora
+guarda JSON y tolera el string suelto, para que una fila vieja no quede ilegible.
+
+**Tonelaje y e1RM: los escalones cuentan.** El tonelaje suma —es trabajo real que no se
+contaba—. El e1RM tambien, y eso es seguro por construccion y no por criterio: la semana
+toma el MAXIMO y un escalon lleva menos peso, asi que no puede bajar el numero. Si alguna
+vez gana, fue el mejor esfuerzo de la semana. (Brzycki pierde precision arriba de ~12
+reps, pero eso ya valia para cualquier serie.)
+
+**Entre escalones no hay descanso**, ese es el punto de la tecnica. El timer arrancaba al
+cargar las reps de la serie, que con un dropset es exactamente cuando hay que bajar el
+peso y seguir.
+
+### 2026-08-04 — El color codifica la familia, no la tecnica
+
+**Decision**: teal `#0E8F9E` para lo que agrupa ejercicios, violeta `#7A3FD4` para lo que
+pasa adentro de la serie. Cual es exactamente lo dice el chip con el nombre.
+
+**Motivo**: con siete tecnicas posibles, un color por tecnica no se recuerda. Y el chip es
+lo que hace que la distincion no dependa solo del color.
+
+**Restriccion dura**: ningun color de estructura puede salir de la familia del semaforo
+(verde `#34C759` / amarillo `#FF9500` / rojo `#FF3B30`). El semaforo dice COMO TE FUE y la
+tecnica dice COMO SE HACE. La superserie era naranja `#F5A623`, a un paso del amarillo del
+semaforo, y por eso cambio.
+
+**Corolario**: la tecnica no puede ser texto libre. En el Excel entra por alias, como ya
+hacia `superset`. Lo que no se reconoce entra como nada — pintar de violeta algo que nadie
+sabe ejecutar es peor que no pintarlo.
