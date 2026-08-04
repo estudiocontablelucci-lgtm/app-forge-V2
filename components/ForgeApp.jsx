@@ -10,6 +10,7 @@ import { crearProgramaBasico } from "@/lib/programa-basico";
 import AccountButton from "./AccountButton";
 import ProfileScreen from "./ProfileScreen";
 import MedidasScreen from "./MedidasScreen";
+import AsistenciaScreen from "./AsistenciaScreen";
 import ExercisePicker from "./ExercisePicker";
 import AvisoInvitacion from "./AvisoInvitacion";
 
@@ -212,6 +213,7 @@ export default function ForgeApp() {
   const [importWizard, setImportWizard] = useState(null); // { step, data, mapping, preview, name }
   const [showProfile, setShowProfile] = useState(false);
   const [showMedidas, setShowMedidas] = useState(false);
+  const [showAsistencia, setShowAsistencia] = useState(false);
   const [syncState, setSyncState] = useState(null); // texto para la pantalla de perfil
   const [syncing, setSyncing] = useState(false);
 
@@ -782,6 +784,15 @@ export default function ForgeApp() {
 
   if (!loaded) return <div style={{ background: "#F2F2F7", minHeight: "100vh" }} />;
 
+  if (showAsistencia) {
+    return (
+      <div className="forge">
+        <style>{CSS}</style>
+        <div className="phone"><AsistenciaScreen onClose={() => setShowAsistencia(false)} /></div>
+      </div>
+    );
+  }
+
   // Medidas tapa la app entera igual que el Perfil: es una tarea larga y
   // sentada, no algo que se consulte entre series.
   if (showMedidas) {
@@ -1176,6 +1187,15 @@ export default function ForgeApp() {
                 en el gimnasio; el resultado, con una cinta métrica.
               </p>
               <button className="btn-secondary" onClick={() => setShowMedidas(true)}>Ver mis medidas</button>
+            </div>
+
+            <div className="card">
+              <div className="cardtitle">Asistencia</div>
+              <p className="fhint" style={{ marginBottom: 10 }}>
+                Días de gimnasio por mes. La adherencia dice si cumpliste esta semana;
+                esto dice si el hábito se sostiene.
+              </p>
+              <button className="btn-secondary" onClick={() => setShowAsistencia(true)}>Ver mi asistencia</button>
             </div>
 
             <div className="card">
@@ -2216,6 +2236,21 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .med-ok { color: #1E9E4A; font-weight: 700; } .med-falta { color: #C77700; font-weight: 700; }
 .med-borrar { padding: 4px 10px; border: 0; background: none; color: #C7C7CC; font-size: 18px; cursor: pointer; }
 .med-borrar:hover { color: #C7261B; }
+
+/* Asistencia */
+.asis-barras { display: flex; align-items: flex-end; gap: 4px; height: 110px; margin-top: 4px; }
+.asis-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; height: 100%; min-width: 0; }
+.asis-n { font-size: 9px; color: #48484A; font-weight: 600; }
+.asis-b { width: 100%; background: #2C6BED; border-radius: 3px 3px 0 0; min-height: 2px; }
+.asis-b.bajo { background: #9DBBF5; }
+.asis-b.encurso { background: repeating-linear-gradient(45deg, #2C6BED, #2C6BED 3px, #9DBBF5 3px, #9DBBF5 6px); }
+.asis-m { font: 600 9px 'Inter'; color: #AEAEB2; }
+.asis-desde { display: flex; gap: 8px; flex-wrap: wrap; }
+.asis-fila { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid #F2F2F7; font-size: 13px; }
+.asis-fila:first-of-type { border-top: none; }
+.asis-fila-m { flex: 1; font: 600 13px 'Inter'; }
+.asis-mini { padding: 3px 9px; border-radius: 999px; border: 1px solid #E5E5EA; background: #fff; color: #8E8E93; font: 600 11px 'Inter'; cursor: pointer; }
+.asis-mini:hover { border-color: #2C6BED; color: #2C6BED; }
 .invite-banner { position: absolute; top: 62px; left: 16px; right: 16px; z-index: 25; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #EEF3FE; border: 1px solid #B9CDF5; font: 400 13px 'Inter'; color: #1F4B99; line-height: 1.4; }
 .invite-acciones { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .invite-ver { color: #2C6BED; font-weight: 600; text-decoration: none; white-space: nowrap; }
