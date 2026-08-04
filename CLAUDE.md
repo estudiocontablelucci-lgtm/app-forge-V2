@@ -385,6 +385,16 @@ Entrenar, y recien ahi pregunta si se quiere salir. Una PWA instalada no tiene
 barra de navegacion, asi que por defecto el atras salia de la app — a mitad de
 un entrenamiento eso es perder la sesion por un gesto reflejo.
 
+**`navigator.onLine` dice si hay INTERFAZ de red, no si se llega a internet.**
+Con wifi sin salida contesta que si. Sirve para enterarse de los CAMBIOS
+(eventos `online`/`offline`), pero la palabra final la da lo que pase de verdad
+al sincronizar: `marcarRed(r.ok || r.motivo !== "sin-red")`.
+
+**El boton de cuenta no puede esperar a que next-auth resuelva.** Tenia
+`if (status === "loading") return null` para evitar un parpadeo, y sin red esa
+consulta se cuelga: el boton desaparecia hasta minimizar la app y volver. Con un
+perfil conocido no hay parpadeo posible, asi que se dibuja de una.
+
 **Ojo con `get_by_text` en los tests de navegador.** "Como llegaste a entrenar"
 contiene "entrenar", asi que `get_by_text("Entrenar").first` dejo de ser la
 pestaña y varias suites se rompieron a la vez. Las pestañas se tocan por

@@ -240,6 +240,10 @@ export default function ForgeApp() {
    */
   const [hayRed, setHayRed] = useState(true);
   useEffect(() => {
+    // `navigator.onLine` dice si hay INTERFAZ de red, no si se llega a
+    // internet: con wifi sin salida contesta que si. Sirve como primera
+    // aproximacion y para enterarse de los cambios, pero la palabra final la
+    // tiene lo que pase de verdad al sincronizar (`marcarRed`).
     const actualizar = () => setHayRed(navigator.onLine !== false);
     actualizar();
     window.addEventListener("online", actualizar);
@@ -249,6 +253,9 @@ export default function ForgeApp() {
       window.removeEventListener("offline", actualizar);
     };
   }, []);
+
+  /** Evidencia real: una sincronizacion que sale o que falla por falta de red. */
+  const marcarRed = (llego) => setHayRed(llego);
 
   const [perfilLocal, setPerfilLocal] = useState(null);
   useEffect(() => {
@@ -400,6 +407,9 @@ export default function ForgeApp() {
     setSyncState("Sincronizando…");
 
     const r = await pullAll();
+    // La palabra final sobre si hay red: lo que acaba de pasar, no lo que
+    // opina `navigator.onLine`.
+    marcarRed(r.ok || r.motivo !== "sin-red");
     if (!r.ok) {
       setSyncState(r.motivo === "sin-red"
         ? "Sin conexión. Lo tuyo está guardado en el teléfono."
@@ -637,6 +647,7 @@ export default function ForgeApp() {
       if (signedIn && activeProgram) {
         setSyncState("Subiendo…");
         pushSession({ program: activeProgram, entry, catalog }).then((r) => {
+          marcarRed(r.ok || r.motivo !== "sin-red");
           setSyncState(r.ok
             ? `Última subida: ${new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`
             : r.motivo === "sin-red"
