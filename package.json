@@ -30,6 +30,7 @@
     "verify:ui": "python scripts/check_ui.py",
     "verify:pwa": "python scripts/check_pwa.py",
     "verify:tecnicas-ui": "python scripts/check_tecnicas_ui.py",
+    "verify:atras-ui": "python scripts/check_atras_ui.py",
     "gen:iconos": "python scripts/gen_iconos.py",
     "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor && npm run verify:identidad && npm run verify:medidas && npm run verify:asistencia && npm run verify:progreso && npm run verify:tecnicas"
   },

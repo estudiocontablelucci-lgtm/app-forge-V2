@@ -426,6 +426,13 @@ export default function ForgeApp() {
   const showMedidasRef = useRef(showMedidas); showMedidasRef.current = showMedidas;
   const showAsistenciaRef = useRef(showAsistencia); showAsistenciaRef.current = showAsistencia;
   const importWizardRef = useRef(importWizard); importWizardRef.current = importWizard;
+  // Las superpuestas tambien: el atras del telefono tiene que cerrarlas a ellas
+  // primero. Sin esto la caja quedaba abierta y la app de atras se movia sola.
+  const descModalRef = useRef(descModal); descModalRef.current = descModal;
+  const confirmActionRef = useRef(confirmAction); confirmActionRef.current = confirmAction;
+  const editingRef = useRef(editing); editingRef.current = editing;
+  const editingProgramRef = useRef(editingProgram); editingProgramRef.current = editingProgram;
+  const editingSessionsRef = useRef(editingSessions); editingSessionsRef.current = editingSessions;
 
   /**
    * Sincroniza en los dos sentidos: baja lo que hay en la nube y sube las
@@ -926,6 +933,15 @@ export default function ForgeApp() {
       // se agota mientras haya algo hacia donde retroceder adentro.
       const quedarse = () => marcar();
 
+      // De la mas superpuesta a la menos. La ficha de descripcion y la
+      // confirmacion se dibujan ARRIBA de todo, asi que son las primeras en
+      // cerrarse: si no, el atras movia la app de abajo y la caja se quedaba
+      // flotando encima de otra pantalla.
+      if (descModalRef.current) { setDescModal(null); return quedarse(); }
+      if (confirmActionRef.current) { setConfirmAction(null); return quedarse(); }
+      if (editingRef.current) { setEditing(null); return quedarse(); }
+      if (editingProgramRef.current) { setEditingProgram(null); return quedarse(); }
+      if (editingSessionsRef.current) { setEditingSessions(false); return quedarse(); }
       if (importWizardRef.current) { setImportWizard(null); return quedarse(); }
       if (showMedidasRef.current) { setShowMedidas(false); return quedarse(); }
       if (showAsistenciaRef.current) { setShowAsistencia(false); return quedarse(); }
