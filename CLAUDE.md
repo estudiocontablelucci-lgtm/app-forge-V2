@@ -252,7 +252,7 @@ Viven en `OneDrive/Documentos/Organizacion Personal/Salud/Sistema cronobiologico
 |---|---|
 | `programa_tecnicas_ciclo2.md` | **Manda sobre toda decision actual**: tecnicas, refs, orden, swaps, reglas de progresion |
 | `rutina_gym.md` | **Linea de base, no decide.** Los estudios medicos textuales, el e1RM del Ciclo 1, el protocolo de fotos, los targets de proporciones y el registro de ajustes de Ciclo 1 |
-| `programa_tecnicas_ciclo2 sin belt quat.md` | **Obsoleto**, el vigente lo declara reemplazado. No leerlo |
+| `_archivo/` | Lo reemplazado. No se lee — el 2026-08-05 se mudo ahi `programa_tecnicas_ciclo2 sin belt quat.md`, que se llamaba casi igual que el vigente y con nombre mas largo parecia el mas especifico |
 
 **Precedencia resuelta el 2026-08-05.** Para refs, ejercicios y criterios manda
 el vigente. `rutina_gym.md` no se consulta para decidir: se consulta para saber
