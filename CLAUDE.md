@@ -405,7 +405,13 @@ direccion del entrenador en la barra: peor que un error, porque no se nota.
 
 **El boton atras de Android** se maneja apilando estado en el historial
 (`popstate` en ForgeApp): cierra pantallas superpuestas, despues vuelve a
-Entrenar, y recien ahi pregunta si se quiere salir. Una PWA instalada no tiene
+Entrenar, y recien ahi pregunta si se quiere salir.
+
+**La cadena tiene que incluir TODAS las superpuestas, y en orden de arriba hacia
+abajo.** Faltaban la ficha de descripcion, la confirmacion y los tres editores:
+el atras las salteaba y movia la app de ABAJO, asi que la caja quedaba flotando
+sobre otra pantalla y el gesto parecia no hacer nada cuando en realidad hacia de
+mas. Al agregar una pantalla superpuesta, agregarla tambien ahi. Una PWA instalada no tiene
 barra de navegacion, asi que por defecto el atras salia de la app — a mitad de
 un entrenamiento eso es perder la sesion por un gesto reflejo.
 

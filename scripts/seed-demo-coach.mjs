@@ -66,7 +66,9 @@ const local = {
   sessions: [{ id: "A", name: "Torso" }, { id: "B", name: "Pierna" }, { id: "C", name: "Full body" }],
   exercises: [
     { id: "e1", session: "A", order: 1, name: "Press banca", group: "Pecho", sets: 3, refKg: 60, repsMin: 8, repsMax: 10, rir: "2-3", rest: 150, unit: "reps" },
-    { id: "e2", session: "A", order: 2, name: "Remo con barra", group: "Espalda", sets: 3, refKg: 50, repsMin: 8, repsMax: 10, rir: "2-3", rest: 120, unit: "reps" },
+    // Con descripcion a proposito: la ficha de "mas informacion" solo aparece
+    // si el ejercicio tiene una, y sin eso no hay que probar el boton atras.
+    { id: "e2", session: "A", order: 2, name: "Remo con barra", group: "Espalda", sets: 3, refKg: 50, repsMin: 8, repsMax: 10, rir: "2-3", rest: 120, unit: "reps", description: "Agarre prono, tirar al ombligo. Espalda neutra, sin tiron lumbar." },
     // Con dropset a proposito: es lo que permite mirar la tecnica en un
     // navegador de verdad, que es donde aparecieron los ultimos bugs.
     { id: "e3", session: "A", order: 3, name: "Press militar", group: "Hombro", sets: 3, refKg: 32.5, repsMin: 8, repsMax: 10, rir: "2", rest: 120, unit: "reps", technique: { tipo: "dropset", pasos: 2, aplica: "ultima" } },
