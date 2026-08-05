@@ -240,9 +240,25 @@ era suyo. Ahora la pantalla vacia ofrece: sincronizar (por si un entrenador ya l
 asigno uno), crear, cargar un `lib/programa-basico.js` neutro, o importar Excel.
 
 El Ciclo 2 vive en `lib/seed-ciclo2.js` y solo alimenta `npm run gen:programa`.
-Fuente de verdad **externa** al repo:
-`OneDrive/Documentos/Organizacion Personal/Salud/Sistema cronobiologico/Claude/rutina_gym.md`
-y `programa_tecnicas_ciclo2 sin belt quat.md`. Antes de tocar refs o ejercicios, leer esos archivos.
+
+**La fuente de verdad es EXTERNA al repo y se queda afuera.** Este repo es
+PUBLICO y ahi hay datos de salud —diagnosticos, restricciones medicas— que bajo
+la Ley 25.326 son dato sensible. Un `.gitignore` es una convencion, no una
+proteccion: un `git add -f` distraido publica para siempre.
+
+Viven en `OneDrive/Documentos/Organizacion Personal/Salud/Sistema cronobiologico/Claude/`:
+
+| Archivo | Que es |
+|---|---|
+| `programa_tecnicas_ciclo2.md` | **El vigente.** Tecnicas, refs, orden, swaps y reglas de progresion. El se declara consolidacion de los anteriores |
+| `rutina_gym.md` | El programa y el historial largo. Anterior |
+| `programa_tecnicas_ciclo2 sin belt quat.md` | **Obsoleto**, el propio vigente lo declara reemplazado. No leerlo |
+
+Antes de tocar refs o ejercicios, leer el vigente. Y **los dos primeros no
+siempre coinciden**: sobre la restriccion medica, `rutina_gym.md` dice que lo que
+gobierna es la carga axial y `programa_tecnicas_ciclo2.md` dice, citando el
+informe, que es la flexion lumbar bajo carga. Cual manda es decision de Agustin,
+no del que lee — si el punto importa para lo que se va a escribir, preguntar.
 
 Restriccion medica que condiciona la seleccion de ejercicios: discopatias lumbares incipientes L3-S1.
 **Nunca** proponer back squat, front squat, peso muerto convencional ni good mornings pesados.
