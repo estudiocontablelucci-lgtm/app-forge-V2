@@ -250,15 +250,23 @@ Viven en `OneDrive/Documentos/Organizacion Personal/Salud/Sistema cronobiologico
 
 | Archivo | Que es |
 |---|---|
-| `programa_tecnicas_ciclo2.md` | **El vigente.** Tecnicas, refs, orden, swaps y reglas de progresion. El se declara consolidacion de los anteriores |
-| `rutina_gym.md` | El programa y el historial largo. Anterior |
-| `programa_tecnicas_ciclo2 sin belt quat.md` | **Obsoleto**, el propio vigente lo declara reemplazado. No leerlo |
+| `programa_tecnicas_ciclo2.md` | **Manda sobre toda decision actual**: tecnicas, refs, orden, swaps, reglas de progresion |
+| `rutina_gym.md` | **Linea de base, no decide.** Los estudios medicos textuales, el e1RM del Ciclo 1, el protocolo de fotos, los targets de proporciones y el registro de ajustes de Ciclo 1 |
+| `programa_tecnicas_ciclo2 sin belt quat.md` | **Obsoleto**, el vigente lo declara reemplazado. No leerlo |
 
-Antes de tocar refs o ejercicios, leer el vigente. Y **los dos primeros no
-siempre coinciden**: sobre la restriccion medica, `rutina_gym.md` dice que lo que
-gobierna es la carga axial y `programa_tecnicas_ciclo2.md` dice, citando el
-informe, que es la flexion lumbar bajo carga. Cual manda es decision de Agustin,
-no del que lee — si el punto importa para lo que se va a escribir, preguntar.
+**Precedencia resuelta el 2026-08-05.** Para refs, ejercicios y criterios manda
+el vigente. `rutina_gym.md` no se consulta para decidir: se consulta para saber
+que decia el informe y de donde salen los numeros de partida. Su rol de
+seguimiento murio con la Google Sheet, dada de baja el 2026-08-04.
+
+Importa porque los dos **se contradicen sobre la restriccion medica**.
+`rutina_gym.md` dice "no hacer ejercicios con carga axial pesada"; el vigente
+dice, citando el mismo informe, que lo que gobierna es la **flexion lumbar bajo
+carga**, no la carga axial, y que por eso conviven trap bar a 120kg y prensa a
+145kg con la lista de prohibidos. La conclusion textual del radiologo es
+"Rectificacion del eje. Incipientes discopatias L3-S1" — lo de la carga axial es
+una interpretacion agregada en el archivo viejo, no una linea del informe. Gana
+el vigente.
 
 Restriccion medica que condiciona la seleccion de ejercicios: discopatias lumbares incipientes L3-S1.
 **Nunca** proponer back squat, front squat, peso muerto convencional ni good mornings pesados.
