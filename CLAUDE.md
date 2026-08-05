@@ -444,11 +444,13 @@ series aparte romperian el conteo, el tonelaje por serie y el e1RM. Mismo
 criterio que `body_measurements.values_json`: el conjunto de campos lo define la
 app y la base solo lo transporta.
 
-**Suman en el tonelaje y entran al e1RM.** Lo segundo es seguro por
-construccion y no por criterio: la semana toma el MAXIMO y un escalon tiene
-menos peso, asi que no puede bajar el numero. La unica forma de que gane es que
-haya sido el mejor esfuerzo de la semana. (Ojo: Brzycki pierde precision arriba
-de ~12 reps, pero eso ya valia para cualquier serie — la tecnica no lo empeora.)
+**Suman en el tonelaje y NO entran al e1RM**, que sale solo de la serie
+principal. "El maximo no puede bajar" mira media pregunta: no puede bajar, pero
+puede SUBIR sin que haya mas fuerza. Con las refs reales, el gemelo sentado
+(50x15 = 81.8) queda por debajo de su propio descuelgue a 38.8kg apenas pasa de
+20 reps, y a 25 reps daria 116 — un +42% que se leeria como una mejora enorme.
+Veinte reps en un descuelgue de gemelos es lo normal, no el caso raro. Y el
+semaforo lee ese numero para decidir si subir carga.
 
 **Entre escalones NO hay descanso**, ese es el punto. `serieCerrada()` decide
 cuando arranca el timer: con la serie principal cargada pero escalones

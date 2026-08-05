@@ -103,16 +103,30 @@ await check("el tonelaje suma los escalones", () => {
   return total === 400 + 180 + 100 ? true : `dio ${total}, esperaba 680`;
 });
 
-await check("un escalon NO puede bajar el e1RM de la semana", () => {
-  // La semana toma el MAXIMO, y un escalon tiene menos peso. Esto es lo que
-  // hace seguro incluirlos: matematicamente no pueden empeorar el numero.
-  const principal = brzycki(40, 10);
-  for (const [kg, reps] of [[30, 6], [20, 5], [30, 10]]) {
-    if (Math.max(principal, brzycki(kg, reps)) !== principal) {
-      return `el escalon ${kg}x${reps} le gano al principal 40x10`;
-    }
+await check("un escalon SI puede inflar el e1RM, por eso queda afuera", () => {
+  // El argumento de que "el maximo no puede bajar" mira solo la mitad del
+  // problema. No puede bajar, pero puede SUBIR sin que haya mas fuerza:
+  // Brzycki pierde precision arriba de ~12 reps y un descuelgue al fallo con
+  // 22% menos peso vive justo ahi. Con las refs reales de este programa el
+  // gemelo sentado (50x15) queda por debajo de su propio descuelgue a 38.8kg
+  // en cuanto pasa de 20 reps.
+  const principal = brzycki(50, 15);
+  const descuelgue = brzycki(38.8, 21);
+  if (!(descuelgue > principal)) {
+    return `el descuelgue dio ${descuelgue?.toFixed(1)} contra ${principal.toFixed(1)}: revisar el caso`;
   }
   return true;
+});
+
+await check("el tonelaje los cuenta y el e1RM no", () => {
+  // Las dos mitades de la decision, juntas: el descuelgue es trabajo real
+  // (suma) pero no es evidencia de fuerza (no estima).
+  const serie = { kg: "50", reps: "15", pasos: [{ kg: "38.8", reps: "21" }] };
+  let tonelaje = 0;
+  for (const c of [serie, ...t.pasosDeLog(serie)]) tonelaje += parseFloat(c.kg) * parseInt(c.reps);
+  if (Math.round(tonelaje) !== Math.round(750 + 38.8 * 21)) return `tonelaje ${tonelaje}`;
+  const e1 = brzycki(parseFloat(serie.kg), parseInt(serie.reps));
+  return Math.abs(e1 - brzycki(50, 15)) < 0.001 ? true : `e1RM ${e1}`;
 });
 
 /* ---------- el viaje completo ---------- */

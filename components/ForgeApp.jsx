@@ -774,18 +774,27 @@ export default function ForgeApp() {
       // `isNum` era false para todo y la pantalla de Progreso quedaba vacia
       // aunque hubiera series cargadas. "BW" da NaN y queda fuera del tonelaje,
       // que es lo correcto: no hay carga externa que sumar.
-      // Los escalones de un dropset son parte de la MISMA serie, asi que entran
-      // por el mismo camino. En el tonelaje suman —es trabajo real que antes no
-      // se contaba— y en el e1RM no pueden hacer dano: la semana toma el MAXIMO,
-      // y un escalon con menos peso da un Brzycki mas bajo. Si alguna vez gana,
-      // es porque ese fue el mejor esfuerzo de la semana.
-      const cargas = [{ kg: parseFloat(l.kg), reps: parseInt(l.reps) },
-        ...pasosDeLog(l).map((p) => ({ kg: parseFloat(p?.kg), reps: parseInt(p?.reps) }))];
-      for (const { kg, reps } of cargas) {
-        if (!isNum(kg) || !reps) continue;
-        tonnage[w] = (tonnage[w] || 0) + kg * reps;
+      // Los escalones de un dropset SUMAN al tonelaje —es trabajo real que
+      // antes no se contaba— pero NO alimentan el e1RM, que sale solo de la
+      // serie principal.
+      //
+      // No es una precaucion abstracta: con las refs reales de este programa,
+      // el gemelo sentado (50x15 = 81.8) queda por debajo de su propio
+      // descuelgue a 38.8kg en cuanto pasa de 20 reps, y a 25 reps daria 116
+      // — un +42% que se leeria como una mejora enorme de fuerza sin que haya
+      // pasado nada. Brzycki pierde precision arriba de ~12 reps, y un
+      // descuelgue al fallo con 22% menos peso vive justamente ahi.
+      //
+      // Importa mas de lo que parece: el semaforo y las reglas de progresion
+      // leen este numero para decidir si subir carga.
+      const kg = parseFloat(l.kg), reps = parseInt(l.reps);
+      if (isNum(kg) && reps) {
         const e1 = brzycki(kg, reps);
         if (e1) { e1rms[exId] = e1rms[exId] || {}; e1rms[exId][w] = Math.max(e1rms[exId][w] || 0, e1); }
+      }
+      for (const c of [l, ...pasosDeLog(l)]) {
+        const k = parseFloat(c?.kg), r = parseInt(c?.reps);
+        if (isNum(k) && r) tonnage[w] = (tonnage[w] || 0) + k * r;
       }
     }
     return { tonnage, e1rms };
@@ -1263,9 +1272,9 @@ export default function ForgeApp() {
                   for (let i = 1; i <= setsFor(ex, week, deloadCfg); i++) {
                     const l = logs[keyOf(week, ex.id, i)];
                     if (!isDone(l)) continue;
-                    for (const c of [l, ...pasosDeLog(l)]) {
-                      if (isNum(parseFloat(c?.kg)) && parseInt(c?.reps)) best = Math.max(best, brzycki(parseFloat(c.kg), parseInt(c.reps)) || 0);
-                    }
+                    // Solo la serie principal, igual que en Progreso: un
+                    // descuelgue con menos peso y muchas reps infla el Brzycki.
+                    if (isNum(parseFloat(l.kg)) && parseInt(l.reps)) best = Math.max(best, brzycki(parseFloat(l.kg), parseInt(l.reps)) || 0);
                   }
                   return best > 0 ? <div className="ex-footer"><span className="e1rmnow mono">e1RM: <b>{Math.round(best)}</b></span></div> : null;
                 })()}
