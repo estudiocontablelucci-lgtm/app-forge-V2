@@ -132,6 +132,8 @@ Con navegador, fuera de `npm run verify` porque necesitan la app levantada:
 - `verify:pwa` — instalable y abre SIN RED, contra `next start`. Corta la red de verdad y
   ademas simula la que solo CUELGA, que es lo que hace un telefono sin senal
 - `verify:tecnicas-ui` — los escalones no se abren antes de tiempo y el descanso los espera
+- `verify:atras-ui` — el boton atras del telefono cierra lo superpuesto antes de mover
+  la app de abajo. Escrito para fallar sin el arreglo
 - `scripts/check_coach_ui.py` — la seccion de entrenador, con dos sesiones reales
 
 > `verify:ui` existe por un caso real: la app compilaba, respondia 200 y se veia en blanco. Era
