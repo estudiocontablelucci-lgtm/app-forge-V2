@@ -8,7 +8,7 @@ Estado actual del proyecto y decisiones tomadas.
 
 **Fase**: fases 1 a 7 cerradas. Sin fase 8 definida.
 **Deploy**: https://forge-v2-five.vercel.app — push a `main` deploya solo
-**Ultima actualizacion**: 2026-08-04
+**Ultima actualizacion**: 2026-08-05
 
 > El deploy sale de `main`. Una feature no esta en produccion hasta que su rama se
 > mergea a `main` y se pushea — verificar antes de dar una fase por cerrada.
@@ -125,18 +125,12 @@ La app del ATLETA sigue siendo mobile-first a 430px; la del entrenador es otra c
 - [x] `lib/tecnicas.js` como fuente unica: familia, color, alias de import, escalones
 - [x] Dropset en el programa, en el editor del entrenador, en el Excel y en Entrenar
 - [x] Escalones dentro de la serie (`set_logs.steps_json`, v07) — no como series aparte
-- [x] Suman al tonelaje y entran al e1RM
+- [x] Suman al tonelaje y NO entran al e1RM (resuelto el 2026-08-05, ver abajo)
 - [x] El descanso espera al ultimo escalon
 - [x] Los tres dropsets que la planilla ya prescribia, cargados en el Ciclo 2 real
 
 ## Pendiente (futuro)
 
-- [ ] **Conflicto abierto: el e1RM del dropset.** La app incluye los escalones (indicacion
-      en sesion del 2026-08-04). `programa_tecnicas_ciclo2.md`, seccion 9, dice lo
-      contrario: "suma al tonelaje pero el e1RM se calcula solo con el primer segmento —
-      si no, el descuelgue a carga baja con muchas reps ensucia la estimacion hacia
-      arriba". Ese documento es la fuente de verdad externa segun `CLAUDE.md`. Hoy la app
-      hace lo primero. Cambiarlo es acotado: `metrics` en ForgeApp y el pie de la tarjeta
 - [ ] **Decidir si el dropset se desactiva en deload.** Se acordo que si y quedo sin
       implementar; hoy aplica a la ultima serie que exista, tambien en descarga. La
       planilla lo marca en el deload, pero la anotacion se repite mecanicamente en las
@@ -149,9 +143,10 @@ La app del ATLETA sigue siendo mobile-first a 430px; la del entrenador es otra c
 - [ ] Borrar un ejercicio no viaja entre dispositivos del mismo usuario (el programa si)
 - [ ] Exportar programa a Excel (el historial ya se exporta)
 - [ ] Prediccion de carga (regresion lineal e1RM)
-- [ ] Dos diferencias de reps entre la planilla y la app, detectadas al cargar los
-      dropsets y sin tocar: gemelo prensa 45 (planilla 8-10, app 12-15) y apertura
-      maquina (planilla 12-15, app 10-12). Las refs coinciden
+- [ ] Dominadas con lastre desde Sem 4: definir si la ref es el lastre o el total.
+      Sobre el texto "BW" no se computa ni e1RM ni tonelaje
+- [ ] Los 8 swaps de Ciclo 3. Cinco son sustituciones de maquina: cada una corta la
+      serie de e1RM de su fila, asi que van al empezar el ciclo y no a mitad
 
 ---
 
@@ -416,3 +411,38 @@ semaforo, y por eso cambio.
 **Corolario**: la tecnica no puede ser texto libre. En el Excel entra por alias, como ya
 hacia `superset`. Lo que no se reconoce entra como nada — pintar de violeta algo que nadie
 sabe ejecutar es peor que no pintarlo.
+
+### 2026-08-05 — El e1RM no cuenta los escalones del dropset
+
+**Decision**: el tonelaje los suma, el e1RM sale solo de la serie principal.
+
+**Motivo**: el argumento de que incluirlos era "seguro por construccion" —la
+semana toma el MAXIMO y un escalon pesa menos, asi que no puede bajar el
+numero— mira media pregunta. No puede bajar, pero puede SUBIR sin que haya mas
+fuerza. Con las refs reales: gemelo sentado 50x15 da 81.8 y su propio descuelgue
+a 38.8kg lo pasa a las 20 reps, que en gemelos es lo normal; a 25 reps daria 116,
+un +42%. Y los tres ejercicios con dropset son aislamientos de rango alto, justo
+donde Brzycki pierde precision.
+
+**Lo que lo vuelve grave y no cosmetico**: el semaforo y las reglas de progresion
+leen ese numero para decidir si subir carga.
+
+`programa_tecnicas_ciclo2.md` ya lo habia decidido asi en su seccion 9. Ver
+[Fuente de verdad externa] en `CLAUDE.md`.
+
+### 2026-08-05 — Sustituir un ejercicio es un script, no una edicion a mano
+
+**Decision**: `scripts/sustituir-ejercicio.mjs`. El viejo sale del programa con
+su historial, el nuevo entra con id propio y con su entrada de catalogo.
+
+**Motivo**: vienen cinco sustituciones en Ciclo 3 y a mano se pierde algo cada
+vez. Dos que el script resuelve y una edicion manual no: `superset_with` es
+ON DELETE SET NULL, asi que borrar un ejercicio apareado deja al companero
+huerfano **en silencio**; y una fila con `exercise_id` NULL pierde la identidad
+del ejercicio entre dispositivos, que es lo que la v04 vino a arreglar.
+
+**Corolario del ensayo**: reordenar ejercicios dentro de una sesion viola
+`UNIQUE (program_id, session_code, order_idx)` a mitad del lote aunque al final
+quede consistente. Hay que mover todo a un rango libre primero. Un `--dry` no lo
+detecta — se descubre escribiendo, y para eso esta `scripts/ensayo-ciclo2.mjs`,
+que copia produccion a una base descartable.
