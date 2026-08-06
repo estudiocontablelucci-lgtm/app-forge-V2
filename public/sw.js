@@ -181,3 +181,25 @@ self.addEventListener("fetch", (e) => {
   if (esEstatico(url)) { e.respondWith(deCacheORed(request)); return; }
   // Todo lo demas: red, sin intervenir.
 });
+
+/**
+ * Tocar la notificacion de fin de descanso trae la app al frente.
+ *
+ * Sin esto la notificacion se cierra y no pasa nada: hay que ir a buscar la app
+ * a mano, que estando a mitad de una serie es exactamente lo que no se quiere
+ * hacer. Se busca una ventana ya abierta antes de abrir una nueva — la app
+ * instalada suele estar viva en segundo plano, y abrir otra encima perderia el
+ * entrenamiento en curso de la primera.
+ */
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const abiertas = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of abiertas) {
+      if (new URL(c.url).origin !== self.location.origin) continue;
+      await c.focus();
+      return;
+    }
+    await self.clients.openWindow("/");
+  })());
+});

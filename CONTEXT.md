@@ -6,9 +6,9 @@ Estado actual del proyecto y decisiones tomadas.
 
 ## Estado general
 
-**Fase**: fases 1 a 7 cerradas. Sin fase 8 definida.
+**Fase**: fases 1 a 8 cerradas. Sin fase 9 definida.
 **Deploy**: https://forge-v2-five.vercel.app — push a `main` deploya solo
-**Ultima actualizacion**: 2026-08-05
+**Ultima actualizacion**: 2026-08-06
 
 > El deploy sale de `main`. Una feature no esta en produccion hasta que su rama se
 > mergea a `main` y se pushea — verificar antes de dar una fase por cerrada.
@@ -129,6 +129,109 @@ La app del ATLETA sigue siendo mobile-first a 430px; la del entrenador es otra c
 - [x] El descanso espera al ultimo escalon
 - [x] Los tres dropsets que la planilla ya prescribia, cargados en el Ciclo 2 real
 
+## Fase 8 — el descanso, el aviso y las ayudas (cerrada)
+
+Tres bugs reportados en uso real el 2026-08-06, con tres causas distintas.
+
+- [x] El descanso es un VENCIMIENTO (`lib/descanso.js`), no una cuenta regresiva
+- [x] Cambiar de pestaña ya no lo cancela; sobrevive al segundo plano y a cerrar la app
+- [x] Beep agendado en el grafo de audio + tono de sosten: suena con la pantalla apagada
+- [x] Preferencias en el Perfil: cronometro, sonido, vibracion, notificacion, ayudas
+- [x] El candado del programa avisa con `.toast`, no con un `alert()` del sistema
+- [x] Ayudas contextuales: semaforo (que no tenia leyenda en ninguna parte), e1RM,
+      tonelaje, la linea de prescripcion (Ref/T/D/RIR) y primeros pasos
+- [x] `verify-descanso` (15 checks) + `check_descanso_ui.py` con navegador
+
+### 2026-08-06 — El descanso se guarda como vencimiento, no como cuenta regresiva
+
+**Decision**: `{ id, total, fin }` con `fin` en milisegundos de reloj. Lo que queda
+se deriva del reloj cada vez que se mira.
+
+**Motivo**: la version anterior guardaba `remaining` y le restaba 1 cada segundo
+dentro de un `setInterval`. Eso funciona mientras la pagina esta despierta y falla
+en el unico momento que importa: un intervalo se congela con la pagina, asi que al
+volver de bloquear el telefono el descanso "de 2 minutos" seguia marcando 1:47.
+Los 40 segundos que la app estuvo dormida no los conto nadie.
+
+**Consecuencia que sale gratis**: se persiste en el localStorage y sobrevive a que
+el sistema mate la app. Se descarta el que vencio hace mas de diez minutos —
+cantar "A LA BARRA" al abrir la app al otro dia es peor que no restaurar nada.
+
+### 2026-08-06 — Cambiar de pestaña no cancela el descanso
+
+**Decision**: se saca el `setTimer(null)` del `onClick` de la tabbar.
+
+**Motivo**: estaba puesto a proposito y la intencion se entiende —el cronometro es
+de la pantalla de entrenar— pero confunde la pantalla con el hecho. El descanso es
+tiempo real: sigue corriendo aunque uno vaya a mirar cuanto levanto la semana
+pasada. La barra ya se dibujaba fuera de los condicionales de pestaña.
+
+### 2026-08-06 — El beep se agenda en el grafo de audio
+
+**Decision**: `osc.start(t)` en tiempo absoluto del AudioContext al arrancar el
+descanso, mas un tono de 30 Hz a volumen 0,0015 mientras corre.
+
+**Motivo**: con la pantalla apagada el navegador congela la pagina. Los
+`setTimeout` no corren, `navigator.vibrate` no dispara y no hay API de
+notificacion programada que sirva — Notification Triggers quedo en experimento y
+nunca salio. Lo unico que corre en su propio hilo y a tiempo real es el grafo de
+audio. El tono inaudible existe porque una pagina que ESTA reproduciendo audio no
+se congela; ningun parlante de telefono reproduce 30 Hz.
+
+**Lo que NO se puede prometer**: si el sistema congela igual (bateria baja), el
+beep agendado no sale. Se detecta —el reloj del AudioContext se paro con la
+pagina, asi que `beepPendiente()` sigue en true— y se toca al volver. Es un aviso
+tarde, no un aviso perdido.
+
+**La notificacion arranca APAGADA** y el permiso se pide al prenderla desde el
+Perfil. Un pedido que aparece sin que nadie lo haya buscado se rechaza de un dedo,
+y un `denied` no se puede volver a preguntar nunca mas.
+
+### 2026-08-06 — Las ayudas viven donde nace la duda, no en un tour
+
+**Decision**: ayudas contextuales permanentes (`components/Ayuda.jsx`), cerradas
+por defecto, apagables enteras desde el Perfil. No hay tour de bienvenida.
+
+**Motivo (elegido por Agustin sobre las otras dos opciones)**: un tour explica todo
+el primer dia, cuando todavia no hay ninguna pregunta, y no esta el dia que la
+pregunta aparece — que en esta app es a mitad de una serie. Es ademas el patron que
+la app ya usaba (`vacio-card`, `fhint`, `tec-ayuda`), extendido a lo que faltaba.
+
+**Lo que estaba sin explicar y ahora se explica**: el punto de color del semaforo
+—que existia desde la primera version y no tenia leyenda en ninguna pantalla,
+porque `SEM_LABELS` solo se usaba para el export a Excel—, el e1RM, el tonelaje, y
+la linea `Ref / T / D / RIR`, que es la prescripcion entera del ejercicio en cuatro
+abreviaturas.
+
+### 2026-08-06 — Un `alert()` no es un aviso de la app
+
+**Decision**: `.toast` para lo que informa, `confirm-box` para lo que decide.
+
+**Motivo**: en el telefono un `alert()` es una caja del sistema operativo. Bloquea
+la app, no se parece en nada al resto y hay que tocarla para seguir. El candado del
+programa es informacion, no una decision: se va solo.
+
+**Queda pendiente**: los dos `window.confirm` que quedan (borrar una sesion y
+borrar un programa) siguen siendo cajas del sistema. Son decisiones destructivas,
+asi que les corresponde `confirm-box` y no un toast — pero eso pide un modal
+generico con callback y una entrada mas en la cadena del boton atras.
+
+### 2026-08-06 — `Page.setWebLifecycleState` no reproduce una pagina congelada
+
+**Corolario de metodo, no de producto.** El primer check usaba CDP para congelar la
+pagina y pasaba TAMBIEN con el bug puesto: en Chromium headless los intervalos
+siguen corriendo. Un check que pasa con y sin el arreglo no es evidencia, es
+confianza falsa.
+
+Lo que si lo reproduce es el reloj de Playwright: `pause_at` deja los
+temporizadores quietos y `set_system_time` adelanta la hora sin dispararlos — el
+mundo avanzo y nadie ejecuto una linea de JavaScript. **Los dos reciben SEGUNDOS**;
+pasarles un `Date.now()` crudo lo interpreta como segundos y manda el reloj al año
+58.000, que se ve como un descanso vencido hace milenios.
+
+Verificado corriendo `check_descanso_ui.py` contra `main`: 8 fallas, una por cada
+sintoma reportado. Contra la rama: todo OK.
+
 ## Pendiente (futuro)
 
 - [ ] **Decidir si el dropset se desactiva en deload.** Se acordo que si y quedo sin
@@ -142,6 +245,9 @@ La app del ATLETA sigue siendo mobile-first a 430px; la del entrenador es otra c
 - [ ] Plan / limite de alumnos por entrenador (patron `features` JSON, como Tesoreria)
 - [ ] Borrar un ejercicio no viaja entre dispositivos del mismo usuario (el programa si)
 - [ ] Exportar programa a Excel (el historial ya se exporta)
+- [ ] Los dos `window.confirm` que quedan (borrar sesion, borrar programa) →
+      `confirm-box`. Pide un modal generico con callback y su entrada en la
+      cadena del boton atras
 - [ ] Prediccion de carga (regresion lineal e1RM)
 - [ ] Dominadas con lastre desde Sem 4: definir si la ref es el lastre o el total.
       Sobre el texto "BW" no se computa ni e1RM ni tonelaje

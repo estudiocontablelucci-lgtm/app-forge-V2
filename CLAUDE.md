@@ -39,6 +39,7 @@ app-forge-v2/
 ├── components/
 │   ├── ForgeApp.jsx       # monolito del atleta (~1400 lineas, "use client")
 │   ├── LoginForm.jsx      # formulario de acceso (client)
+│   ├── Ayuda.jsx          # el "?" que explica, en la pantalla donde nace la duda
 │   └── coach/             # la seccion de entrenador, con su propio CSS
 │       ├── CoachApp.jsx        # shell + selector de alumno + invitar
 │       ├── AlumnoFicha.jsx     # metricas de seguimiento
@@ -52,6 +53,8 @@ app-forge-v2/
 │   ├── coach/             # metrics.js (funciones puras) + invite-email.js
 │   ├── medidas.js         # medidas corporales: derivadas, proporciones, asimetrias
 │   ├── asistencia.js      # dias de gimnasio por mes, promedios, racha
+│   ├── descanso.js        # el descanso como VENCIMIENTO + las preferencias
+│   ├── aviso.js           # beep agendado en el grafo de audio, vibracion, notificacion
 │   ├── sync/              # ids.js (prefijos), service.js, client.js
 │   └── repo/              # users, programs, training, coaching, catalog, medidas, asistencia
 ├── db/
@@ -85,7 +88,9 @@ app-forge-v2/
 │   ├── check_ui.py            # headless: falla si una ruta no hidrata
 │   ├── check_pwa.py           # headless: instalable y ABRE SIN RED (contra next start)
 │   ├── gen_iconos.py          # rasteriza favicon.svg a los PNG del manifest
-│   └── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
+│   ├── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
+│   ├── verify-descanso.mjs    # el vencimiento, la restauracion y las preferencias
+│   └── check_descanso_ui.py   # headless: el cronometro, con el reloj adelantado
 ├── data/                  # .xlsx generados (gitignored — datos personales)
 ├── forge-arquitectura.md  # documento de diseno tecnico completo
 ├── forge-mvp.jsx          # version anterior de referencia
@@ -273,7 +278,7 @@ Restriccion medica que condiciona la seleccion de ejercicios: discopatias lumbar
 Sustitutos validos en uso: sentadilla pendular, prensa horizontal, prensa 45, trap bar, hip thrust.
 
 `npm run gen:programa` genera `data/*.xlsx` para importar por el wizard (el SEED solo aplica a
-instalaciones nuevas). `npm run verify` corre las 8 suites (120 checks, sin navegador).
+instalaciones nuevas). `npm run verify` corre las suites sin navegador (255 checks).
 
 Para lo que el verify no ve, que es donde aparecieron los ultimos bugs, hay dos
 verificadores con navegador: `npm run verify:ui` (generico) y
@@ -453,6 +458,57 @@ perfil conocido (`perfilLocal`) y lo usa para dos cosas: no decir "Entrar" a
 alguien que tiene cuenta, y marcar como pendiente de subir la sesion que se
 termino sin señal — que era justo el caso para el que se escribio ese aviso.
 
+## El descanso entre series (fase 8)
+
+**El descanso se guarda como VENCIMIENTO, no como cuenta regresiva.**
+`lib/descanso.js` guarda `fin` (milisegundos de reloj) y lo que queda se DERIVA
+cada vez que se mira. La version anterior restaba 1 por segundo dentro de un
+`setInterval`, y un intervalo se congela con la pagina: al volver de bloquear el
+telefono, el descanso "de 2 minutos" seguia marcando 1:47 porque los 40 segundos
+que la app estuvo dormida no los conto nadie. Sale gratis que sobreviva a que el
+sistema mate la app: guardado como vencimiento, restaurarlo es leerlo.
+
+**Cambiar de pestaña NO lo cancela.** Lo cancelaba a proposito una linea en la
+tabbar. El descanso es tiempo real: sigue corriendo aunque uno mire el
+historial. La barra se dibuja fuera de las pestañas.
+
+**El beep se AGENDA en el grafo de audio, no se dispara con un `setTimeout`.**
+Con la pantalla apagada el navegador congela la pagina: los temporizadores no
+corren, `navigator.vibrate` no dispara y no hay API de notificacion programada
+que sirva (Notification Triggers quedo en experimento). El grafo de audio corre
+en su propio hilo, asi que `osc.start(t)` en tiempo absoluto suena aunque nadie
+vuelva a ejecutar una linea de JS.
+
+**Y para que el grafo no se suspenda, suena un tono de 30 Hz a volumen 0,0015.**
+Ningun parlante de telefono reproduce 30 Hz, pero para el navegador la pagina
+esta emitiendo audio y no la congela. Si igual se congela, `beepPendiente()` lo
+delata —el reloj del AudioContext se paro con la pagina— y el beep se toca al
+volver en vez de tragarse el aviso.
+
+**Preferencias en el Perfil** (`prefs` en el localStorage): cronometro, sonido,
+vibracion, notificacion y ayudas. La notificacion arranca APAGADA y el permiso se
+pide al prenderla: un pedido que aparece sin que nadie lo haya buscado se rechaza
+de un dedo, y un `denied` no se puede volver a preguntar nunca mas.
+
+**`Page.setWebLifecycleState: frozen` por CDP no reproduce el congelamiento.** En
+Chromium headless los intervalos siguen corriendo, asi que el check pasaba
+tambien con el bug puesto — confianza falsa, que es peor que no tener check. Lo
+que si lo reproduce es el reloj de Playwright: `pause_at` deja los temporizadores
+quietos y `set_system_time` adelanta la hora sin dispararlos. **Los dos reciben
+SEGUNDOS**; pasarles un `Date.now()` crudo manda el reloj al año 58.000.
+`npm run verify:descanso-ui` lo corre entero, sin cuenta ni base de datos.
+
+**Los avisos de la app no son `alert()`.** En el telefono un `alert()` es una caja
+del sistema operativo: bloquea la app, no se parece en nada al resto y hay que
+tocarla para seguir. El candado del programa usa `.toast`, que flota sobre la
+tabbar y se va solo. Para lo que SI es una decision esta `confirm-box`.
+
+**Las ayudas viven donde nace la duda, no en un tour.** Un tour explica todo el
+primer dia, cuando todavia no hay ninguna pregunta, y no esta el dia que la
+pregunta aparece. El punto de color del semaforo existia desde la primera version
+sin una sola pantalla que dijera que significa: `SEM_LABELS` solo se usaba para
+el export a Excel.
+
 ## Tecnicas de ejecucion (fase 7)
 
 Hay DOS ejes y la app los venia mezclando. Confundirlos lleva a modelar el
@@ -550,6 +606,9 @@ Tres reglas que valen mas que su implementacion:
 6. ~~PWA offline: instalable, abre sin red, sin romper el deploy~~ Done
 7. ~~Tecnicas de ejecucion: dropset en el programa y en Entrenar, con escalones
    que suman al tonelaje y al e1RM~~ Done
+8. ~~El descanso como vencimiento (sobrevive a la pestaña, al segundo plano y a
+   que se cierre la app), aviso que suena con la pantalla apagada, preferencias
+   y ayudas contextuales~~ Done
 
 ### Dos cosas del sync que ya rompieron
 
