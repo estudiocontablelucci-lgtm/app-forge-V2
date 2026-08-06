@@ -102,6 +102,9 @@ def main() -> int:
             "localStorage.setItem('forge-v2', JSON.stringify(%s)); } catch (e) {}"
             % json.dumps(ESTADO)
         )
+        # El reloj falso se instala ANTES de cargar: despues, la app ya tomo el
+        # `Date.now()` de verdad y adelantarlo no le dice nada.
+        pg.clock.install()
         pg.goto(base, wait_until="networkidle", timeout=30000)
         pg.wait_for_timeout(2500)
 
@@ -127,11 +130,41 @@ def main() -> int:
         check("el descanso arranco al cargar las reps", t0 is not None and t0 > 250,
               f"la barra marca {t0}")
 
+        # El congelamiento va PRIMERO y sin cambiar de pestaña. Son dos bugs
+        # distintos y cada uno tiene que fallar por su cuenta: puesto despues,
+        # la barra ya no existia (la mataba el cambio de pestaña) y este bloque
+        # medía None contra None en vez de medir el atraso.
+        print(f"\ncon la pagina CONGELADA {args.congelar}s (telefono bloqueado)")
+        antes = segundos(pg)
+        # `Page.setWebLifecycleState: frozen` por CDP NO sirve para esto: en
+        # Chromium headless los intervalos siguen corriendo igual, asi que el
+        # check pasaba tambien con el bug puesto — confianza falsa, que es peor
+        # que no tener check. Lo que si lo reproduce es el reloj de Playwright:
+        # `pause_at` deja los temporizadores quietos y `set_system_time`
+        # adelanta la hora SIN dispararlos. Eso es exactamente lo que ve la app
+        # cuando el telefono se bloquea: el mundo avanzo y nadie ejecuto una
+        # linea de JavaScript.
+        #
+        # Los dos reciben SEGUNDOS, no milisegundos. Pasarle un `Date.now()`
+        # crudo lo interpreta como segundos y manda el reloj al año 58.000.
+        ahora = pg.evaluate("Date.now()")
+        pg.clock.pause_at(ahora / 1000)
+        pg.clock.set_system_time((ahora + args.congelar * 1000) / 1000)
+        pg.clock.resume()
+        pg.wait_for_timeout(900)
+        despues = segundos(pg)
+
+        bajo = (antes - despues) if (antes is not None and despues is not None) else None
+        check("los segundos congelados SI se contaron",
+              bajo is not None and bajo >= args.congelar - 1,
+              f"marcaba {antes} y ahora marca {despues}: bajo {bajo}s con la hora "
+              f"adelantada {args.congelar}s y los temporizadores quietos. "
+              f"La cuenta regresiva se congelo con la pagina")
+
         print("\ncambiar de pestaña NO lo cancela")
         pg.locator(".tabbar button").nth(2).click()   # Historial
         pg.wait_for_timeout(700)
-        t_hist = segundos(pg)
-        check("sigue corriendo desde Historial", t_hist is not None,
+        check("sigue corriendo desde Historial", segundos(pg) is not None,
               "la barra desaparecio al salir de Entrenar — el bug reportado")
 
         pg.locator(".tabbar button").nth(3).click()   # Progreso
@@ -143,25 +176,6 @@ def main() -> int:
         pg.wait_for_timeout(700)
         check("y al volver a Entrenar sigue ahi", segundos(pg) is not None,
               "volver a Entrenar no la recupero")
-
-        print(f"\ncon la pagina CONGELADA {args.congelar}s (telefono bloqueado)")
-        antes = segundos(pg)
-        cdp = ctx.new_cdp_session(pg)
-        cdp.send("Page.enable")
-        cdp.send("Page.setWebLifecycleState", {"state": "frozen"})
-        # El sleep corre en el test, no en la pagina: la pagina esta congelada y
-        # no ejecuta nada. Eso es exactamente lo que pasa con la pantalla apagada.
-        pg.wait_for_timeout(args.congelar * 1000)
-        cdp.send("Page.setWebLifecycleState", {"state": "active"})
-        pg.wait_for_timeout(900)
-        despues = segundos(pg)
-
-        bajo = (antes - despues) if (antes is not None and despues is not None) else None
-        # Margen de 2s para el ida y vuelta del CDP y el propio wait.
-        check("los segundos congelados SI se contaron",
-              bajo is not None and bajo >= args.congelar - 1,
-              f"marcaba {antes} y ahora marca {despues}: bajo {bajo}s en {args.congelar}s "
-              f"de pagina congelada. La cuenta regresiva se congelo con la pagina")
 
         print("\nsobrevivir a que se cierre la app")
         antes_reload = segundos(pg)
