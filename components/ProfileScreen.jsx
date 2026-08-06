@@ -5,10 +5,41 @@ import { useSession, signOut } from "next-auth/react";
 import { despertarAudio, beepYa, estadoNotificacion, pedirPermisoNotificacion } from "@/lib/aviso";
 import { PREFS_DEFAULT } from "@/lib/descanso";
 
+/**
+ * Una seccion del Perfil, plegada por defecto.
+ *
+ * La pantalla paso de tres tarjetas a seis y dejo de leerse de un vistazo: para
+ * llegar a "Entrenar a otros" habia que pasar por veinte lineas de
+ * preferencias. Plegadas, cada seccion ocupa un renglon y el orden de la
+ * pantalla vuelve a ser visible.
+ *
+ * El `resumen` es lo que se ve SIN abrir. No es decorativo: el estado de la
+ * conexion y del modo sin conexion tiene que poder leerse sin desplegar nada —
+ * es lo unico que hay para diagnosticar "no abre sin señal" en un telefono sin
+ * devtools, y esconderlo detras de un toque lo volveria inservible.
+ */
+function Seccion({ titulo, resumen, children, abiertaPorDefecto = false }) {
+  const [abierta, setAbierta] = useState(abiertaPorDefecto);
+  return (
+    <div className={`sec ${abierta ? "on" : ""}`}>
+      <button type="button" className="sec-head" aria-expanded={abierta} onClick={() => setAbierta((a) => !a)}>
+        <span className="sec-txt">
+          <span className="sec-t">{titulo}</span>
+          {resumen && <span className="sec-r">{resumen}</span>}
+        </span>
+        <span className="sec-flecha" aria-hidden="true">›</span>
+      </button>
+      {abierta && <div className="sec-cuerpo">{children}</div>}
+    </div>
+  );
+}
+
 /** Una preferencia: titulo, explicacion de que hace, y el interruptor. */
 function Pref({ id, titulo, detalle, valor, onChange, deshabilitado = false }) {
   return (
     <div className={`pref ${valor ? "" : "off"}`}>
+      {/* Cada uno en su renglon. Eran dos <span> sueltos —o sea, en linea— y
+          en pantalla se leia "Cronómetro de descansoArranca solo al cerrar". */}
       <label className="pref-txt" htmlFor={id}>
         <span className="pref-t">{titulo}</span>
         <span className="pref-d">{detalle}</span>
@@ -146,6 +177,26 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
   const sucio = user && (nombre !== (user.displayName || "") ||
     peso !== (user.bodyWeightKg == null ? "" : String(user.bodyWeightKg)));
 
+  /**
+   * Lo que dice cada seccion SIN abrirla.
+   *
+   * Sin esto, plegar la de conexion escondia el unico diagnostico que hay para
+   * "no abre sin señal" en un telefono sin devtools, y el arreglo habria sido
+   * peor que el problema que resuelve.
+   */
+  const conectado = hayRed && estado !== "sin-red";
+  const resumenConexion = [
+    conectado ? "Con conexión" : "Sin conexión",
+    offline?.estado === "listo" && offline.archivos > 5 ? "abre sin red"
+      : offline?.estado === "esperando" ? "hay una versión nueva esperando"
+      : offline?.estado === "sin-registrar" ? "todavía no abre sin red"
+      : null,
+  ].filter(Boolean).join(" · ");
+
+  const resumenConfig = prefs.descanso
+    ? `Cronómetro ${[prefs.sonido && "con sonido", prefs.vibracion && "y vibración"].filter(Boolean).join(" ") || "en silencio"}`
+    : "Cronómetro apagado";
+
   return (
     <div className="screen">
       {/* Salir del perfil es lo que mas se hace acá y estaba al fondo de todo,
@@ -177,51 +228,9 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
         </div>
       )}
 
-      {/* El estado del modo offline va FUERA del bloque que depende del
-          servidor: estaba adentro, asi que la unica pantalla que explica por que
-          la app no anda sin conexion solo aparecia CON conexion. */}
-      <div className="card">
-        {/* El titulo describe una CAPACIDAD, no el estado de la conexion. Decia
-            "Modo sin conexión: listo" y se leia como "estás sin conexión": con
-            la red ya de vuelta, la app parecia trabada. El estado real va
-            primero y aparte. */}
-        <div className="flabel">Conexión</div>
-        {/* Con la evidencia propia incluida: si el pedido de esta misma pantalla
-            fallo por falta de red, decir "con conexión" seria contradecirse. */}
-        <p className="fhint" style={{ marginBottom: 12 }}>
-          Ahora mismo: <strong>{hayRed && estado !== "sin-red" ? "con conexión" : "sin conexión"}</strong>.
-          {hayRed && estado !== "sin-red"
-            ? " Todo se sincroniza normalmente."
-            : " Podés entrenar igual; se sube cuando vuelva."}
-        </p>
-
-        <div className="flabel">Funciona sin conexión</div>
-        {!offline && <p className="fhint">Revisando…</p>}
-        {offline?.estado === "no-soportado" && (
-          <p className="fhint">Este navegador no lo soporta. Probá con Chrome o Safari.</p>
-        )}
-        {offline?.estado === "sin-registrar" && (
-          <p className="fhint">No está activo. Abrí la app con conexión y volvé a entrar acá.</p>
-        )}
-        {offline?.estado === "instalando" && <p className="fhint">Preparándose…</p>}
-        {offline?.estado === "esperando" && (
-          <p className="fhint">
-            Hay una versión nueva esperando. <strong>Cerrá la app del todo</strong> (sacala de las
-            apps recientes) y volvé a abrirla con conexión para que tome el control.
-            {" "}Archivos guardados: {offline.archivos}.
-          </p>
-        )}
-        {offline?.estado === "listo" && (
-          <p className="fhint">
-            {offline.archivos > 5
-              ? <>Preparado — <strong>{offline.archivos} archivos guardados</strong>. Si te quedás sin señal, la app abre igual.</>
-              : <>Preparándose: solo {offline.archivos} archivos. Abrí la app con conexión una vez más
-                 para que termine de guardar lo que falta.</>}
-            {offline.instalada ? " Estás usando la app instalada." : " Estás en el navegador, no en la app instalada."}
-          </p>
-        )}
-      </div>
-
+      {/* ============ 1 · PERFIL ============
+          Quien sos va primero: es el titulo de la pantalla. Antes lo primero
+          era el estado de la conexion, que es diagnostico y no identidad. */}
       {user && (
         <>
           <div className="card prof-head">
@@ -250,17 +259,31 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
             </button>
           </div>
 
-          {/* Las preferencias van ARRIBA de la sincronizacion y de la puerta
-              al entrenador: son de las pocas cosas de esta pantalla que se
-              tocan mas de una vez, y estaban en ninguna parte. */}
-          <div className="card">
-            <div className="flabel">Descanso entre series</div>
-            <p className="fhint" style={{ marginBottom: 6 }}>
-              El cronómetro arranca al cargar las repeticiones de la última serie del bloque.
-              Sigue corriendo aunque cambies de pestaña o salgas de la app.
-            </p>
+          {/* ============ 2 · ENTRENAR A OTROS ============
+              Sube y deja de ser un enlace gris al fondo. Es un cambio de app
+              entera —la del entrenador, con su propio ancho y su selector de
+              alumno— y se leia como una nota al pie. */}
+          <a className="puerta" href="/entrenador">
+            <span className="puerta-ico" aria-hidden="true">👥</span>
+            <span className="puerta-txt">
+              <span className="puerta-t">Entrenar a otros</span>
+              <span className="puerta-d">Tus alumnos y cómo les va</span>
+            </span>
+            <span className="puerta-flecha" aria-hidden="true">→</span>
+          </a>
+        </>
+      )}
 
-            <Pref
+      {/* ============ 3 · CONFIGURACIÓN ============ */}
+      {user && (
+        <Seccion titulo="Configuración" resumen={resumenConfig}>
+          <div className="flabel">Descanso entre series</div>
+          <p className="fhint" style={{ marginBottom: 6 }}>
+            El cronómetro arranca al cargar las repeticiones de la última serie del bloque.
+            Sigue corriendo aunque cambies de pestaña o salgas de la app.
+          </p>
+
+          <Pref
               id="pref-descanso"
               titulo="Cronómetro de descanso"
               detalle="Arranca solo al cerrar cada serie. Apagado, no aparece nunca."
@@ -316,24 +339,72 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
               }}
             />
 
-            {permisoNotif === "default" && prefs.descanso && (
-              <p className="fhint">Al activarla, el navegador va a pedirte permiso una vez.</p>
-            )}
-          </div>
+          {permisoNotif === "default" && prefs.descanso && (
+            <p className="fhint">Al activarla, el navegador va a pedirte permiso una vez.</p>
+          )}
 
-          <div className="card">
-            <div className="flabel">Ayudas en pantalla</div>
-            <Pref
-              id="pref-ayudas"
-              titulo="Mostrar las ayudas"
-              detalle="Los botones con “?” que explican el semáforo, el e1RM, el RIR y el tonelaje. Apagalos cuando ya no los necesites."
-              valor={prefs.ayudas}
-              onChange={(v) => onPrefs({ ayudas: v })}
-            />
-          </div>
+          <div className="flabel" style={{ marginTop: 18 }}>Ayudas en pantalla</div>
+          <Pref
+            id="pref-ayudas"
+            titulo="Mostrar las ayudas"
+            detalle="Los botones con “?” que explican el semáforo, el e1RM, el RIR y el tonelaje. Apagalos cuando ya no los necesites."
+            valor={prefs.ayudas}
+            onChange={(v) => onPrefs({ ayudas: v })}
+          />
+        </Seccion>
+      )}
 
-          <div className="card">
-            <div className="flabel">Sincronización</div>
+      {/* ============ 4 · CONEXIÓN ============
+          Va FUERA del bloque que depende del servidor: estaba adentro, asi que
+          la unica pantalla que explica por que la app no anda sin conexion solo
+          aparecia CON conexion.
+
+          El resumen del encabezado lleva el estado real, asi que plegarla no
+          esconde el diagnostico — que es justo para lo que existe. */}
+      <Seccion titulo="Conexión y sincronización" resumen={resumenConexion}>
+        {/* El titulo describe una CAPACIDAD, no el estado de la conexion. Decia
+            "Modo sin conexión: listo" y se leia como "estás sin conexión": con
+            la red ya de vuelta, la app parecia trabada. El estado real va
+            primero y aparte. */}
+        <div className="flabel">Ahora mismo</div>
+        {/* Con la evidencia propia incluida: si el pedido de esta misma pantalla
+            fallo por falta de red, decir "con conexión" seria contradecirse. */}
+        <p className="fhint" style={{ marginBottom: 12 }}>
+          <strong>{conectado ? "Con conexión" : "Sin conexión"}</strong>.
+          {conectado
+            ? " Todo se sincroniza normalmente."
+            : " Podés entrenar igual; se sube cuando vuelva."}
+        </p>
+
+        <div className="flabel">Funciona sin conexión</div>
+        {!offline && <p className="fhint">Revisando…</p>}
+        {offline?.estado === "no-soportado" && (
+          <p className="fhint">Este navegador no lo soporta. Probá con Chrome o Safari.</p>
+        )}
+        {offline?.estado === "sin-registrar" && (
+          <p className="fhint">No está activo. Abrí la app con conexión y volvé a entrar acá.</p>
+        )}
+        {offline?.estado === "instalando" && <p className="fhint">Preparándose…</p>}
+        {offline?.estado === "esperando" && (
+          <p className="fhint">
+            Hay una versión nueva esperando. <strong>Cerrá la app del todo</strong> (sacala de las
+            apps recientes) y volvé a abrirla con conexión para que tome el control.
+            {" "}Archivos guardados: {offline.archivos}.
+          </p>
+        )}
+        {offline?.estado === "listo" && (
+          <p className="fhint">
+            {offline.archivos > 5
+              ? <>Preparado — <strong>{offline.archivos} archivos guardados</strong>. Si te quedás sin señal, la app abre igual.</>
+              : <>Preparándose: solo {offline.archivos} archivos. Abrí la app con conexión una vez más
+                 para que termine de guardar lo que falta.</>}
+            {offline.instalada ? " Estás usando la app instalada." : " Estás en el navegador, no en la app instalada."}
+          </p>
+        )}
+
+        {user && (
+          <>
+            <div className="flabel" style={{ marginTop: 18 }}>Sincronización</div>
             <p className="fhint">{syncState || "Los entrenamientos se suben al terminar cada sesión."}</p>
             {onSync && (
               <button className="btn-secondary" onClick={onSync} disabled={syncing}>
@@ -344,21 +415,18 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
               Baja lo que esté en la nube y sube las sesiones que hayan quedado
               en el teléfono por falta de señal.
             </p>
-          </div>
+          </>
+        )}
+      </Seccion>
 
-
-          {/* Un enlace, no una seccion. Entrenar a otros dejo de vivir adentro
-              del Perfil: tiene pantalla propia, con ancho de escritorio y un
-              selector de alumno. Aca queda solo la puerta, porque para invitar
-              al primero hace falta poder llegar. */}
-          <a className="btn-ghost" href="/entrenador">Entrenar a otros →</a>
-
-          <button className="btn-primary" onClick={onClose} style={{ marginTop: 20 }}>Volver a entrenar</button>
-          <button className="btn-salir" onClick={() => signOut({ callbackUrl: "/" })}>Cerrar sesión</button>
-        </>
-      )}
-
-      {!user && <button className="btn-primary" onClick={onClose}>Volver a entrenar</button>}
+      {/* "Volver a entrenar" ya esta arriba de todo y es lo que mas se toca.
+          Aca abajo queda como secundario para no competir con la puerta al
+          entrenador, que es la unica accion de esta pantalla que lleva a otro
+          lado. */}
+      <button className={user ? "btn-secondary" : "btn-primary"} onClick={onClose} style={{ marginTop: 20 }}>
+        Volver a entrenar
+      </button>
+      {user && <button className="btn-salir" onClick={() => signOut({ callbackUrl: "/" })}>Cerrar sesión</button>}
     </div>
   );
 }

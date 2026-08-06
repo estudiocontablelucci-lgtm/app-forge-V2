@@ -1489,7 +1489,19 @@ export default function ForgeApp() {
               <div className="brand">FORGE</div>
               <div className="prog-header-row">
                 <h1>{activeProgram?.name || "Programa"}</h1>
-                <button className="prog-switch-btn" onClick={() => setProgramListView(true)}>&#9776;</button>
+                {/* Dice a donde lleva. Era un hamburguesa suelto, y ese icono
+                    en una app significa "el menu de la app": nadie adivina que
+                    abre la lista de programas para cambiar de programa. */}
+                {/* Dice a donde lleva. Era un hamburguesa suelto, y ese icono
+                    en una app significa "el menu de la app": nadie adivina que
+                    abre la lista de programas para cambiar de programa.
+
+                    "Programas" y no "Mis programas": el nombre del programa
+                    activo es el titulo de la pantalla y con la etiqueta larga
+                    quedaba cortado en "Hipertrofi…". */}
+                <button className="prog-switch-btn" onClick={() => setProgramListView(true)}>
+                  <span aria-hidden="true">☰</span> Programas
+                </button>
               </div>
               <p className="sub">{esAsignado && <span className="prog-coach">de {activeProgram.coachName}</span>}{activeProgram?.weeks || 4} sem{activeProgram?.hasDeload ? " + deload" : ""} · {sessions.length} sesiones · {program.length} ejercicios {session === null && !esAsignado && <button className="prog-edit-link" onClick={() => setEditingProgram({ ...activeProgram })}>Editar programa</button>}</p>
             </header>
@@ -2912,12 +2924,39 @@ const CSS = `
 .sem-leyenda span { display: inline-flex; align-items: center; gap: 5px; font: 400 12px 'Inter'; color: #636366; }
 .sem-leyenda i { width: 9px; height: 9px; border-radius: 50%; }
 
-/* ---------- Preferencias (Perfil) ---------- */
+/* ---------- Secciones plegables del Perfil ----------
+   La pantalla paso de tres tarjetas a seis y dejo de leerse de un vistazo:
+   para llegar a "Entrenar a otros" habia que bajar por veinte lineas de
+   preferencias. Plegada, cada seccion ocupa un renglon. El resumen del
+   encabezado es lo que evita que plegar signifique esconder. */
+.sec { background: #FFF; border: none; border-radius: 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+.sec-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 16px 18px; border: 0; background: none; text-align: left; cursor: pointer; }
+.sec-txt { flex: 1; min-width: 0; }
+.sec-t { display: block; font: 600 15px 'Inter'; color: #1C1C1E; }
+.sec-r { display: block; font: 400 12.5px 'Inter'; color: #8E8E93; line-height: 1.4; margin-top: 3px; }
+.sec-flecha { flex: 0 0 auto; font-size: 20px; color: #C7C7CC; transition: transform .18s; }
+.sec.on .sec-flecha { transform: rotate(90deg); }
+.sec-cuerpo { padding: 0 18px 18px; }
+
+/* ---------- Preferencias (Perfil) ----------
+   Titulo y explicacion van en RENGLONES distintos. Eran dos <span> sueltos, o
+   sea en linea, y en pantalla se leia "Cronómetro de descansoArranca solo al
+   cerrar cada serie" — todo pegado. */
 .pref { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px solid #F0F0F4; }
 .pref:last-of-type { border-bottom: 0; }
-.pref-txt { flex: 1; }
-.pref-t { font: 600 14px 'Inter'; color: #1C1C1E; }
-.pref-d { font: 400 12px 'Inter'; color: #8E8E93; line-height: 1.45; margin-top: 2px; }
+.pref-txt { flex: 1; min-width: 0; }
+.pref-t { display: block; font: 600 14px 'Inter'; color: #1C1C1E; line-height: 1.35; }
+.pref-d { display: block; font: 400 12px 'Inter'; color: #8E8E93; line-height: 1.45; margin-top: 3px; }
+
+/* ---------- La puerta a la app del entrenador ----------
+   Era un enlace gris al fondo de la pantalla, debajo de todo. No es una opcion
+   mas: es cambiar de app entera. */
+a.puerta { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; padding: 15px 16px; border-radius: 14px; background: #2C6BED; color: #fff; text-decoration: none; box-shadow: 0 2px 10px rgba(44,107,237,.28); }
+.puerta-ico { flex: 0 0 auto; font-size: 22px; line-height: 1; }
+.puerta-txt { flex: 1; min-width: 0; }
+.puerta-t { display: block; font: 600 15px 'Inter'; }
+.puerta-d { display: block; font: 400 12.5px 'Inter'; color: rgba(255,255,255,.82); line-height: 1.4; margin-top: 2px; }
+.puerta-flecha { flex: 0 0 auto; font-size: 17px; color: rgba(255,255,255,.9); }
 .pref.off .pref-t, .pref.off .pref-d { color: #AEAEB2; }
 .sw { flex: 0 0 auto; position: relative; width: 50px; height: 30px; margin-top: 2px; border: 0; border-radius: 999px; background: #D1D1D6; cursor: pointer; transition: background .18s; }
 .sw.on { background: #2C6BED; }
@@ -3037,8 +3076,12 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 /* El boton de cuenta flota arriba a la derecha (position absolute), asi que
    esta fila tiene que dejarle su lugar o el menu de programas le queda debajo. */
 .prog-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-right: 46px; }
-.prog-header-row h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prog-switch-btn { width: 38px; height: 38px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #636366; font-size: 18px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+/* El nombre del programa se PARTE en dos renglones antes que cortarse. Con el
+   boton de la lista rotulado ("Programas" en vez de un hamburguesa) queda menos
+   ancho, y "Hipertrofia …" no identifica a un programa: es justo el dato que la
+   pantalla existe para mostrar. */
+.prog-header-row h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prog-switch-btn { height: 38px; padding: 0 13px; gap: 7px; border-radius: 999px; background: #FFF; border: 1px solid #2C6BED; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
 .export-btn { height: 38px; padding: 0 14px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; }
 .export-btn:active { background: #F2F2F7; }
 .prog-edit-link { background: none; border: none; color: #2C6BED; font: 500 12px 'Inter'; cursor: pointer; padding: 0; margin-left: 4px; text-decoration: underline; }

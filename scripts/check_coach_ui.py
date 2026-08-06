@@ -33,6 +33,24 @@ def check(label: str, ok: bool, detalle: str = "") -> None:
         fallas.append(f"{label}: {detalle}")
 
 
+def sincronizar_a_mano(pg, espera: int = 3000) -> None:
+    """
+    Aprieta "Sincronizar ahora" desde el Perfil.
+
+    Existe porque ese boton dejo de estar suelto en la pantalla: vive dentro de
+    la seccion plegable "Conexión y sincronización", asi que primero hay que
+    abrirla. Es un tap mas para el usuario y una linea mas para el test; la
+    alternativa era dejar el Perfil como un rollo de seis tarjetas.
+    """
+    for i in range(pg.locator(".sec-head").count()):
+        if "incroniza" in pg.locator(".sec-head").nth(i).inner_text():
+            pg.locator(".sec-head").nth(i).click()
+            pg.wait_for_timeout(500)
+            break
+    pg.get_by_text("Sincronizar ahora").first.click()
+    pg.wait_for_timeout(espera)
+
+
 def sesion(ctx, token: str, base: str):
     host = urlparse(base).hostname
     ctx.add_cookies([{
@@ -430,8 +448,7 @@ def main() -> int:
         # Sincroniza para subirlo.
         p1.locator(".acct").first.click()
         p1.wait_for_timeout(1200)
-        p1.get_by_text("Sincronizar ahora").first.click()
-        p1.wait_for_timeout(3000)
+        sincronizar_a_mano(p1)
 
         subidos = d1.request.get(f"{base}/api/sync").json()["programs"]
         check("el programa llego al servidor", any(p["name"] == "Fullbody 3x · básico" for p in subidos),
@@ -459,8 +476,7 @@ def main() -> int:
         # Y ahora lo que rompia: el dispositivo 2, con su copia vieja, sincroniza.
         p2.locator(".acct").first.click()
         p2.wait_for_timeout(1200)
-        p2.get_by_text("Sincronizar ahora").first.click()
-        p2.wait_for_timeout(3500)
+        sincronizar_a_mano(p2, espera=3500)
 
         final = next(p for p in d2.request.get(f"{base}/api/sync").json()["programs"] if p["id"] == prog["id"])
         check("el dispositivo desactualizado NO resucita el ejercicio borrado",
