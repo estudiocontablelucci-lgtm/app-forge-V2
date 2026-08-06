@@ -2,6 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { despertarAudio, beepYa, estadoNotificacion, pedirPermisoNotificacion } from "@/lib/aviso";
+import { PREFS_DEFAULT } from "@/lib/descanso";
+
+/** Una preferencia: titulo, explicacion de que hace, y el interruptor. */
+function Pref({ id, titulo, detalle, valor, onChange, deshabilitado = false }) {
+  return (
+    <div className={`pref ${valor ? "" : "off"}`}>
+      <label className="pref-txt" htmlFor={id}>
+        <span className="pref-t">{titulo}</span>
+        <span className="pref-d">{detalle}</span>
+      </label>
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={valor}
+        aria-label={titulo}
+        disabled={deshabilitado}
+        className={`sw ${valor ? "on" : ""}`}
+        onClick={() => onChange(!valor)}
+      />
+    </div>
+  );
+}
 
 /**
  * Perfil: datos de la cuenta y lo poco que el usuario puede editar de si mismo.
@@ -10,13 +34,21 @@ import { useSession, signOut } from "next-auth/react";
  * ejercicios con `refKg: "BW"` (dominadas, fondos), que hoy quedan fuera del
  * progreso porque no hay con que multiplicar.
  */
-export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal, hayRed = true }) {
+export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal, hayRed = true, prefs = PREFS_DEFAULT, onPrefs = () => {} }) {
   const { data: session } = useSession();
   const [user, setUser] = useState(null);
   const [nombre, setNombre] = useState("");
   const [peso, setPeso] = useState("");
   const [estado, setEstado] = useState("cargando"); // cargando | listo | guardando | error
   const [error, setError] = useState(null);
+  /**
+   * El permiso de notificaciones es del NAVEGADOR, no de la app: la
+   * preferencia puede decir que si y el permiso estar revocado desde los
+   * ajustes del sitio. Se lee en el cliente y no en el estado inicial porque
+   * `Notification` no existe durante el render del servidor.
+   */
+  const [permisoNotif, setPermisoNotif] = useState("default");
+  useEffect(() => { setPermisoNotif(estadoNotificacion()); }, []);
 
   /**
    * Estado del modo offline, en palabras.
@@ -216,6 +248,88 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
             <button className="btn-primary" disabled={!sucio || estado === "guardando"} onClick={guardar}>
               {estado === "guardando" ? "Guardando…" : "Guardar cambios"}
             </button>
+          </div>
+
+          {/* Las preferencias van ARRIBA de la sincronizacion y de la puerta
+              al entrenador: son de las pocas cosas de esta pantalla que se
+              tocan mas de una vez, y estaban en ninguna parte. */}
+          <div className="card">
+            <div className="flabel">Descanso entre series</div>
+            <p className="fhint" style={{ marginBottom: 6 }}>
+              El cronómetro arranca al cargar las repeticiones de la última serie del bloque.
+              Sigue corriendo aunque cambies de pestaña o salgas de la app.
+            </p>
+
+            <Pref
+              id="pref-descanso"
+              titulo="Cronómetro de descanso"
+              detalle="Arranca solo al cerrar cada serie. Apagado, no aparece nunca."
+              valor={prefs.descanso}
+              onChange={(v) => onPrefs({ descanso: v })}
+            />
+
+            <Pref
+              id="pref-sonido"
+              titulo="Sonido al terminar"
+              detalle="Tres pulsos. Es lo único que se escucha con el teléfono en el bolsillo y la pantalla apagada."
+              valor={prefs.sonido}
+              deshabilitado={!prefs.descanso}
+              onChange={async (v) => {
+                onPrefs({ sonido: v });
+                // Se prueba en el momento: el navegador solo deja empezar a
+                // sonar desde un gesto, y este toque ES el gesto. Sin esto, la
+                // primera vez que hiciera falta el audio no iba a estar listo.
+                if (v && await despertarAudio()) beepYa();
+              }}
+            />
+
+            <Pref
+              id="pref-vibracion"
+              titulo="Vibración"
+              detalle="Solo funciona con la app abierta en pantalla; el sistema no vibra por una app dormida."
+              valor={prefs.vibracion}
+              deshabilitado={!prefs.descanso}
+              onChange={(v) => {
+                onPrefs({ vibracion: v });
+                if (v) { try { navigator.vibrate?.([120]); } catch { /* sin motor */ } }
+              }}
+            />
+
+            <Pref
+              id="pref-notif"
+              titulo="Notificación del sistema"
+              detalle={
+                permisoNotif === "denied"
+                  ? "Bloqueada en este navegador. Se habilita desde los ajustes del sitio, no desde acá."
+                  : "Un aviso en la barra cuando el descanso termina y no estás mirando la app."
+              }
+              valor={prefs.notificacion && permisoNotif === "granted"}
+              deshabilitado={!prefs.descanso || permisoNotif === "denied" || permisoNotif === "no-soportado"}
+              onChange={async (v) => {
+                if (!v) { onPrefs({ notificacion: false }); return; }
+                // El permiso se pide ACA y no al abrir la app: un pedido que
+                // aparece sin que nadie lo haya buscado se rechaza de un dedo,
+                // y un "denied" no se puede volver a preguntar nunca mas.
+                const r = await pedirPermisoNotificacion();
+                setPermisoNotif(r);
+                onPrefs({ notificacion: r === "granted" });
+              }}
+            />
+
+            {permisoNotif === "default" && prefs.descanso && (
+              <p className="fhint">Al activarla, el navegador va a pedirte permiso una vez.</p>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="flabel">Ayudas en pantalla</div>
+            <Pref
+              id="pref-ayudas"
+              titulo="Mostrar las ayudas"
+              detalle="Los botones con “?” que explican el semáforo, el e1RM, el RIR y el tonelaje. Apagalos cuando ya no los necesites."
+              valor={prefs.ayudas}
+              onChange={(v) => onPrefs({ ayudas: v })}
+            />
           </div>
 
           <div className="card">

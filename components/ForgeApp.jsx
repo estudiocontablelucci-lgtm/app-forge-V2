@@ -9,7 +9,10 @@ import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalog
 import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos, hayServidor } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
+import { crearDescanso, restante, avance, restaurarDescanso, normalizarPrefs } from "@/lib/descanso";
+import { despertarAudio, agendarBeep, sonarAhora, notificarFinDescanso, limpiarAviso } from "@/lib/aviso";
 import AccountButton from "./AccountButton";
+import Ayuda from "./Ayuda";
 import ProfileScreen from "./ProfileScreen";
 import MedidasScreen from "./MedidasScreen";
 import AsistenciaScreen from "./AsistenciaScreen";
@@ -216,7 +219,15 @@ export default function ForgeApp() {
   const [week, setWeek] = useState(1);
   const [session, setSession] = useState(null);
   const [blockIdx, setBlockIdx] = useState(0);
-  const [timer, setTimer] = useState(null);
+  // El descanso guarda un VENCIMIENTO, no una cuenta regresiva. Ver
+  // `lib/descanso.js`: lo que queda se deriva del reloj cada vez que se mira,
+  // asi que dormirse, cambiar de pestaña o cerrar la app no lo desincronizan.
+  const [timer, setTimer] = useState(null);   // { id, total, fin } | null
+  const [quedan, setQuedan] = useState(0);    // segundos, derivados de `timer`
+  const [prefs, setPrefs] = useState(normalizarPrefs(null));
+  // Avisos de una linea que se van solos. Reemplazan a los `alert()`, que en el
+  // telefono son una caja del sistema operativo encima de la app.
+  const [aviso, setAviso] = useState(null);
   const [editing, setEditing] = useState(null);
   const [progSession, setProgSession] = useState(null); // session id
   const [editingSessions, setEditingSessions] = useState(false);
@@ -377,12 +388,18 @@ export default function ForgeApp() {
       if (s.catalog) setCatalog(s.catalog);
       if (s.borrados) setBorrados(s.borrados);
       if (s.perfilLocal) setPerfilLocal(s.perfilLocal);
+      setPrefs(normalizarPrefs(s.prefs));
       setLogs(s.logs || {});
       setHistory(s.history || []);
+      // El descanso sobrevive a que el sistema mate la app. Sale gratis:
+      // guardado como vencimiento, restaurarlo es leerlo. Uno vencido hace rato
+      // se descarta — cantar "A LA BARRA" al abrir la app de mañana no sirve.
+      const d = restaurarDescanso(s.timer);
+      if (d) setTimer(d);
     }
     setLoaded(true);
   }, []);
-  useEffect(() => { if (loaded) saveState({ programs, catalog, activeProgramId, logs, history, borrados, perfilLocal }); }, [programs, catalog, activeProgramId, logs, history, borrados, perfilLocal, loaded]);
+  useEffect(() => { if (loaded) saveState({ programs, catalog, activeProgramId, logs, history, borrados, perfilLocal, prefs, timer }); }, [programs, catalog, activeProgramId, logs, history, borrados, perfilLocal, prefs, timer, loaded]);
 
   /**
    * Siempre tiene que haber un programa activo si hay programas.
@@ -550,17 +567,56 @@ export default function ForgeApp() {
     sincronizar();
   }, [loaded, signedIn]);
 
+  /**
+   * El reloj del descanso.
+   *
+   * No cuenta: MIRA. Cada tick pregunta cuanto falta para el vencimiento, asi
+   * que si la pagina estuvo congelada el numero se corrige solo al volver, en
+   * vez de arrastrar el atraso para siempre.
+   *
+   * Se mira cada 250 ms y no cada segundo por una razon sola: al volver de
+   * segundo plano, un intervalo de un segundo puede tardar hasta un segundo en
+   * refrescar y la barra queda mostrando un numero viejo justo cuando se la
+   * esta mirando. Es una resta y una comparacion, no cuesta nada.
+   */
+  const avisadoRef = useRef(null);
+  const prefsRef = useRef(prefs); prefsRef.current = prefs;
   useEffect(() => {
-    if (!timer || timer.remaining <= 0) return;
-    const iv = setInterval(() => {
-      setTimer((t) => {
-        if (!t || t.remaining <= 0) return t;
-        if (t.remaining === 1) { try { navigator.vibrate?.([200, 100, 200]); } catch {} return { ...t, remaining: 0 }; }
-        return { ...t, remaining: t.remaining - 1 };
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [timer?.id]);
+    if (!timer) { setQuedan(0); return; }
+
+    const mirar = () => {
+      const q = restante(timer);
+      setQuedan(q);
+      if (q > 0 || avisadoRef.current === timer.id) return;
+      // Vencio. Se avisa UNA vez por descanso, aunque el tick corra de nuevo.
+      avisadoRef.current = timer.id;
+      const p = prefsRef.current;
+      sonarAhora({ sonido: p.sonido, vibracion: p.vibracion });
+      // La notificacion solo si la app no esta a la vista: con la pantalla
+      // encendida y la barra en pantalla, un cartel del sistema es ruido.
+      if (p.notificacion && typeof document !== "undefined" && document.hidden) notificarFinDescanso();
+    };
+
+    mirar();
+    const iv = setInterval(mirar, 250);
+    // Volver a la app es el momento en que mas importa que el numero sea el de
+    // verdad, y es justo cuando el intervalo puede venir de estar congelado.
+    const alVolverAVer = () => { if (!document.hidden) mirar(); };
+    document.addEventListener("visibilitychange", alVolverAVer);
+    return () => { clearInterval(iv); document.removeEventListener("visibilitychange", alVolverAVer); };
+  }, [timer]);
+
+  /** Cerrar el descanso: apaga el beep agendado y saca la notificacion. */
+  const cerrarDescanso = () => { limpiarAviso(); setTimer(null); };
+
+  // Los avisos se van solos. Tocarlos tambien los cierra, para quien no quiere
+  // esperar: es informacion, no una decision, y nunca bloquea lo que se estaba
+  // haciendo — que es toda la diferencia con el `alert()` que reemplaza.
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 3600);
+    return () => clearTimeout(t);
+  }, [aviso]);
 
   const weeks = useMemo(() => {
     const n = activeProgram?.weeks || 4;
@@ -581,6 +637,9 @@ export default function ForgeApp() {
   // Descanso: arranca cuando se completa la vuelta. En superserie, recién al
   // cerrar la serie N de todos los ejercicios del bloque (ese es el punto de la SS).
   function maybeStartRest(exercise, setN, logsAhora = logs) {
+    // Apagado desde el Perfil: hay quien lleva el descanso con el reloj de
+    // pared, o entrena en circuito y un cronometro que salta solo estorba.
+    if (!prefs.descanso) return;
     // Una serie con dropset no esta cerrada hasta el ultimo escalon: entre
     // escalones NO hay descanso, ese es el punto de la tecnica. Si el timer
     // arrancara al cerrar la serie principal, sonaria justo cuando hay que
@@ -599,7 +658,15 @@ export default function ForgeApp() {
     if (!roundDone) return;
     const rest = Math.max(0, ...mates.map((e) => e.rest || 0));
     if (!rest) return;
-    setTimer({ id: uid(), total: rest, remaining: rest });
+    const d = crearDescanso(rest);
+    if (!d) return;
+    setTimer(d);
+    // El beep se AGENDA en el grafo de audio, no se dispara con un temporizador
+    // de JavaScript: los temporizadores se congelan con la pantalla apagada y el
+    // grafo de audio no. Ver el encabezado de `lib/aviso.js`.
+    if (prefs.sonido) {
+      despertarAudio().then((listo) => { if (listo) agendarBeep(restante(d)); });
+    }
   }
 
   function onSetChange(exercise, setN, field, val) {
@@ -745,7 +812,9 @@ export default function ForgeApp() {
         });
       }
     }
-    setSession(null); setTimer(null); setSessionStart(null); setSavedHealth(null);
+    // Terminar la sesion SI cancela el descanso, y ademas apaga el beep que
+    // quedo agendado en el grafo de audio: sin esto sonaba en el vestuario.
+    setSession(null); cerrarDescanso(); setSessionStart(null); setSavedHealth(null);
     setSessionNote("");
     setConfirmAction(null);
   }
@@ -1106,6 +1175,8 @@ export default function ForgeApp() {
             syncState={syncState}
             onSync={sincronizar}
             syncing={syncing}
+            prefs={prefs}
+            onPrefs={(cambio) => setPrefs((p) => ({ ...p, ...cambio }))}
           />
         </div>
       </div>
@@ -1183,6 +1254,24 @@ export default function ForgeApp() {
                 <p className="vacio-t">Primero necesitás un programa</p>
                 <p className="vacio-p">Elegí uno en la pestaña Programa, o pedile a tu entrenador que te asigne el suyo.</p>
                 <button className="btn-secondary" onClick={() => { setTab("programa"); setProgramListView(true); }}>Ir a Programa</button>
+              </div>
+            )}
+
+            {/* Ya hay programa y todavia no hay ni una sesion registrada: el
+                unico momento en que conviene contar el circuito entero. Se
+                descarta con un toque y no vuelve — y como se descarta guardando
+                una preferencia, tampoco vuelve en el otro dispositivo. */}
+            {activeProgram && history.length === 0 && prefs.primerosPasos && (
+              <div className="vacio-card primeros">
+                <p className="vacio-t">Cómo funciona</p>
+                <ol className="pasos">
+                  <li>Elegí la <b>semana</b> y tocá una <b>sesión</b>.</li>
+                  <li>Respondé cómo llegaste (sueño, estrés, energía). Queda registrado y después se cruza con lo que moviste.</li>
+                  <li>Cargá <b>KG</b>, <b>REPS</b> y <b>RIR</b> de cada serie. Con escribir las reps la serie ya cuenta como hecha.</li>
+                  <li>El <b>descanso arranca solo</b> al cerrar la última serie del bloque, y sigue corriendo aunque cambies de pestaña.</li>
+                  <li>Al final, <b>Terminar</b>: va al historial y se sube.</li>
+                </ol>
+                <button className="btn-secondary" onClick={() => setPrefs((p) => ({ ...p, primerosPasos: false }))}>Entendido</button>
               </div>
             )}
 
@@ -1272,6 +1361,19 @@ export default function ForgeApp() {
                 <div className="refline mono">
                   Ref: {refLine(ex, week, deloadCfg)}{ex.tempo ? <><span className="sep">|</span> T {ex.tempo}</> : null}<span className="sep">|</span> D {fmtRest(ex.rest)}{ex.rir ? <><span className="sep">|</span> RIR {ex.rir}</> : null}
                 </div>
+                {/* Cuatro abreviaturas en una linea de doce puntos. Es la
+                    prescripcion entera del ejercicio y hasta ahora no habia
+                    ninguna pantalla que dijera que significan. Va solo en el
+                    primer ejercicio del bloque: repetirla en cada tarjeta la
+                    convierte en ruido. */}
+                {exI === 0 && (
+                  <Ayuda titulo="Qué dice esta línea" mostrar={prefs.ayudas}>
+                    <p><b>Ref</b> — el peso de referencia por el rango de repeticiones que toca. Es una sugerencia, no una orden: el semáforo la corrige con lo que hagas.</p>
+                    {ex.tempo && <p><b>T</b> — tempo, en segundos por fase: bajada · pausa abajo · subida · pausa arriba. <span className="mono">2-0-1-0</span> es bajar en dos, subir en uno, sin pausas.</p>}
+                    <p><b>D</b> — el descanso hasta la serie siguiente.</p>
+                    {ex.rir && <p><b>RIR</b> — repeticiones en reserva: cuántas te <em>sobraban</em> al cortar. RIR 2 es terminar pudiendo hacer dos más. Es como se mide el esfuerzo sin ir al fallo.</p>}
+                  </Ayuda>
+                )}
 
                 {(() => { const t = defDe(ex); return t ? <p className="tec-ayuda">{t.ayuda}</p> : null; })()}
 
@@ -1401,7 +1503,10 @@ export default function ForgeApp() {
                   {b.type === "superset" && <div className="prog-ss-label">⚡ {b.exercises.length === 2 ? "Superserie" : b.exercises.length === 3 ? "Tri-set" : "Giant set"}</div>}
                   {b.exercises.map((e) => (
                     <button key={e.id} className={`prow ${defDe(e) ? "con-tec" : ""} ${b.type === "superset" ? "in-ss" : ""}`} onClick={() => {
-                      if (session !== null) { alert("Terminá o cancelá la sesión activa para editar el programa."); return; }
+                      // Un aviso con la forma de la app, no un `alert()` del
+                      // sistema operativo: el candado ya explica que no se
+                      // puede: esto explica por que, y se va solo.
+                      if (session !== null) { setAviso("🔒 Estás entrenando. Terminá o cancelá la sesión para editar el programa."); return; }
                       if (esAsignado) { setDescModal(e); return; }
                       setEditing({ ...e });
                     }}>
@@ -1432,6 +1537,21 @@ export default function ForgeApp() {
               <p className="sub">{histProg.length} sesiones registradas</p>
             </header>
             {histProg.length === 0 && <div className="empty">Completá tu primera sesión para verla acá.</div>}
+            {/* El punto de color existe desde la primera version y hasta ahora
+                no habia una sola pantalla que dijera que significa: las
+                etiquetas de `SEM_LABELS` solo se usaban para el export a
+                Excel. Un color sin leyenda es una decoracion. */}
+            {histProg.length > 0 && prefs.ayudas && (
+              <Ayuda titulo="Qué es el punto de color">
+                <p>El <b>semáforo</b> compara lo que hiciste contra lo que pedía el programa, ejercicio por ejercicio.</p>
+                <div className="sem-leyenda">
+                  <span><i style={{ background: SEM_COLORS.green }} /> {SEM_LABELS.green}</span>
+                  <span><i style={{ background: SEM_COLORS.yellow }} /> {SEM_LABELS.yellow}</span>
+                  <span><i style={{ background: SEM_COLORS.red }} /> {SEM_LABELS.red}</span>
+                </div>
+                <p style={{ marginTop: 7 }}><b>Verde</b>: llegaste al tope de repeticiones con el RIR que pedía — la próxima va más peso. <b>Amarillo</b>: llegaste a las repeticiones pero con menos reserva de la pedida — mantené la carga. <b>Rojo</b>: no llegaste al rango; revisá la carga, el descanso o cómo llegaste ese día.</p>
+              </Ayuda>
+            )}
             {histProg.map((h) => (
               <div key={h.id} className="hist-card">
                 <button className="hist-head" onClick={() => setExpandedLog(expandedLog === h.id ? null : h.id)}>
@@ -1467,6 +1587,10 @@ export default function ForgeApp() {
             <header className="top"><div className="brand">FORGE</div><h1>Progreso</h1><p className="sub">e1RM (Brzycki) y tonelaje del ciclo</p></header>
             <div className="card">
               <div className="cardtitle">Tonelaje semanal</div>
+              <Ayuda titulo="Qué es el tonelaje" mostrar={prefs.ayudas}>
+                <p>Todo el peso que moviste en la semana: se suma <b>kilos × repeticiones</b> de cada serie, incluidos los escalones de un dropset.</p>
+                <p>Es una medida de <em>volumen</em>, no de fuerza. Sube si entrenás más o más pesado, y baja en la semana de descarga — ahí bajar es lo correcto.</p>
+              </Ayuda>
               {/* Una semana a medias NO se compara contra una completa: se marca
                   rayada y dice cuantas sesiones lleva. El % contra la anterior
                   solo se muestra entre semanas CERRADAS — comparar 1 sesion
@@ -1643,6 +1767,11 @@ export default function ForgeApp() {
 
             <div className="card">
               <div className="cardtitle">e1RM por ejercicio</div>
+              <Ayuda titulo="Qué es el e1RM" mostrar={prefs.ayudas}>
+                <p><b>e1RM</b> es el máximo estimado a una repetición: cuánto levantarías una sola vez, calculado a partir de una serie normal. No hace falta probarlo — que es el punto, porque probar un máximo real cansa y tiene riesgo.</p>
+                <p>Sale de la fórmula de Brzycki: <span className="mono">kg × 36 / (37 − reps)</span>. Cada semana toma tu mejor serie. Pierde precisión arriba de unas 12 repeticiones, así que en ejercicios de rango alto tomalo como tendencia y no como número.</p>
+                <p>Sirve para comparar semanas del mismo ejercicio. <b>No</b> se hereda al cambiar de máquina: ahí empieza una serie nueva.</p>
+              </Ayuda>
               {(() => {
                 const nSem = activeProgram?.weeks || 4;
                 const cols = `1fr repeat(${nSem}, 34px) 50px`;
@@ -1698,11 +1827,17 @@ export default function ForgeApp() {
           </div>
         )}
 
-        {/* ======== TIMER ======== */}
+        {/* ======== TIMER ========
+            Se dibuja fuera de las pestañas a proposito: el descanso corre
+            aunque uno se vaya a mirar el historial. */}
         {timer && (
-          <div className={`timerbar ${timer.remaining === 0 ? "zero" : ""}`}>
-            <div className="tfill" style={{ width: `${(1 - timer.remaining / timer.total) * 100}%` }} />
-            <div className="tcontent"><span className="tlabel">{timer.remaining === 0 ? "A LA BARRA!" : "DESCANSO"}</span><span className="ttime mono">{fmtTime(timer.remaining)}</span><button className="tskip" onClick={() => setTimer(null)}>{timer.remaining === 0 ? "OK" : "Saltar"}</button></div>
+          <div className={`timerbar ${quedan === 0 ? "zero" : ""}`}>
+            <div className="tfill" style={{ width: `${avance(timer) * 100}%` }} />
+            <div className="tcontent">
+              <span className="tlabel">{quedan === 0 ? "A LA BARRA!" : "DESCANSO"}</span>
+              <span className="ttime mono">{fmtTime(quedan)}</span>
+              <button className="tskip" onClick={cerrarDescanso}>{quedan === 0 ? "OK" : "Saltar"}</button>
+            </div>
           </div>
         )}
 
@@ -1957,9 +2092,21 @@ export default function ForgeApp() {
           <div className="salir-aviso">Tocá atrás otra vez para salir de FORGE</div>
         )}
 
+        {/* Avisos de la app. Flotan sobre la tabbar como el de salida, no
+            bloquean nada y se van solos. */}
+        {aviso && !confirmarSalida && (
+          <div className="toast" role="status" onClick={() => setAviso(null)}>{aviso}</div>
+        )}
+
+        {/* Cambiar de pestaña NO cancela el descanso. Lo hacia, y era el bug
+            mas caro de esta pantalla: el descanso es tiempo real —sigue
+            corriendo aunque uno mire el historial— y matarlo al salir de
+            Entrenar convertia una consulta de dos segundos en perder la cuenta.
+            La barra se dibuja fuera de las pestañas, asi que se ve desde
+            cualquiera de las cuatro. */}
         <nav className="tabbar">
           {[["programa", "Programa", "▤"], ["entrenar", "Entrenar", "◉"], ["historial", "Historial", "☰"], ["progreso", "Progreso", "↗"]].map(([id, label, icon]) => (
-            <button key={id} className={tab === id ? "on" : ""} onClick={() => { setTab(id); if (id !== "entrenar") setTimer(null); }}><span className="ticon">{icon}</span>{label}</button>
+            <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}><span className="ticon">{icon}</span>{label}</button>
           ))}
         </nav>
       </div>
@@ -2738,6 +2885,45 @@ const CSS = `
 .sinred p { margin: 3px 0 0; font: 400 12px 'Inter'; color: #8E8E93; line-height: 1.4; }
 /* Aviso de salida: flotante sobre la tabbar, se va solo. */
 .salir-aviso { position: fixed; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 40; padding: 10px 18px; border-radius: 999px; background: rgba(28,28,30,.92); color: #fff; font: 600 13px 'Inter'; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+/* Los avisos de la app. Misma familia que el de salida —flotan sobre la
+   tabbar y se van solos— pero con lugar para una frase entera. Reemplazan al
+   alert() del navegador, que en el telefono es una caja del sistema operativo:
+   bloquea la app, no se parece en nada al resto y hay que tocarla para seguir. */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 41; width: calc(100% - 32px); max-width: 398px; box-sizing: border-box; padding: 13px 16px; border-radius: 14px; background: rgba(28,28,30,.94); color: #fff; font: 500 13.5px 'Inter'; line-height: 1.45; text-align: left; box-shadow: 0 6px 22px rgba(0,0,0,.24); cursor: pointer; animation: toast-in .18s ease-out; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ---------- Ayudas contextuales ----------
+   Cerradas ocupan una linea y no compiten con el dato. No son un tour: viven
+   en la pantalla donde nace la duda y se quedan ahi. Se apagan todas juntas
+   desde el Perfil. */
+.ayuda-i { display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 0; padding: 5px 11px 5px 6px; border: 0; border-radius: 999px; background: #F0F4FE; color: #2C6BED; font: 600 12px 'Inter'; cursor: pointer; }
+.ayuda-i.on { background: #2C6BED; color: #fff; }
+.ayuda-glifo { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #2C6BED; color: #fff; font: 700 11px 'Inter'; }
+.ayuda-i.on .ayuda-glifo { background: rgba(255,255,255,.22); }
+.ayuda-txt { margin: 8px 0 4px; padding: 11px 13px; border-radius: 12px; background: #F0F4FE; border: 1px solid #DCE6FC; color: #3A3A3C; font: 400 12.5px 'Inter'; line-height: 1.55; }
+.ayuda-txt b { color: #1C1C1E; font-weight: 600; }
+.ayuda-txt p { margin: 0 0 7px; }
+.ayuda-txt p:last-child { margin-bottom: 0; }
+
+/* Leyenda del semaforo. El punto de color existia desde el principio y no
+   existia ninguna pantalla que dijera que significa: las etiquetas solo se
+   usaban para el export a Excel. */
+.sem-leyenda { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 4px; }
+.sem-leyenda span { display: inline-flex; align-items: center; gap: 5px; font: 400 12px 'Inter'; color: #636366; }
+.sem-leyenda i { width: 9px; height: 9px; border-radius: 50%; }
+
+/* ---------- Preferencias (Perfil) ---------- */
+.pref { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px solid #F0F0F4; }
+.pref:last-of-type { border-bottom: 0; }
+.pref-txt { flex: 1; }
+.pref-t { font: 600 14px 'Inter'; color: #1C1C1E; }
+.pref-d { font: 400 12px 'Inter'; color: #8E8E93; line-height: 1.45; margin-top: 2px; }
+.pref.off .pref-t, .pref.off .pref-d { color: #AEAEB2; }
+.sw { flex: 0 0 auto; position: relative; width: 50px; height: 30px; margin-top: 2px; border: 0; border-radius: 999px; background: #D1D1D6; cursor: pointer; transition: background .18s; }
+.sw.on { background: #2C6BED; }
+.sw:disabled { opacity: .45; cursor: default; }
+.sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s; }
+.sw.on::after { transform: translateX(20px); }
 .hist-pend { margin-left: 7px; padding: 1px 7px; border-radius: 999px; background: #FFF0D0; color: #8A6A2B; font: 600 10px 'Inter'; text-transform: uppercase; letter-spacing: .05em; vertical-align: middle; }
 /* El mismo boton, pero como enlace: la puerta a la seccion de entrenador. */
 a.btn-ghost { display: flex; align-items: center; justify-content: center; text-decoration: none; }
@@ -2751,6 +2937,12 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .vacio-card { background: #FFF; border-radius: 16px; padding: 20px 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
 .vacio-t { font: 600 16px 'Inter'; color: #1C1C1E; margin-bottom: 6px; }
 .vacio-p { font: 400 13px 'Inter'; color: #8E8E93; line-height: 1.5; margin-bottom: 12px; }
+/* Primeros pasos: el circuito entero, una sola vez, con programa y sin
+   historial. Despues se descarta y no vuelve. */
+.primeros { border: 1px solid #DCE6FC; }
+.pasos { margin: 10px 0 4px; padding-left: 20px; }
+.pasos li { font: 400 13px 'Inter'; color: #48484A; line-height: 1.55; margin-bottom: 8px; }
+.pasos b { color: #1C1C1E; font-weight: 600; }
 
 /* Medidas corporales */
 .med-grupo { width: 100%; text-align: left; padding: 0; border: 0; background: none; font: 600 14px 'Inter'; color: #1C1C1E; cursor: pointer; }
