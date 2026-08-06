@@ -142,6 +142,41 @@ Tres bugs reportados en uso real el 2026-08-06, con tres causas distintas.
       tonelaje, la linea de prescripcion (Ref/T/D/RIR) y primeros pasos
 - [x] `verify-descanso` (15 checks) + `check_descanso_ui.py` con navegador
 
+### 2026-08-06 — El Perfil se ordena y se pliega
+
+**Decision**: Perfil → puerta al entrenador → Configuración → Conexión y
+sincronización. Las dos ultimas plegables y plegadas por defecto, cada una con
+un resumen legible SIN abrirla.
+
+**Motivo (cinco cosas que Agustin encontro probandolo)**:
+
+1. **Titulo y explicacion de cada preferencia se leian pegados** —
+   "Cronómetro de descansoArranca solo al cerrar cada serie". Eran dos `<span>`,
+   o sea en linea, sin `display: block`.
+2. **La seccion ocupaba media pantalla.** Con las preferencias agregadas, el
+   Perfil paso de tres tarjetas a seis.
+3. **Faltaba orden por titulo.** Lo primero era el estado de la conexion, que es
+   diagnostico y no identidad.
+4. **"Entrenar a otros" era un enlace gris al fondo.** Es un cambio de app
+   entera, no una opcion mas: ahora es una tarjeta con el azul primario.
+5. **El hamburguesa de Programa no decia a donde llevaba.** Ese icono significa
+   "el menu de la app"; que abriera la lista de programas no lo adivina nadie.
+
+**El resumen del encabezado no es decoracion.** Plegar la seccion de conexion sin
+el escondia el unico diagnostico que hay para "no abre sin señal" en un telefono
+sin devtools — el arreglo habria sido peor que el problema que resuelve.
+
+**Consecuencia asumida**: "Sincronizar ahora" queda a un toque de profundidad. Se
+banca porque la app sincroniza sola y porque el aviso de "sin subir" en Entrenar
+tiene su propio boton, que es el camino de recuperacion real.
+
+**Costo lateral**: `check_coach_ui.py` apretaba ese boton directo y se rompio.
+Se le agrego `sincronizar_a_mano()`, que abre la seccion primero.
+
+**Verificado contra `main`**: `check_perfil_ui.py` da 5 fallas ahi y todo OK en la
+rama. La del texto pegado se mide por POSICION en pantalla, no por CSS: titulo en
+y=913,4 y detalle en y=915,4 es el mismo renglon.
+
 ### 2026-08-06 — El descanso se guarda como vencimiento, no como cuenta regresiva
 
 **Decision**: `{ id, total, fin }` con `fin` en milisegundos de reloj. Lo que queda

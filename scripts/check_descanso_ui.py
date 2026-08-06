@@ -215,6 +215,20 @@ def main() -> int:
                   "sesión" in pg.locator(".toast").inner_text().lower(),
                   pg.locator(".toast").inner_text())
 
+        print("\nel boton de la lista de programas")
+        pg.locator(".tabbar button").nth(0).click()
+        pg.wait_for_timeout(700)
+        b = pg.locator(".prog-switch-btn")
+        # Un hamburguesa suelto significa "el menu de la app". Que abra la lista
+        # de programas para cambiar de programa no lo adivina nadie.
+        check("dice a donde lleva", b.count() > 0 and "programa" in b.first.inner_text().lower(),
+              b.first.inner_text() if b.count() else "no existe el boton")
+        if b.count():
+            b.first.click()
+            pg.wait_for_timeout(800)
+            check("y abre la lista", pg.locator(".prog-card").count() > 0 or "programa" in pg.inner_text("body").lower(),
+                  "el toque no llevo a ningun lado")
+
         print("\nlas ayudas")
         pg.locator(".tabbar button").nth(3).click()   # Progreso
         pg.wait_for_timeout(700)

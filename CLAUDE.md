@@ -90,7 +90,8 @@ app-forge-v2/
 │   ├── gen_iconos.py          # rasteriza favicon.svg a los PNG del manifest
 │   ├── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
 │   ├── verify-descanso.mjs    # el vencimiento, la restauracion y las preferencias
-│   └── check_descanso_ui.py   # headless: el cronometro, con el reloj adelantado
+│   ├── check_descanso_ui.py   # headless: el cronometro, con el reloj adelantado
+│   └── check_perfil_ui.py     # headless: orden, secciones plegadas y renglones
 ├── data/                  # .xlsx generados (gitignored — datos personales)
 ├── forge-arquitectura.md  # documento de diseno tecnico completo
 ├── forge-mvp.jsx          # version anterior de referencia
@@ -502,6 +503,27 @@ SEGUNDOS**; pasarles un `Date.now()` crudo manda el reloj al año 58.000.
 del sistema operativo: bloquea la app, no se parece en nada al resto y hay que
 tocarla para seguir. El candado del programa usa `.toast`, que flota sobre la
 tabbar y se va solo. Para lo que SI es una decision esta `confirm-box`.
+
+**El Perfil se lee de un vistazo o no se lee.** Paso de tres tarjetas a seis y
+para llegar a "Entrenar a otros" habia que bajar por veinte lineas de
+preferencias. Orden: Perfil → puerta al entrenador → **Configuración** →
+**Conexión y sincronización**, las dos ultimas plegables (`.sec`) y plegadas por
+defecto. **Cada una lleva un resumen en el encabezado**: sin eso, plegar la de
+conexion escondia el unico diagnostico que hay para "no abre sin señal" en un
+telefono sin devtools, y el arreglo habria sido peor que el problema.
+
+Corolario para los tests: **"Sincronizar ahora" ya no esta suelto**, vive dentro
+de esa seccion. `check_coach_ui.py` la abre con `sincronizar_a_mano()`.
+
+**Un titulo y su explicacion en dos `<span>` es una sola linea.** Se leia
+"Cronómetro de descansoArranca solo al cerrar cada serie". Un `<span>` es en
+linea: para que sean dos renglones hace falta `display: block`. `check_perfil_ui.py`
+lo vigila comparando la POSICION en pantalla de los dos, no el CSS.
+
+**Un hamburguesa significa "el menu de la app".** En Programa abria la lista de
+programas y nadie lo adivinaba; ahora es un boton rotulado. El nombre del programa
+se parte en dos renglones antes que cortarse: "Hipertrofia …" no identifica a un
+programa, y es el dato que esa pantalla existe para mostrar.
 
 **Las ayudas viven donde nace la duda, no en un tour.** Un tour explica todo el
 primer dia, cuando todavia no hay ninguna pregunta, y no esta el dia que la
