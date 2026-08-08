@@ -26,6 +26,7 @@
     "verify:progreso": "node scripts/verify-progreso.mjs",
     "verify:tecnicas": "node scripts/verify-tecnicas.mjs",
     "verify:descanso": "node scripts/verify-descanso.mjs",
+    "verify:aviso": "node scripts/verify-aviso.mjs",
     "import:asistencia": "node scripts/import-asistencia.mjs",
     "backfill:email": "node scripts/backfill-email-canon.mjs",
     "verify:ui": "python scripts/check_ui.py",
@@ -35,7 +36,7 @@
     "verify:perfil-ui": "python scripts/check_perfil_ui.py",
     "verify:atras-ui": "python scripts/check_atras_ui.py",
     "gen:iconos": "python scripts/gen_iconos.py",
-    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor && npm run verify:identidad && npm run verify:medidas && npm run verify:asistencia && npm run verify:progreso && npm run verify:tecnicas && npm run verify:descanso"
+    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor && npm run verify:identidad && npm run verify:medidas && npm run verify:asistencia && npm run verify:progreso && npm run verify:tecnicas && npm run verify:descanso && npm run verify:aviso"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
