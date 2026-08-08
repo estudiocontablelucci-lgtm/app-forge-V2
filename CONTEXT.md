@@ -44,6 +44,10 @@ Estado actual del proyecto y decisiones tomadas.
 
 Seis diferencias entre lo que hacia la app y lo que dice `rutina_gym.md`, todas cerradas:
 
+> `rutina_gym.md` se partio el 2026-08-08 en `criterios/protocolo-medicion.md` y
+> `registro/2026-06-ciclo1-rutina.md`. Ver la nota en [Datos del atleta: fuente de verdad
+> externa], mas abajo.
+
 - [x] **Progreso conservaba solo lo del programa actual.** Un ejercicio sustituido desaparecia
       con sus metricas y bajaba el tonelaje de semanas ya entrenadas. Ahora se recorren las
       metricas y los retirados se recuperan del snapshot del historial.
@@ -354,7 +358,36 @@ un backend solo para eso. El .xlsx cubre el caso de analisis externo hoy, sin in
 
 ### 2026-07 — Datos del atleta: fuente de verdad externa
 **Decision**: el SEED refleja el Ciclo 2 real (refs post-ajustes 24/06/2026). La fuente de verdad sigue
-siendo `OneDrive/.../Sistema cronobiologico/Claude/rutina_gym.md` + `programa_tecnicas_ciclo2.md`.
+siendo externa: `OneDrive/.../Sistema cronobiologico/Claude/`, hoy `programa/programa-vigente.md`
+gobernado por `criterios/`.
+
+**Actualizado el 2026-08-08**: esa carpeta se reorganizo y `rutina_gym.md` +
+`programa_tecnicas_ciclo2.md` —los dos archivos que citaba esta decision— ya no existen. El
+primero se partio en `criterios/protocolo-medicion.md` y `registro/2026-06-ciclo1-rutina.md`;
+el segundo se archivo en `registro/2026-08-ciclo2-programa.md`. Ver `00-indice.md`, que se lee
+primero, y `CAMBIOS.md`.
+
+**El SEED de este repo se quedo en el Ciclo 2 y no se actualiza.** `lib/seed-ciclo2.js` es
+historia; desde el 2026-08-08 rige el Ciclo 3 (4 dias, 36 ejercicios, 111 series). Subir el
+programa vigente al repo seria meter refs y notas medicas en un repo **publico**, asi que
+`npm run gen:programa` lo lee de la carpeta de Salud y la ruta vive sola en `scripts/rutas.mjs`
+— escrita, nunca derivada de `__dirname`, que es lo que rompio `certificaciones-ingresos` al
+sacarlo de OneDrive.
+
+### 2026-08-08 — Generar el .xlsx incluye leerlo de vuelta
+**Decision**: `gen:programa` valida el programa contra si mismo y despues **relee con los
+helpers de import reales de `ForgeApp.jsx` el archivo que acaba de escribir**, comparando los 13
+campos, la superserie y la tecnica.
+**Motivo**: el archivo de entrada es una transcripcion a mano y el wizard mapea columnas por
+NOMBRE de encabezado. Las dos cosas fallan en silencio. Se probo rompiendo el encabezado
+`Tecnica` a proposito: sin round-trip el .xlsx sale igual de bonito y las cuatro tecnicas del
+ciclo entran como nada. Con round-trip, corta con las cuatro listadas por sesion.
+**Consecuencia**: `verify-import.mjs` dejo de leer de `data/` y arma su .xlsx en memoria desde
+el SEED — dependia de haber corrido `gen:programa` antes, asi que en un clon nuevo fallaba por
+un archivo que falta y no por un bug. Y `scripts/import-helpers.mjs` inyecta TODAS las
+dependencias del bloque extraido: `parseExcelData` llama a `normalizarTecnica` solo si hay
+columna Tecnica, asi que el test daba verde por corto-circuito y el primer archivo que la
+trajera reventaba en el generador, no en el test que existe para atajarlo.
 **Motivo**: el SEED solo aplica a instalaciones nuevas — `migrateState()` conserva el localStorage
 existente. Para cargar el programa en un navegador con datos, se genera un .xlsx con
 `npm run gen:programa` y se importa por el wizard. El .xlsx queda en `data/` (gitignored: son datos
@@ -568,8 +601,9 @@ donde Brzycki pierde precision.
 **Lo que lo vuelve grave y no cosmetico**: el semaforo y las reglas de progresion
 leen ese numero para decidir si subir carga.
 
-`programa_tecnicas_ciclo2.md` ya lo habia decidido asi en su seccion 9. Ver
-[Fuente de verdad externa] en `CLAUDE.md`.
+`programa_tecnicas_ciclo2.md` ya lo habia decidido asi en su seccion 9 (archivado el
+2026-08-08 en `registro/2026-08-ciclo2-programa.md`; el vigente lo sostiene en su
+seccion 5). Ver [Fuente de verdad externa] en `CLAUDE.md`.
 
 ### 2026-08-05 — Sustituir un ejercicio es un script, no una edicion a mano
 

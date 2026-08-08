@@ -44,6 +44,49 @@ const check = async (label, fn) => {
 
 /* ---------- el modulo, sin base ---------- */
 
+await check("ISO-EST no pide escalones y NO frena el descanso", () => {
+  // El riesgo concreto: una tecnica intraserie con `pasos >= 1` deja
+  // `serieCerrada()` en false hasta que se carguen escalones que en una
+  // isometrica no existen. El cronometro no arrancaria nunca justo en el
+  // ejercicio donde esta prescripta.
+  const ex = { technique: { tipo: "isoest" } };
+  if (t.pasosDe(ex, 3, 3) !== 0) return `pidio ${t.pasosDe(ex, 3, 3)} escalones en la ultima serie`;
+  const log = { kg: 45, reps: 12, done: true };
+  if (t.serieCerrada(ex, 3, 3, log) !== true) return "dejo la serie abierta: el descanso no arranca";
+  return true;
+});
+
+await check("ISO-EST no acepta que le metan escalones desde la base", () => {
+  const n = t.normalizar({ tipo: "isoest", pasos: 3 });
+  if (n.pasos !== 0) return `normalizo a ${n.pasos} escalones`;
+  const d = t.tecnicaFromDb('{"tipo":"isoest","pasos":2,"aplica":"todas"}');
+  if (d.pasos !== 0) return `desde la base quedo con ${d.pasos}`;
+  if (d.aplica !== "todas") return "perdio el 'aplica' guardado";
+  return true;
+});
+
+await check("el dropset conserva su piso de 1 escalon", () => {
+  // El clamp nuevo es por tecnica: aflojarlo para ISO-EST no puede permitir un
+  // dropset de cero bajadas, que seria un dropset que no es un dropset.
+  const n = t.normalizar({ tipo: "dropset", pasos: 0 });
+  if (n.pasos !== 1) return `un dropset quedo con ${n.pasos} escalones`;
+  if (t.normalizar({ tipo: "dropset", pasos: 9 }).pasos !== 5) return "perdio el techo de 5";
+  return true;
+});
+
+await check("ISO-EST entra por alias desde el Excel", () => {
+  for (const a of ["ISO-EST", "iso-est", "Isométrica", "isoest"]) {
+    if (t.porAlias(a) !== "isoest") return `"${a}" no se reconocio`;
+  }
+  if (t.porAlias("ds") !== "dropset") return "se rompio el alias del dropset";
+  return true;
+});
+
+await check("ISO-EST es intraserie: mismo violeta que el dropset", () => {
+  const f = t.familiaDe({ technique: { tipo: "isoest" } }, false);
+  return f?.id === "intraserie" ? true : `cayo en la familia ${f?.id}`;
+});
+
 await check("una tecnica desconocida se ignora en vez de romper", () => {
   if (t.tecnicaFromDb('{"tipo":"telepatia"}') !== null) return "acepto un tipo que no existe";
   if (t.tecnicaFromDb("{roto") !== null) return "no sobrevivio a JSON invalido";

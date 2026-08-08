@@ -10,7 +10,7 @@ import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCa
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
 import { crearDescanso, restante, avance, restaurarDescanso, normalizarPrefs } from "@/lib/descanso";
-import { despertarAudio, agendarBeep, sonarAhora, notificarFinDescanso, limpiarAviso } from "@/lib/aviso";
+import { despertarAudio, agendarBeep, beepArmado, sonarAhora, notificarFinDescanso, limpiarAviso } from "@/lib/aviso";
 import AccountButton from "./AccountButton";
 import Ayuda from "./Ayuda";
 import ProfileScreen from "./ProfileScreen";
@@ -605,6 +605,39 @@ export default function ForgeApp() {
     document.addEventListener("visibilitychange", alVolverAVer);
     return () => { clearInterval(iv); document.removeEventListener("visibilitychange", alVolverAVer); };
   }, [timer]);
+
+  /**
+   * Red de seguridad: agendar el beep de un descanso que llego SIN agendar.
+   *
+   * `maybeStartRest` lo agenda cuando el descanso nace, y ahi hay gesto seguro
+   * (se acaba de escribir en un input). Pero hay un camino que no pasa por ahi:
+   * el descanso RESTAURADO. Si Android mata la app a mitad de serie —con la
+   * pantalla apagada y el telefono en el banco, que es el caso normal— al
+   * volver el cronometro se lee del disco y sigue corriendo bien, pero el grafo
+   * de audio arranco de cero y no tiene nada agendado. El descanso se veia
+   * perfecto y vencia mudo.
+   *
+   * Agendar necesita un gesto del usuario y al abrir la app no hubo ninguno,
+   * asi que se engancha al primero que venga. Se intenta tambien de entrada por
+   * si el audio seguia vivo de un descanso anterior de la misma sesion.
+   */
+  useEffect(() => {
+    if (!timer || !prefs.sonido || beepArmado()) return;
+    let vivo = true;
+    const GESTOS = ["pointerdown", "keydown", "touchstart"];
+    const sacar = () => { for (const ev of GESTOS) window.removeEventListener(ev, armar); };
+    function armar() {
+      if (!vivo || beepArmado()) return;
+      despertarAudio().then((listo) => {
+        if (!vivo || !listo) return;
+        const q = restante(timer);
+        if (q > 0) { agendarBeep(q); sacar(); }
+      });
+    }
+    for (const ev of GESTOS) window.addEventListener(ev, armar, { passive: true });
+    armar();
+    return () => { vivo = false; sacar(); };
+  }, [timer, prefs.sonido]);
 
   /** Cerrar el descanso: apaga el beep agendado y saca la notificacion. */
   const cerrarDescanso = () => { limpiarAviso(); setTimer(null); };
@@ -2213,11 +2246,16 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
           </label>
           {draft.technique?.tipo && (
             <>
-              <label><span>Bajadas</span>
-                <select value={draft.technique.pasos} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, pasos: Number(e.target.value) }))}>
-                  {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
+              {/* "Bajadas" solo para las tecnicas que registran escalones. Una
+                  isometrica en estiramiento no tiene ninguna: preguntar cuantas
+                  es ofrecer configurar algo que no existe. */}
+              {TECNICAS[draft.technique.tipo]?.pasos > 0 && (
+                <label><span>Bajadas</span>
+                  <select value={draft.technique.pasos} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, pasos: Number(e.target.value) }))}>
+                    {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+              )}
               <label><span>En que series</span>
                 <select value={draft.technique.aplica} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, aplica: e.target.value }))}>
                   <option value="ultima">Solo la ultima</option>
