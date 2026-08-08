@@ -518,7 +518,18 @@ del usuario y al abrir la app no hubo ninguno, asi que ForgeApp se engancha al p
 venga. Los dos defectos se tapaban entre si, que es por lo que el sintoma era "a veces no suena".
 
 `npm run verify:aviso` cubre el modulo entero con un doble del grafo de audio: **no tenia una
-sola verificacion**, siendo el unico canal que viene prendido por defecto.
+sola verificacion**, siendo el unico canal que viene prendido por defecto. Y
+`npm run verify:aviso-ui` prueba el camino que el nodo no alcanza —el descanso restaurado— en
+un navegador real: **un beep se MIRA espiando el grafo**, no se escucha. Un `AudioContext`
+instrumentado antes de que cargue la app anota cada oscilador con su frecuencia y su hora, y
+ahi 30 Hz sin hora es el tono de sosten y 880/1175 con hora futura son los pulsos agendados.
+
+**Preguntar si el audio esta vivo NO puede ser un intento de despertarlo.** El primer arreglo
+usaba `despertarAudio()` al montar, y sin gesto el navegador deja la promesa de `resume()`
+PENDIENTE en vez de rechazarla: quedaba un intento colgado que revivia junto con el del gesto y
+agendaba dos veces. Taparlo con un flag "estoy armando" fue peor —el flag quedaba trabado en el
+intento que nunca resolvia y bloqueaba el del gesto, que es el unico que importa: cero beeps.
+Por eso existe `audioVivo()`, que mira `ctx.state` y no toca nada.
 
 **Y para que el grafo no se suspenda, suena un tono de 30 Hz a volumen 0,0015.**
 Ningun parlante de telefono reproduce 30 Hz, pero para el navegador la pagina

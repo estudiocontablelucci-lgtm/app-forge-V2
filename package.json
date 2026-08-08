@@ -33,6 +33,7 @@
     "verify:pwa": "python scripts/check_pwa.py",
     "verify:tecnicas-ui": "python scripts/check_tecnicas_ui.py",
     "verify:descanso-ui": "python scripts/check_descanso_ui.py",
+    "verify:aviso-ui": "python scripts/check_aviso_ui.py",
     "verify:perfil-ui": "python scripts/check_perfil_ui.py",
     "verify:atras-ui": "python scripts/check_atras_ui.py",
     "gen:iconos": "python scripts/gen_iconos.py",

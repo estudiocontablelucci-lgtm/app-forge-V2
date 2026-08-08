@@ -10,7 +10,7 @@ import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCa
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
 import { crearDescanso, restante, avance, restaurarDescanso, normalizarPrefs } from "@/lib/descanso";
-import { despertarAudio, agendarBeep, beepArmado, sonarAhora, notificarFinDescanso, limpiarAviso } from "@/lib/aviso";
+import { despertarAudio, agendarBeep, beepArmado, audioVivo, sonarAhora, notificarFinDescanso, limpiarAviso } from "@/lib/aviso";
 import AccountButton from "./AccountButton";
 import Ayuda from "./Ayuda";
 import ProfileScreen from "./ProfileScreen";
@@ -635,7 +635,11 @@ export default function ForgeApp() {
       });
     }
     for (const ev of GESTOS) window.addEventListener(ev, armar, { passive: true });
-    armar();
+    // De entrada SOLO si el audio ya venia vivo de un descanso anterior. Sin ese
+    // filtro, el intento del montaje llama a `resume()` sin gesto, el navegador
+    // deja la promesa PENDIENTE en lugar de rechazarla, y queda un intento
+    // colgado que revive junto con el del gesto y agenda dos veces.
+    if (audioVivo()) armar();
     return () => { vivo = false; sacar(); };
   }, [timer, prefs.sonido]);
 

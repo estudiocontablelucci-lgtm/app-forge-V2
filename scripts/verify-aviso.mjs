@@ -55,7 +55,7 @@ const ctx = {
 globalThis.window = { AudioContext: function () { return ctx; } };
 globalThis.document = { hidden: false };
 
-const { despertarAudio, agendarBeep, cancelarBeep, beepPendiente, sonarAhora } =
+const { despertarAudio, agendarBeep, cancelarBeep, beepPendiente, beepArmado, audioVivo, sonarAhora } =
   await import("../lib/aviso.js");
 
 /* ================================ helpers ================================ */
@@ -161,6 +161,42 @@ check("al vencer, sonarAhora IGUAL toca el aviso", () => {
   ctx.resumeFalla = false;
   sonarAhora({ sonido: true, vibracion: false });
   assert.equal(pulsos().length, 3, "el descanso vencio en silencio: no sono nada");
+});
+
+titulo("Preguntar si el audio esta vivo NO puede despertarlo");
+
+/*
+ * `audioVivo()` existe para que ForgeApp pueda decidir si vale la pena intentar
+ * agendar al montar. Tiene que ser una PREGUNTA y no un intento: sin gesto del
+ * usuario el navegador deja la promesa de `resume()` pendiente en vez de
+ * rechazarla, y un intento colgado que revive despues agenda por duplicado.
+ * Usar `despertarAudio()` para averiguarlo fue exactamente ese error.
+ */
+
+reset({ state: "suspended" });
+check("con el contexto suspendido dice que no, y no lo toca", () => {
+  const antes = ctx.state;
+  assert.equal(audioVivo(), false);
+  assert.equal(ctx.state, antes, "preguntar cambio el estado del contexto");
+  assert.equal(sonados.length, 0, "preguntar creo osciladores");
+});
+
+check("una vez despierto dice que si", async () => {
+  ctx.state = "running";
+  assert.equal(audioVivo(), true);
+});
+
+check("beepArmado distingue 'nunca se agendo' de 'ya sono'", () => {
+  reset();
+  assert.equal(beepArmado(), false, "sin agendar nada dijo que estaba armado");
+  ctx.currentTime = 10;
+  agendarBeep(60);
+  assert.equal(beepArmado(), true);
+  ctx.currentTime = 100;                      // ya sono
+  assert.equal(beepPendiente(), false);
+  assert.equal(beepArmado(), true, "seguir armado es lo que evita el doble aviso");
+  cancelarBeep();
+  assert.equal(beepArmado(), false);
 });
 
 titulo("Nunca hubo descanso agendado y el contexto esta limpio");
