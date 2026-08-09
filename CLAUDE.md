@@ -726,6 +726,23 @@ sincronizacion y solo se detecto leyendo los logs de Vercel — en un telefono n
 Anunciar exito con algo afuera es el peor de los dos estados: el usuario cree que su programa
 esta en la nube.
 
+**La causa raiz era el guard de la migracion al cargar.** Habia DOS formas de que una
+referencia al catalogo estuviera mal y `migrarCatalogo` solo miraba una:
+
+```js
+const faltaMigrar = programs.some(p => p.exercises.some(e => !e.exerciseId));
+if (state.catalog && !faltaMigrar) return state;
+```
+
+Preguntaba si el id **falta**, nunca si **apunta a algo que existe**. Un programa que llega de
+otra cuenta, otro navegador o un respaldo trae sus `exerciseId` puestos: `faltaMigrar` da false,
+el estado se devuelve tal cual, y nadie lo repara jamas. Ahora esa rama absorbe al catalogo lo
+que falta y sanea el resto. Se repara **al cargar** y no solo antes de subir: un estado
+incoherente en memoria rompe tambien lo que se muestra, no solo lo que viaja.
+
+`npm run verify:huerfanos-ui` lo reproduce entero — con los dos arreglos desactivados da
+3 huerfanas al cargar, 3 despues de sincronizar y **0 copias en el servidor**.
+
 **Una referencia huerfana al catalogo bloquea el push del programa ENTERO, para siempre.**
 `program_exercises.exercise_id` es una FK a `exercises`: un solo ejercicio apuntando a una
 entrada que no esta hace fallar el INSERT completo con `FOREIGN KEY constraint failed`, y como

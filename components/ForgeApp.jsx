@@ -142,10 +142,36 @@ function migrateState(raw) {
  * normalizado, asi que dos formas de escribir el mismo ejercicio terminan
  * apuntando a la misma entrada.
  */
+/**
+ * Deja el estado guardado con sus referencias al catalogo CONSISTENTES.
+ *
+ * Habia dos formas de estar mal y esto solo miraba una.
+ *
+ * - **Falta el `exerciseId`** — programas viejos, anteriores al catalogo. Los
+ *   migra `migrarACatalogo`, que crea la entrada y la enlaza.
+ * - **El `exerciseId` APUNTA A NADA** — el que faltaba. Un programa puede traer
+ *   referencias a un catalogo que este dispositivo no tiene: llego de otra
+ *   cuenta, de otro navegador, o de un respaldo. `faltaMigrar` da false porque
+ *   el id ESTA, asi que el estado se devolvia tal cual y nadie lo reparaba
+ *   nunca.
+ *
+ * Lo segundo no es teorico: el 2026-08-09 un programa con 16 referencias
+ * huerfanas no subio en NINGUNA sincronizacion —`program_exercises.exercise_id`
+ * es una FK y tumba el INSERT entero— y la app anunciaba "Sincronizado".
+ *
+ * Se repara ACA, al cargar, y no solo antes de subir: un estado incoherente en
+ * memoria rompe tambien lo que se muestra, no solo lo que viaja.
+ */
 function migrarCatalogo(state) {
   if (!state) return state;
   const faltaMigrar = (state.programs || []).some((p) => (p.exercises || []).some((e) => !e.exerciseId));
-  if (state.catalog && !faltaMigrar) return state;
+  if (state.catalog && !faltaMigrar) {
+    // Primero dar de alta lo que se puede; recien despues soltar lo que no.
+    const catalog = absorberDeProgramas(state.catalog, state.programs);
+    const { programs, sueltas, repuntadas } = sinReferenciasHuerfanas(state.programs, catalog);
+    if (catalog === state.catalog && !sueltas && !repuntadas) return state;
+    return { ...state, catalog, programs };
+  }
 
   const { catalog, programs } = migrarACatalogo(state.programs, state.catalog);
   return { ...state, catalog, programs };
