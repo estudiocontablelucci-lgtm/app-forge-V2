@@ -26,7 +26,7 @@ import * as XLSX from "xlsx";
 import { cargarProgramaVigente, PROGRAMA_VIGENTE } from "./rutas.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const { SESIONES, EJERCICIOS, CICLO } = await cargarProgramaVigente();
+const { SESIONES, EJERCICIOS, CICLO, NOMBRE } = await cargarProgramaVigente();
 const { TECNICAS, normalizar } = await import("../lib/tecnicas.js");
 
 const byId = new Map(EJERCICIOS.map((e) => [e.id, e]));
@@ -78,12 +78,18 @@ if (errores.length) {
 
 /* ============================ el .xlsx ============================ */
 
-const HEADER = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Tecnica", "Unidad", "Descripcion"];
+const HEADER = ["Programa", "Sesion", "Nombre sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Tecnica", "Unidad", "Descripcion"];
+
+const nombreSesion = new Map(SESIONES.map((s) => [s.id, s.name]));
 
 const rows = [...EJERCICIOS]
   .sort((a, b) => (a.session < b.session ? -1 : a.session > b.session ? 1 : a.order - b.order))
   .map((e) => [
+    // Se repiten en cada fila: son datos del programa y de la sesion escritos
+    // en una planilla que es una fila por ejercicio.
+    NOMBRE,
     e.session,
+    nombreSesion.get(e.session) || "",
     e.order,
     e.name,
     e.group,
@@ -103,7 +109,7 @@ const rows = [...EJERCICIOS]
   ]);
 
 const ws = XLSX.utils.aoa_to_sheet([HEADER, ...rows]);
-ws["!cols"] = [{ wch: 8 }, { wch: 6 }, { wch: 34 }, { wch: 14 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 30 }, { wch: 9 }, { wch: 8 }, { wch: 70 }];
+ws["!cols"] = [{ wch: 30 }, { wch: 8 }, { wch: 20 }, { wch: 6 }, { wch: 34 }, { wch: 14 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 30 }, { wch: 9 }, { wch: 8 }, { wch: 70 }];
 const wb = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(wb, ws, "Programa");
 
@@ -127,13 +133,24 @@ const leidas = filasDe(readFileSync(out));
 const mapping = mapear(helpers, leidas);
 
 const sinMapear = HEADER.filter((h) => !Object.values(mapping).includes(h));
-const { exercises: vuelta, sessions: sesionesVuelta } = helpers.parseExcelData(leidas, mapping);
+const { exercises: vuelta, sessions: sesionesVuelta, programName: nombreVuelta } = helpers.parseExcelData(leidas, mapping);
 const porNombre = new Map(vuelta.map((e) => [`${e.session}|${e.name}`, e]));
 const idsVuelta = new Map(vuelta.map((e) => [e.id, e]));
 
 const perdidas = [];
 if (sinMapear.length) perdidas.push(`columnas que el wizard NO reconoce: ${sinMapear.join(", ")}`);
 if (sesionesVuelta.length !== SESIONES.length) perdidas.push(`volvieron ${sesionesVuelta.length} sesiones de ${SESIONES.length}`);
+
+// El nombre del programa y los de las sesiones son lo que MAS se ve —el titulo
+// y lo que se toca para elegir que entrenar— y son justamente los que no
+// existian como columna: el programa se llamaba como el archivo y las sesiones
+// quedaban "Sesion A". Se comprueban aparte porque no viven en `exercises`.
+if (nombreVuelta !== NOMBRE) perdidas.push(`nombre del programa: escribi ${JSON.stringify(NOMBRE)}, volvio ${JSON.stringify(nombreVuelta)}`);
+for (const s of SESIONES) {
+  const v = sesionesVuelta.find((x) => x.id === s.id);
+  if (!v) { perdidas.push(`sesion ${s.id}: no volvio`); continue; }
+  if (v.name !== s.name) perdidas.push(`sesion ${s.id}: escribi ${JSON.stringify(s.name)}, volvio ${JSON.stringify(v.name)}`);
+}
 
 const CAMPOS = ["session", "order", "name", "group", "sets", "refKg", "repsMin", "repsMax", "tempo", "rest", "rir", "unit", "description"];
 for (const e of EJERCICIOS) {

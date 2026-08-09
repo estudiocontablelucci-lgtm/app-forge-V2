@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { TECNICAS, defDe, pasosDe, pasosDeLog, pasoHecho, serieCerrada, normalizar as normalizarTecnica, porAlias as tecnicaPorAlias } from "@/lib/tecnicas";
@@ -161,6 +161,20 @@ function loadState() {
 let saveT = null;
 function saveState(s) { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem("forge-v2", JSON.stringify(s)); } catch {} }, 500); }
 
+/**
+ * Borrar el estado del disco, YA y sin que nadie lo vuelva a escribir.
+ *
+ * El `clearTimeout` no es de adorno: `saveState` guarda con 500 ms de retraso,
+ * y cerrar sesion navega enseguida. Sin cancelar el guardado pendiente, el
+ * estado de la cuenta que se acaba de ir se re-escribe despues de haberlo
+ * borrado — y reaparece en la cuenta siguiente.
+ */
+function limpiarEstado() {
+  clearTimeout(saveT);
+  saveT = null;
+  try { localStorage.removeItem("forge-v2"); } catch { /* modo privado, o sin permiso */ }
+}
+
 /* ---------- Mini components ---------- */
 function ExSetRow({ ex, n, week, logs, onSetChange, onPasoChange, deload, totalSets }) {
   const k = keyOf(week, ex.id, n);
@@ -309,6 +323,39 @@ export default function ForgeApp() {
     setPerfilLocal((p) => (p?.email === email && p?.name === name ? p : { name, email, image }));
   }, [signedIn, authSession]);
   const conCuenta = signedIn || Boolean(perfilLocal);
+
+  /**
+   * Cerrar sesion de verdad, que incluye OLVIDAR el perfil.
+   *
+   * `perfilLocal` existe para que sin señal la app no le diga "Entrar" a
+   * alguien que tiene cuenta: `/api/auth/session` falla y next-auth responde
+   * "no autenticado", que es cierto como estado del momento y falso como
+   * conclusion. El problema es que al cerrar sesion el servidor responde
+   * EXACTAMENTE LO MISMO, asi que la app no podia distinguir "no hay sesion
+   * porque no hay red" de "no hay sesion porque me fui" — y seguia mostrando
+   * al usuario adentro, con el cartel de "Sin conexión", para siempre.
+   *
+   * Lo que las separa no es una respuesta del servidor: es que cerrar sesion es
+   * un ACTO DELIBERADO de la persona. Estar sin red nunca borra el perfil;
+   * tocar el boton siempre lo borra.
+   *
+   * Y se limpian tambien los programas y el historial: son de la cuenta que se
+   * va. Si quedaran, al entrar la cuenta siguiente los MERGEA y los sube como
+   * propios — asi es como el programa de una persona termina en la cuenta de
+   * otra. El servidor ya los tiene; no se pierde nada.
+   */
+  const cerrarSesion = () => {
+    limpiarEstado();
+    setPerfilLocal(null);
+    setPrograms([]);
+    setActiveProgramId(null);
+    setLogs({});
+    setHistory([]);
+    setCatalog(migrarACatalogo([]).catalog);   // el catalogo base, no vacio
+    setBorrados({});
+    setTimer(null);
+    signOut({ callbackUrl: "/" });
+  };
 
   // Derived: active program, sessions, exercises
   const activeProgram = programs.find((p) => p.id === activeProgramId) || programs[0];
@@ -1214,6 +1261,7 @@ export default function ForgeApp() {
             syncing={syncing}
             prefs={prefs}
             onPrefs={(cambio) => setPrefs((p) => ({ ...p, ...cambio }))}
+            onCerrarSesion={cerrarSesion}
           />
         </div>
       </div>
@@ -2281,6 +2329,12 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
 
 /* ---------- Excel import helpers ---------- */
 const FIELD_ALIASES = {
+  // EL ORDEN IMPORTA y estos dos van PRIMEROS. `matchColumn` se queda con el
+  // primer campo cuyo alias este CONTENIDO en el encabezado, y "Nombre sesion"
+  // contiene "sesion" (de `session`) y tambien "nombre" (de `name`): puesto mas
+  // abajo, ninguno de los dos llegaria nunca a mapearse.
+  programName: ["nombre del programa", "nombre programa", "programa", "program"],
+  sessionName: ["nombre de la sesion", "nombre de sesion", "nombre sesion", "nombre de la sesión", "nombre de sesión", "nombre sesión", "sesion nombre"],
   session:  ["sesion", "sesión", "dia", "día", "day", "session"],
   name:     ["ejercicio", "exercise", "nombre", "name"],
   group:    ["grupo", "grupo muscular", "muscle", "muscle group", "musclegroup"],
@@ -2342,6 +2396,8 @@ function parseRefKg(val) {
 function parseExcelData(rows, mapping) {
   const exercises = [];
   const sessionSet = new Set();
+  const nombresDeSesion = new Map();
+  let nombrePrograma = "";
   let order = 0;
 
   for (const row of rows) {
@@ -2351,6 +2407,14 @@ function parseExcelData(rows, mapping) {
     const sessionRaw = mapping.session != null ? String(row[mapping.session] || "A").trim().toUpperCase() : "A";
     const session = sessionRaw.charAt(0);
     sessionSet.add(session);
+
+    if (mapping.sessionName != null && !nombresDeSesion.has(session)) {
+      const n = String(row[mapping.sessionName] || "").trim();
+      if (n) nombresDeSesion.set(session, n);
+    }
+    if (mapping.programName != null && !nombrePrograma) {
+      nombrePrograma = String(row[mapping.programName] || "").trim();
+    }
 
     let repsMin = 0, repsMax = 0;
     if (mapping.repsMin != null && mapping.repsMax != null) {
@@ -2394,25 +2458,36 @@ function parseExcelData(rows, mapping) {
     }
   }
 
-  const sessions = [...sessionSet].sort().map((id) => ({ id, name: `Sesion ${id}` }));
-  return { exercises, sessions };
+  // El nombre de la sesion se toma de la PRIMERA fila de esa sesion que lo
+  // traiga. Es un dato de la sesion escrito en una fila de ejercicio, asi que
+  // repetirlo en las diez filas es lo natural al armar la planilla y no puede
+  // ser obligatorio en ninguna.
+  const sessions = [...sessionSet].sort().map((id) => ({ id, name: nombresDeSesion.get(id) || `Sesion ${id}` }));
+  // Sin columna, el wizard cae al nombre del archivo — que es como un programa
+  // termina llamandose "forge-programa-vigente".
+  return { exercises, sessions, programName: nombrePrograma || null };
 }
 
 function downloadTemplate() {
-  const header = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Tecnica", "Unidad", "Descripcion"];
+  // "Programa" y "Nombre sesion" van PRIMERAS y se repiten en cada fila. Sin
+  // ellas el programa se llamaba como el archivo y las sesiones quedaban
+  // "Sesion A", "Sesion B" — que es lo unico que se ve al elegir que entrenar.
+  const header = ["Programa", "Sesion", "Nombre sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Tecnica", "Unidad", "Descripcion"];
+  const P = "Mi programa";
   const examples = [
-    ["A", 1, "Sentadilla", "Cuadriceps", 4, 8, 10, 100, "2-0-1-0", "150", "2-3", "", "", "reps", "Barra alta, rodillas hacia afuera"],
-    ["A", 2, "Press plano", "Pecho", 3, 8, 10, 70, "2-0-1-0", "2'30\"", "2-3", "", "", "reps", ""],
-    ["A", 3, "Remo con barra", "Espalda", 3, 8, 10, 60, "2-0-1-1", "2'", "2-3", "", "", "reps", "Agarre prono, tirar al ombligo"],
-    ["A", 4, "Curl biceps", "Biceps", 3, 10, 12, 12.5, "2-0-1-0", "60", "1-2", "Extension triceps", "", "reps", ""],
-    ["A", 5, "Extension triceps", "Triceps", 3, 10, 12, "", "2-0-1-0", "60", "1-2", "Curl biceps", "dropset", "reps", "La ultima serie con dos bajadas de peso, sin descanso"],
-    ["B", 1, "Peso muerto", "Isquios", 4, 6, 8, 120, "2-0-1-0", "3'", "2-3", "", "", "reps", "Convencional, espalda neutra"],
-    ["B", 2, "Dominadas", "Espalda", 3, 4, 8, "BW", "2-0-1-0", "180", "2-3", "", "", "reps", ""],
-    ["B", 3, "Caminata granjero", "Core", 3, 40, 60, "25kg/m", "", "120", "", "", "", "pasos", "Unidad 'pasos' para medir distancia en vez de repeticiones"],
+    [P, "A", "Torso", 1, "Sentadilla", "Cuadriceps", 4, 8, 10, 100, "2-0-1-0", "150", "2-3", "", "", "reps", "Barra alta, rodillas hacia afuera"],
+    [P, "A", "Torso", 2, "Press plano", "Pecho", 3, 8, 10, 70, "2-0-1-0", "2'30\"", "2-3", "", "", "reps", ""],
+    [P, "A", "Torso", 3, "Remo con barra", "Espalda", 3, 8, 10, 60, "2-0-1-1", "2'", "2-3", "", "", "reps", "Agarre prono, tirar al ombligo"],
+    [P, "A", "Torso", 4, "Curl biceps", "Biceps", 3, 10, 12, 12.5, "2-0-1-0", "60", "1-2", "Extension triceps", "", "reps", ""],
+    [P, "A", "Torso", 5, "Extension triceps", "Triceps", 3, 10, 12, "", "2-0-1-0", "60", "1-2", "Curl biceps", "dropset", "reps", "La ultima serie con dos bajadas de peso, sin descanso"],
+    [P, "B", "Pierna", 1, "Peso muerto", "Isquios", 4, 6, 8, 120, "2-0-1-0", "3'", "2-3", "", "", "reps", "Convencional, espalda neutra"],
+    [P, "B", "Pierna", 2, "Dominadas", "Espalda", 3, 4, 8, "BW", "2-0-1-0", "180", "2-3", "", "", "reps", ""],
+    [P, "B", "Pierna", 3, "Gemelo sentado", "Gemelos", 3, 10, 12, 45, "1-0-1-0", "90", "1-2", "", "isoest", "reps", "Aguantar abajo 15-30\" en la ultima repeticion"],
+    [P, "B", "Pierna", 4, "Caminata granjero", "Core", 3, 40, 60, "25kg/m", "", "120", "", "", "", "pasos", "Unidad 'pasos' para medir distancia en vez de repeticiones"],
   ];
   const ws = XLSX.utils.aoa_to_sheet([header, ...examples]);
   // Column widths
-  ws["!cols"] = [{ wch: 8 }, { wch: 6 }, { wch: 22 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 }, { wch: 10 }, { wch: 8 }, { wch: 35 }];
+  ws["!cols"] = [{ wch: 18 }, { wch: 8 }, { wch: 16 }, { wch: 6 }, { wch: 22 }, { wch: 16 }, { wch: 7 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 }, { wch: 10 }, { wch: 8 }, { wch: 35 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Programa");
   XLSX.writeFile(wb, "forge-plantilla-programa.xlsx");
@@ -2546,8 +2621,10 @@ function ImportWizard({ wizard, setWizard, onImport }) {
           <div className="navrow" style={{ marginTop: 16 }}>
             <button className="navbtn" onClick={() => setWizard({ step: 1 })}>Atras</button>
             <button className="navbtn pri" disabled={!canProceed} onClick={() => {
-              const { exercises, sessions } = parseExcelData(wizard.rows, wizard.mapping);
-              setWizard((w) => ({ ...w, step: 3, preview: { exercises, sessions } }));
+              const { exercises, sessions, programName } = parseExcelData(wizard.rows, wizard.mapping);
+              // El nombre del archivo es el ULTIMO recurso, no el primero: es
+              // como un programa termina llamandose "forge-programa-vigente".
+              setWizard((w) => ({ ...w, step: 3, name: programName || w.name, preview: { exercises, sessions } }));
             }}>Vista previa</button>
           </div>
         </div>

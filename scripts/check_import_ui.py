@@ -148,6 +148,18 @@ def main() -> int:
         check("entraron las 4 sesiones", len(sesiones) == 4,
               f"entraron {len(sesiones)}: {[s.get('id') for s in sesiones]}")
 
+        # Lo que MAS se ve: el titulo del programa y lo que se toca para elegir
+        # que entrenar. Sin columnas propias, el programa se llamaba como el
+        # ARCHIVO y las sesiones quedaban "Sesion A" / "Sesion B".
+        nombre = prog.get("name") or ""
+        check("el programa NO se llama como el archivo",
+              "forge-programa" not in nombre.lower() and nombre.strip() != "",
+              f"quedo {nombre!r}")
+        genericas = [s.get("name") for s in sesiones if str(s.get("name", "")).startswith("Sesion ")]
+        check("las sesiones traen su nombre real, no 'Sesion A'", not genericas,
+              f"quedaron genericas: {genericas}")
+        print(f"       (programa {nombre!r} · sesiones {[s.get('name') for s in sesiones]})")
+
         series = sum(int(e.get("sets") or 0) for e in ejercicios)
         check("las series suman 111", series == 111, f"suman {series}")
 
