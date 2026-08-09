@@ -719,6 +719,22 @@ Tres reglas que valen mas que su implementacion:
 
 ### Dos cosas del sync que ya rompieron
 
+**Un programa que NO sube se dice, con su nombre.** `sincronizar` recorria los programas,
+contaba los que subian y **descartaba el resultado de los que no**: un 500 del servidor salia por
+pantalla como "Sincronizado · 4 programas". El 2026-08-09 un programa no subio en NINGUNA
+sincronizacion y solo se detecto leyendo los logs de Vercel — en un telefono no hay logs.
+Anunciar exito con algo afuera es el peor de los dos estados: el usuario cree que su programa
+esta en la nube.
+
+**Una referencia huerfana al catalogo bloquea el push del programa ENTERO, para siempre.**
+`program_exercises.exercise_id` es una FK a `exercises`: un solo ejercicio apuntando a una
+entrada que no esta hace fallar el INSERT completo con `FOREIGN KEY constraint failed`, y como
+el push se reintenta en cada sincronizacion, falla siempre igual. Paso con 16 de 36 ejercicios.
+Antes de subir, `sincronizar` **absorbe** al catalogo lo que falta y despues
+`sinReferenciasHuerfanas` resuelve el resto: repunta por NOMBRE si el ejercicio existe con otro
+id, y si no hay a quien apuntar **suelta la referencia a null**. El programa sigue funcionando
+—`name` viaja denormalizado— y entra. Una referencia rota no vale mas que ninguna.
+
 **Entre dos versiones de un programa gana la editada DESPUES, salvo si es
 asignado.** Lo decide `mergePrograms` con `updatedAt`, que es la marca de cuando
 lo toco el USUARIO y no de cuando se subio. Un programa asignado se reemplaza
