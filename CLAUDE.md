@@ -252,31 +252,54 @@ PUBLICO y ahi hay datos de salud —diagnosticos, restricciones medicas— que b
 la Ley 25.326 son dato sensible. Un `.gitignore` es una convencion, no una
 proteccion: un `git add -f` distraido publica para siempre.
 
-Viven en `OneDrive/Documentos/Organizacion Personal/Salud/Sistema cronobiologico/Claude/`:
+Viven en `OneDrive/Documentos/Organizacion Personal/Salud/Sistema cronobiologico/Claude/`.
+**Reorganizada el 2026-08-08** en tres niveles con precedencia explicita:
 
-| Archivo | Que es |
+| Ruta | Que es |
 |---|---|
-| `programa_tecnicas_ciclo2.md` | **Manda sobre toda decision actual**: tecnicas, refs, orden, swaps, reglas de progresion |
-| `rutina_gym.md` | **Linea de base, no decide.** Los estudios medicos textuales, el e1RM del Ciclo 1, el protocolo de fotos, los targets de proporciones y el registro de ajustes de Ciclo 1 |
-| `_archivo/` | Lo reemplazado. No se lee — el 2026-08-05 se mudo ahi `programa_tecnicas_ciclo2 sin belt quat.md`, que se llamaba casi igual que el vigente y con nombre mas largo parecia el mas especifico |
+| **`00-indice.md`** | **Se lee primero.** Mapa, precedencia y las cuatro reglas de la carpeta |
+| `criterios/` | **ESTABLE, gobierna todo lo demas.** `criterios-programa.md` (C1-C9: seleccion, orden, escalera, cobertura, tecnica), `criterios-progresion.md`, `contexto-medico.md`, `protocolo-medicion.md` |
+| `programa/programa-vigente.md` | **Manda sobre toda decision actual:** slots, refs, orden, tecnicas |
+| `registro/` | **Historico. No se consulta para decidir.** Auditorias, ciclos cerrados |
+| `CAMBIOS.md` | Changelog unico, una linea por decision |
 
-**Precedencia resuelta el 2026-08-05.** Para refs, ejercicios y criterios manda
-el vigente. `rutina_gym.md` no se consulta para decidir: se consulta para saber
-que decia el informe y de donde salen los numeros de partida. Su rol de
-seguimiento murio con la Google Sheet, dada de baja el 2026-08-04.
+**Ningun archivo vigente lleva numero de ciclo en el nombre.** `programa-vigente.md` siempre
+apunta al actual; los archivados llevan fecha. Es la regla que evita lo del 04/08/2026, cuando
+habia tres copias de `programa_tecnicas_ciclo2` y una compartia nombre exacto con la vigente.
 
-Importa porque los dos **se contradicen sobre la restriccion medica**.
-`rutina_gym.md` dice "no hacer ejercicios con carga axial pesada"; el vigente
-dice, citando el mismo informe, que lo que gobierna es la **flexion lumbar bajo
-carga**, no la carga axial, y que por eso conviven trap bar a 120kg y prensa a
-145kg con la lista de prohibidos. La conclusion textual del radiologo es
-"Rectificacion del eje. Incipientes discopatias L3-S1" — lo de la carga axial es
-una interpretacion agregada en el archivo viejo, no una linea del informe. Gana
-el vigente.
+**Vigente desde el 2026-08-08: Ciclo 3** — 4 dias (A/B/C fullbody DUP + D de especializacion),
+36 ejercicios, 111 series semanales. `ASIM-IZQ` esta **suspendido** por no haberse ejecutado
+nunca (0 series en 8 sesiones del Ciclo 2).
 
-Restriccion medica que condiciona la seleccion de ejercicios: discopatias lumbares incipientes L3-S1.
+**El programa NO vive en el repo y `npm run gen:programa` lo lee de afuera.** La ruta esta en
+`scripts/rutas.mjs` y en ningun otro lado, escrita y no derivada de `__dirname`; los datos, en
+`programa/programa-vigente.mjs` de la carpeta de Salud — mismo nombre base que el `.md`, que es
+la regla 4 de esa carpeta. `lib/seed-ciclo2.js` se queda como historia y como fuente del
+verificador de import, que ya no depende de `data/`.
+
+**El generador valida y ademas hace round-trip.** Valida lo que el archivo puede contradecir de
+si mismo (superseries mutuas y dentro de la sesion, ordenes 1..n, tecnicas que existen) y
+despues **relee el .xlsx que acaba de escribir con los helpers de import reales** de
+`ForgeApp.jsx`. Sin eso, una columna que el auto-mapeo no reconoce se pierde en silencio y el
+programa importado se ve perfecto: las tecnicas y las superseries son justo lo que no se nota
+que falta hasta estar en el gimnasio.
+
+**Al transcribir el `.md`, las cuentas del original no cerraban por uno** y se resolvio a favor
+del detalle: las cuatro tablas de sesion suman 111 y la tabla de volumen por grupo tambien,
+contra un titular que decia 110. El generador imprime el volumen por grupo justamente para
+poder cruzarlo contra el documento.
+
+**Restriccion medica que condiciona la seleccion de ejercicios:** discopatias lumbares
+incipientes L3-S1. Lo que gobierna es la **flexion lumbar bajo carga, no la carga axial en si**
+— el informe del radiologo no contiene la palabra "axial" ni menciona ejercicios, y por eso
+conviven trap bar a 115 kg y prensa a 140 con la lista de prohibidos.
+
 **Nunca** proponer back squat, front squat, peso muerto convencional ni good mornings pesados.
-Sustitutos validos en uso: sentadilla pendular, prensa horizontal, prensa 45, trap bar, hip thrust.
+Sustitutos validos en uso: sentadilla pendular, prensa 45, trap bar, hip thrust, hack squat,
+extension lumbar liviana.
+
+**Isotretinoina activa hasta ~28/02/2027:** sin test de maximos ni PRs. Ver
+`criterios/contexto-medico.md`.
 
 `npm run gen:programa` genera `data/*.xlsx` para importar por el wizard (el SEED solo aplica a
 instalaciones nuevas). `npm run verify` corre las suites sin navegador (255 checks).
@@ -480,6 +503,34 @@ que sirva (Notification Triggers quedo en experimento). El grafo de audio corre
 en su propio hilo, asi que `osc.start(t)` en tiempo absoluto suena aunque nadie
 vuelva a ejecutar una linea de JS.
 
+**"No sono" y "ya sono" NO son la misma respuesta, y confundirlas dejaba el descanso mudo.**
+`beepPendiente()` daba false en dos situaciones distintas —el agendado ya salio, y nunca hubo
+agendado— y `sonarAhora` trataba las dos como "listo, no hago nada". Cualquier descanso que
+llegara sin beep agendado vencia en silencio, sin aviso y sin senal de que el aviso no estaba
+armado. Ahora existe `beepArmado()` y la regla es: **ante la duda suena.** Un aviso de mas se
+ignora; uno de menos deja a alguien parado al lado de la maquina mirando el telefono.
+
+**El camino que llegaba sin agendar es el descanso RESTAURADO.** Si el sistema mata la app a
+mitad de serie —pantalla apagada, telefono en el banco, o sea el caso normal— al volver el
+cronometro se lee del disco y cuenta bien, pero el grafo de audio arranco de cero. `agendarBeep`
+solo se llamaba al CREAR el descanso. Y no se puede agendar al restaurar: hace falta un gesto
+del usuario y al abrir la app no hubo ninguno, asi que ForgeApp se engancha al primero que
+venga. Los dos defectos se tapaban entre si, que es por lo que el sintoma era "a veces no suena".
+
+`npm run verify:aviso` cubre el modulo entero con un doble del grafo de audio: **no tenia una
+sola verificacion**, siendo el unico canal que viene prendido por defecto. Y
+`npm run verify:aviso-ui` prueba el camino que el nodo no alcanza —el descanso restaurado— en
+un navegador real: **un beep se MIRA espiando el grafo**, no se escucha. Un `AudioContext`
+instrumentado antes de que cargue la app anota cada oscilador con su frecuencia y su hora, y
+ahi 30 Hz sin hora es el tono de sosten y 880/1175 con hora futura son los pulsos agendados.
+
+**Preguntar si el audio esta vivo NO puede ser un intento de despertarlo.** El primer arreglo
+usaba `despertarAudio()` al montar, y sin gesto el navegador deja la promesa de `resume()`
+PENDIENTE en vez de rechazarla: quedaba un intento colgado que revivia junto con el del gesto y
+agendaba dos veces. Taparlo con un flag "estoy armando" fue peor —el flag quedaba trabado en el
+intento que nunca resolvia y bloqueaba el del gesto, que es el unico que importa: cero beeps.
+Por eso existe `audioVivo()`, que mira `ctx.state` y no toca nada.
+
 **Y para que el grafo no se suspenda, suena un tono de 30 Hz a volumen 0,0015.**
 Ningun parlante de telefono reproduce 30 Hz, pero para el navegador la pagina
 esta emitiendo audio y no la congela. Si igual se congela, `beepPendiente()` lo
@@ -571,6 +622,16 @@ dice el chip con el nombre — que ademas es lo que hace que no dependa solo del
 color. Ninguno puede salir de la familia del semaforo (verde/amarillo/rojo): el
 semaforo dice COMO TE FUE y la tecnica dice COMO SE HACE. La superserie era
 naranja `#F5A623`, a un paso del amarillo del semaforo, y por eso cambio.
+
+**El simbolo del chip sale de `TECNICAS`, no de la UI.** Estaba escrito a mano —una flecha
+para abajo, "bajá el peso"— y con una sola tecnica pasaba por adorno. Con dos deja de serlo:
+una flecha hacia abajo sobre una isometrica dice justo lo contrario de lo que hay que hacer.
+
+**`ISO-EST` lleva `pasos: 0` y eso NO es un detalle.** No agrega nada que registrar, que es lo
+que la separa del dropset. Con `pasos` en 1, `serieCerrada()` espera un escalon que nadie va a
+cargar y **el descanso no arranca nunca** en ese ejercicio — comprobado poniendolo en 1 a
+proposito. El clamp de `normalizar()` es por tecnica: aflojar el piso para la isometrica no
+puede permitir un dropset de cero bajadas.
 
 **La tecnica no puede ser texto libre.** En el Excel entra por alias
 (`porAlias`), igual que `superset: ["superserie","superset","ss"]`. Lo que no se

@@ -72,6 +72,12 @@ const local = {
     // Con dropset a proposito: es lo que permite mirar la tecnica en un
     // navegador de verdad, que es donde aparecieron los ultimos bugs.
     { id: "e3", session: "A", order: 3, name: "Press militar", group: "Hombro", sets: 3, refKg: 32.5, repsMin: 8, repsMax: 10, rir: "2", rest: 120, unit: "reps", technique: { tipo: "dropset", pasos: 2, aplica: "ultima" } },
+    // Con ISO-EST a proposito, y en la misma sesion que el dropset: son las dos
+    // caras de "adentro de la serie" y el riesgo de cada una es el OPUESTO. El
+    // dropset tiene que FRENAR el descanso hasta el ultimo escalon; la
+    // isometrica no tiene escalones, asi que si se le cuela uno el descanso no
+    // arranca NUNCA en ese ejercicio. Eso no se ve hasta estar en el gimnasio.
+    { id: "e7", session: "A", order: 4, name: "Curl femoral sentado", group: "Isquios", sets: 3, refKg: 40, repsMin: 10, repsMax: 12, rir: "2", rest: 90, unit: "reps", technique: { tipo: "isoest", pasos: 0, aplica: "ultima" } },
     { id: "e4", session: "B", order: 1, name: "Sentadilla pendular", group: "Cuadriceps", sets: 3, refKg: 80, repsMin: 8, repsMax: 10, rir: "2-3", rest: 180, unit: "reps" },
     { id: "e5", session: "B", order: 2, name: "Hip thrust", group: "Gluteo", sets: 3, refKg: 90, repsMin: 8, repsMax: 12, rir: "2-3", rest: 150, unit: "reps" },
     { id: "e6", session: "C", order: 1, name: "Dominadas", group: "Espalda", sets: 3, refKg: "BW", repsMin: 5, repsMax: 8, rir: "1-2", rest: 180, unit: "reps" },

@@ -10,3 +10,7 @@ db/verify.db
 # credenciales — nunca al repo (es publico)
 .env*
 .vercel
+
+# artefactos de Python
+__pycache__/
+*.pyc

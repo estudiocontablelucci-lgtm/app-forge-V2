@@ -134,9 +134,63 @@ def main() -> int:
         check("y arranca recien con el ultimo", pg.locator(".timerbar").count() > 0,
               "cerrado el dropset entero, el descanso no arranco")
 
-        print("\nlas cuentas")
+        print("\nlas cuentas del dropset")
+        # Va ACA y no al final: despues se avanza de ejercicio y la tarjeta del
+        # dropset deja de estar en pantalla, asi que el locator no resuelve.
         e1 = card.locator(".e1rmnow").inner_text() if card.locator(".e1rmnow").count() else ""
         check("el e1RM del ejercicio sigue saliendo", "e1RM" in e1, e1 or "sin e1RM al pie")
+
+        print("\nISO-EST: el riesgo OPUESTO al del dropset")
+        # El dropset tiene que FRENAR el descanso hasta el ultimo escalon. La
+        # isometrica en estiramiento no tiene escalones, asi que si se le colara
+        # uno el descanso no arrancaria NUNCA en ese ejercicio — y eso no se ve
+        # hasta estar parado al lado de la maquina.
+        pg.locator(".timerbar .tskip").first.click()   # cerrar el descanso anterior
+        pg.wait_for_timeout(600)
+
+        iso = None
+        for _ in range(8):
+            pri = pg.locator(".navbtn.pri")
+            if not pri.count() or "Siguiente" not in pri.first.inner_text():
+                break
+            pri.first.click()
+            pg.wait_for_timeout(800)
+            cand = pg.locator(".excard.con-tec")
+            # El chip dibuja el NOMBRE, no la abreviatura: "Isométrica en
+            # estiramiento". Se busca "ISOM" y no "ISO-EST" ni el nombre entero,
+            # que trae acento y no sobrevive a un `.upper()` comparado a mano.
+            if cand.count() and "ISOM" in cand.first.inner_text().upper():
+                iso = cand.first
+                break
+
+        check("se llega al ejercicio con isometrica", iso is not None,
+              "no aparecio ninguna tarjeta con ISO-EST: el seed o el recorrido cambiaron")
+
+        if iso is not None:
+            check("lleva la marca de tecnica, como el dropset",
+                  "con-tec" in (iso.get_attribute("class") or ""),
+                  "sin borde no se distingue de un ejercicio normal")
+            check("y dice que hay que aguantar abajo",
+                  "aguant" in iso.inner_text().lower(),
+                  "el chip solo no alcanza: hay que decir que hacer")
+
+            ifilas = iso.locator(".setrow")
+            iultima = ifilas.nth(ifilas.count() - 1)
+            iultima.locator("input").nth(0).fill("40")
+            iultima.locator("input").nth(1).fill("11")
+            pg.wait_for_timeout(1300)
+
+            check("NO pide escalones", iso.locator(".setrow.paso").count() == 0,
+                  f"aparecieron {iso.locator('.setrow.paso').count()} escalones en una isometrica")
+            check("y el descanso SI arranca al cerrar la serie",
+                  pg.locator(".timerbar").count() > 0,
+                  "la serie quedo abierta esperando escalones que no existen: el timer no arranca nunca")
+
+            # El chip lleva simbolo, y no puede ser el mismo que el del dropset:
+            # una flecha para abajo sobre una isometrica dice "bajá el peso".
+            check("no usa la flecha de 'bajá el peso'",
+                  "↓" not in (iso.locator(".tecchip").inner_text() if iso.locator(".tecchip").count() else "↓"),
+                  "el chip de la isometrica dice lo contrario de lo que hay que hacer")
 
         check("la app no tiro errores", not errores, str(errores[:2]))
 

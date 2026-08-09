@@ -26,6 +26,13 @@ Que hace, y por que:
    `Resultado Columna.pdf` que dejo de existir cuando se separo en dos.
 
 NO borra nada: mueve y renombra. Idempotente.
+
+APLICADO Y CERRADO (2026-08-05). El 2026-08-08 la carpeta se reorganizo entera
+en `criterios/` -> `programa/` -> `registro/`, y `rutina_gym.md` —el segundo
+archivo que este script corrige— dejo de existir: se partio en
+`criterios/protocolo-medicion.md` y `registro/2026-06-ciclo1-rutina.md`. Correrlo
+de nuevo es inocuo (avisa "NO ESTA" y sigue), pero no reordena nada de lo nuevo.
+Para verificar el estado actual del indice, `scripts/verificar-rutas-salud.py`.
 """
 import argparse
 import io

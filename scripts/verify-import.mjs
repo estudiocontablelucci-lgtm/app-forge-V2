@@ -7,38 +7,30 @@
  * bloque "Excel import helpers", que es codigo puro sin dependencias de React.
  * Compara campo por campo contra el SEED y sale con codigo 1 si algo no coincide.
  */
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
+import { cargarHelpers, mapear, filasDe } from "./import-helpers.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const src = readFileSync(resolve(root, "components/ForgeApp.jsx"), "utf8");
-
-// Bloque de helpers de import tal cual esta en el fuente.
-const from = src.indexOf("/* ---------- Excel import helpers ---------- */");
-const to = src.indexOf("function ImportWizard");
-if (from === -1 || to === -1) throw new Error("No se encontro el bloque de helpers de import en ForgeApp.jsx");
-const helpers = new Function("XLSX", "uid", `${src.slice(from, to)}; return { matchColumn, parseExcelData };`)(
-  XLSX,
-  () => Math.random().toString(36).slice(2, 9),
-);
+const helpers = cargarHelpers();
 
 // Se importa el modulo en vez de extraerlo del fuente: cuando el SEED salio
 // de ForgeApp.jsx, la extraccion por texto no fallo — agarro el primer array
 // que encontro y comparo contra el equivocado.
 const { SEED } = await import("../lib/seed-ciclo2.js");
-// XLSX.readFile no esta disponible en el build ESM (fs no viene bindeado): leer el buffer.
-const wb = XLSX.read(readFileSync(resolve(root, "data/forge-ciclo2-gabriel.xlsx")), { type: "buffer" });
-const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
 
-// Mismo auto-mapeo que hace el wizard al soltar el archivo.
-const mapping = {};
-for (const h of Object.keys(rows[0])) {
-  const field = helpers.matchColumn(h);
-  if (field && !(field in mapping)) mapping[field] = h;
-}
-console.log(`mapeo automatico: ${Object.keys(mapping).length}/14 columnas`);
+// El .xlsx se arma ACA, en memoria, y no se lee de `data/`. Esa carpeta esta
+// gitignoreada: la suite dependia de haber corrido `gen:programa` antes, asi
+// que en un clon nuevo fallaba por un archivo que falta y no por un bug.
+const byId = new Map(SEED.map((e) => [e.id, e]));
+const HEADER = ["Sesion", "Orden", "Ejercicio", "Grupo muscular", "Series", "Reps min", "Reps max", "Ref KG", "Tempo", "Descanso", "RIR", "Superserie", "Unidad", "Descripcion"];
+const aoa = [...SEED]
+  .sort((a, b) => (a.session < b.session ? -1 : a.session > b.session ? 1 : a.order - b.order))
+  .map((e) => [e.session, e.order, e.name, e.group, e.sets, e.repsMin, e.repsMax, e.refKg ?? "", e.tempo, e.rest, e.rir, e.superset ? (byId.get(e.superset)?.name ?? "") : "", e.unit, e.description]);
+const wb = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([HEADER, ...aoa]), "Programa");
+const rows = filasDe(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+
+const mapping = mapear(helpers, rows);
+console.log(`mapeo automatico: ${Object.keys(mapping).length}/${HEADER.length} columnas`);
 const sinMapear = Object.keys(rows[0]).filter((h) => !Object.values(mapping).includes(h));
 if (sinMapear.length) console.log(`  columnas sin mapear: ${sinMapear.join(", ")}`);
 
