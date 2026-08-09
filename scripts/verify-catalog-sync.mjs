@@ -180,6 +180,51 @@ await check("el catalogo base es de solo lectura", async () => {
   return true;
 });
 
+
+/* ============ una referencia huerfana rompe el push del programa ENTERO ============ */
+
+await check("un exerciseId inexistente hace fallar el INSERT del programa entero", async () => {
+  // La FK es real y esto es lo que pasaba en produccion: 16 de 36 ejercicios
+  // apuntaban a entradas que no estaban, y el programa no subia NUNCA — el
+  // push se reintenta en cada sincronizacion y falla siempre igual.
+  const p = {
+    id: 'p-huerfano', name: 'Con referencia rota', weeks: 4, hasDeload: true,
+    sessions: [{ id: 'A', name: 'A' }],
+    exercises: [
+      { id: 'x1', session: 'A', order: 1, name: 'Press plano', sets: 3, exerciseId: CATALOGO_BASE[0].id },
+      { id: 'x2', session: 'A', order: 2, name: 'Fantasma', sets: 3, exerciseId: 'ex-no-existe-en-ningun-lado' },
+    ],
+  };
+  let exploto = false;
+  try { await pushProgramForUser(ana.id, p); } catch { exploto = true; }
+  return exploto ? true : 'el servidor lo acepto: la FK no esta protegiendo nada';
+});
+
+await check('saneado antes de subir, el mismo programa entra', async () => {
+  const { sinReferenciasHuerfanas } = await import("../lib/catalog.js");
+  // El catalogo base alcanza: lo que importa es que NO contenga el id fantasma.
+  const catalogo = CATALOGO_BASE;
+  const p = {
+    id: 'p-saneado', name: 'Saneado', weeks: 4, hasDeload: true,
+    sessions: [{ id: 'A', name: 'A' }],
+    exercises: [
+      { id: 'y1', session: 'A', order: 1, name: 'Press plano', sets: 3, exerciseId: CATALOGO_BASE[0].id },
+      { id: 'y2', session: 'A', order: 2, name: 'Fantasma', sets: 3, exerciseId: 'ex-no-existe-en-ningun-lado' },
+    ],
+  };
+  const { programs, sueltas } = sinReferenciasHuerfanas([p], catalogo);
+  if (sueltas !== 1) return `solto ${sueltas} referencias, esperaba 1`;
+  await pushProgramForUser(ana.id, programs[0]);
+  const { programs: remotos } = await pullForUser(ana.id);
+  const vuelto = remotos.find((x) => x.name === "Saneado");
+  if (!vuelto) return "el programa no llego al servidor";
+  // El ejercicio NO se pierde: lo unico que se solto es la referencia, y el
+  // nombre viaja denormalizado al lado.
+  if (vuelto.exercises.length !== 2) return `volvio con ${vuelto.exercises.length} ejercicios, esperaba 2`;
+  const conRef = vuelto.exercises.filter((e) => e.exerciseId);
+  return conRef.length === 1 ? true : `quedaron ${conRef.length} referencias, esperaba 1`;
+});
+
 if (fallas.length) {
   console.error(`\nFALLO  ${fallas.length} verificacion(es):`);
   for (const f of fallas) console.error(`  - ${f}`);

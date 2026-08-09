@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
 import { TECNICAS, defDe, pasosDe, pasosDeLog, pasoHecho, serieCerrada, normalizar as normalizarTecnica, porAlias as tecnicaPorAlias } from "@/lib/tecnicas";
-import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas } from "@/lib/catalog";
+import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas, sinReferenciasHuerfanas } from "@/lib/catalog";
 import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos, hayServidor } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
@@ -547,13 +547,30 @@ export default function ForgeApp() {
       setLogs((L) => ({ ...reconstruidos, ...L }));
     }
 
+    // El catalogo tiene que quedar consistente ANTES de subir los programas:
+    // `program_exercises.exercise_id` es una FK, y un ejercicio que apunta a
+    // una entrada inexistente hace fallar el INSERT del programa entero. Como
+    // el push se reintenta en cada sincronizacion, ese programa no sube NUNCA.
+    // Primero se dan de alta las que faltan, y recien lo que ni asi se pudo
+    // resolver se suelta. Ver `lib/catalog.js`.
+    const catConPropios = absorberDeProgramas(catalogRef.current, programsRef.current);
+    if (catConPropios !== catalogRef.current) setCatalog(catConPropios);
+    const { programs: aSubir, sueltas } = sinReferenciasHuerfanas(programsRef.current, catConPropios);
+    if (sueltas) setPrograms((P) => P.map((p) => aSubir.find((x) => x.id === p.id) || p));
+
     // Los programas propios se suben siempre, hayan sido entrenados o no: uno
     // recien creado tiene que existir en el servidor para poder asignarselo a
     // un alumno. Los ajenos (asignados por un entrenador) no se tocan.
     let programasSubidos = 0;
-    for (const p of programsRef.current.filter((x) => !x.readOnly)) {
-      const res = await pushProgram(p, catalogRef.current);
+    const programasFallidos = [];
+    for (const p of aSubir.filter((x) => !x.readOnly)) {
+      const res = await pushProgram(p, catConPropios);
+      // Un programa que no sube NO puede contarse como si nada. Antes se
+      // descartaba el resultado y el cartel decia "Sincronizado · 4 programas"
+      // con un 500 del servidor abajo — solo visible en los logs, que en un
+      // telefono no existen.
       if (res.ok) programasSubidos++;
+      else programasFallidos.push(p.name || p.id);
     }
 
     // Una lapida deja de hacer falta cuando el servidor ya no devuelve ese
@@ -581,7 +598,17 @@ export default function ForgeApp() {
     if (subidas) partes.push(`${subidas} subida${subidas === 1 ? "" : "s"} recién`);
     if (programasSubidos) partes.push(`${programasSubidos} programa${programasSubidos === 1 ? "" : "s"}`);
     if (fallaron.length) partes.push(`${fallaron.length} sin subir`);
-    setSyncState(`Sincronizado · ${partes.join(" · ")}.`);
+
+    // Un programa que no subio se DICE, y con su nombre. Anunciar
+    // "Sincronizado" mientras algo quedo afuera es el peor de los dos estados
+    // posibles: el usuario cree que su programa esta en la nube y no esta.
+    if (programasFallidos.length) {
+      const cuales = programasFallidos.slice(0, 2).join(", ");
+      const resto = programasFallidos.length > 2 ? ` y ${programasFallidos.length - 2} más` : "";
+      setSyncState(`Se sincronizó lo demás, pero no se pudo subir ${cuales}${resto}. Está guardado en el teléfono; reintentá en un rato.`);
+    } else {
+      setSyncState(`Sincronizado · ${partes.join(" · ")}.`);
+    }
     setSyncing(false);
   };
 
