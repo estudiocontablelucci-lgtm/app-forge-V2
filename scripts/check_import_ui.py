@@ -41,6 +41,7 @@ def main() -> int:
     ap.add_argument("--base", default="http://localhost:3008")
     ap.add_argument("--xlsx", default="data/forge-programa-vigente.xlsx")
     ap.add_argument("--esperado", type=int, default=36, help="ejercicios que tiene que traer")
+    ap.add_argument("--series", type=int, default=0, help="series semanales esperadas (0 = solo informar)")
     args = ap.parse_args()
     base = args.base.rstrip("/")
     xlsx = Path(args.xlsx).resolve()
@@ -160,8 +161,17 @@ def main() -> int:
               f"quedaron genericas: {genericas}")
         print(f"       (programa {nombre!r} · sesiones {[s.get('name') for s in sesiones]})")
 
+        # El total NO se compara contra un numero escrito aca: cambia en cada
+        # revision del ciclo y un check que envejece se convierte en ruido que
+        # se ignora. Lo que se comprueba es que la columna Series haya entrado
+        # ENTERA — ningun ejercicio sin series es el sintoma de que no mapeo.
         series = sum(int(e.get("sets") or 0) for e in ejercicios)
-        check("las series suman 111", series == 111, f"suman {series}")
+        sinSeries = [e.get("name") for e in ejercicios if not (int(e.get("sets") or 0) > 0)]
+        check("todos los ejercicios traen sus series", not sinSeries,
+              f"{len(sinSeries)} sin series: {sinSeries[:3]}")
+        if args.series:
+            check(f"las series suman {args.series}", series == args.series, f"suman {series}")
+        print(f"       (series semanales: {series})")
 
         con_tec = [e for e in ejercicios if e.get("technique")]
         tipos = sorted({(e.get("technique") or {}).get("tipo") for e in con_tec})

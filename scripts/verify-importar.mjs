@@ -100,15 +100,81 @@ check("el que ya no esta se informa por nombre", () => {
   assert.deepEqual(r.quitados.sort(), ["Curl viejo", "Remo T"]);
 });
 
-check("el mismo nombre en OTRA sesion no es el mismo ejercicio", () => {
-  // "Camilla isquios" en A y en B son dos slots distintos con su propio
-  // historial. Emparejarlos mezclaria dos series de dias diferentes.
+titulo("Mudarse de DIA no es una sustitucion");
+
+check("un ejercicio que cambia de sesion CONSERVA su id", () => {
+  // La revision del 09/08/2026 mudo face pulls de B a D, y pullover y apertura
+  // de C a D. Es la misma maquina, el mismo patron y la misma longitud: el
+  // e1RM tiene que seguir encadenando. Atar la identidad a la sesion habria
+  // cortado la cadena de tres ejercicios en silencio.
   const r = fusionarPrograma(EXISTENTE, {
-    name: "Ciclo 3", sessions: [{ id: "B", name: "B" }],
-    exercises: [ex({ id: "tmp-1", session: "B", name: "Press plano" })],
+    name: "Ciclo 3", sessions: [{ id: "D", name: "D" }],
+    exercises: [ex({ id: "tmp-1", session: "D", name: "Press plano", refKg: 72 })],
   });
-  assert.equal(r.program.exercises[0].id, "tmp-1");
-  assert.equal(r.conservados, 0);
+  assert.equal(r.program.exercises[0].id, "viejo-1", "le dio id nuevo: se corta el e1RM");
+  assert.equal(r.program.exercises[0].session, "D");
+  assert.equal(r.conservados, 1);
+  assert.deepEqual(r.mudados, [{ name: "Press plano", de: "A", a: "D" }]);
+});
+
+check("y se lleva sus refs por semana a la sesion nueva", () => {
+  const r = fusionarPrograma(EXISTENTE, {
+    name: "Ciclo 3", sessions: [{ id: "D", name: "D" }],
+    exercises: [ex({ id: "tmp-1", session: "D", name: "Press plano" })],
+  });
+  assert.deepEqual(r.program.exercises[0].refsByWeek, { 2: 65 });
+});
+
+check("con HOMONIMOS en varias sesiones NO se adivina", () => {
+  // "Camilla isquios" estuvo en A y en B a la vez. Si el nombre se repite, cual
+  // se mudo a cual es una adivinanza, y errarle mezcla el historial de dos dias.
+  const conDobles = {
+    ...EXISTENTE,
+    exercises: [
+      ex({ id: "v-a", session: "A", name: "Camilla isquios", refKg: 50 }),
+      ex({ id: "v-b", session: "B", name: "Camilla isquios", refKg: 50 }),
+    ],
+  };
+  const r = fusionarPrograma(conDobles, {
+    name: "Ciclo 3", sessions: [{ id: "D", name: "D" }],
+    exercises: [ex({ id: "tmp-x", session: "D", name: "Camilla isquios" })],
+  });
+  assert.equal(r.program.exercises[0].id, "tmp-x", "adivino de cual de los dos venia");
+  assert.equal(r.mudados.length, 0);
+});
+
+check("pero si sigue en su sesion, empareja ahi aunque haya homonimo", () => {
+  const conDobles = {
+    ...EXISTENTE,
+    exercises: [
+      ex({ id: "v-a", session: "A", name: "Camilla isquios" }),
+      ex({ id: "v-b", session: "B", name: "Camilla isquios" }),
+    ],
+  };
+  const r = fusionarPrograma(conDobles, {
+    name: "Ciclo 3", sessions: [{ id: "A", name: "A" }, { id: "B", name: "B" }],
+    exercises: [
+      ex({ id: "t1", session: "B", name: "Camilla isquios" }),
+      ex({ id: "t2", session: "A", name: "Camilla isquios" }),
+    ],
+  });
+  assert.equal(r.program.exercises[0].id, "v-b", "emparejo con el de la otra sesion");
+  assert.equal(r.program.exercises[1].id, "v-a");
+  assert.equal(r.conservados, 2);
+});
+
+check("un viejo no se empareja dos veces", () => {
+  const r = fusionarPrograma(EXISTENTE, {
+    name: "Ciclo 3", sessions: [{ id: "A", name: "A" }],
+    exercises: [
+      ex({ id: "t1", name: "Press plano" }),
+      ex({ id: "t2", name: "Press plano" }),
+    ],
+  });
+  const ids = r.program.exercises.map((e) => e.id);
+  assert.equal(ids[0], "viejo-1");
+  assert.equal(ids[1], "t2", "reuso el mismo id viejo en dos ejercicios");
+  assert.equal(new Set(ids).size, 2, "quedaron dos ejercicios con el mismo id");
 });
 
 check("empareja por nombre normalizado, no letra a letra", () => {

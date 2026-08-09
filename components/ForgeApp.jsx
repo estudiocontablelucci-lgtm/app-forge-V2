@@ -2747,6 +2747,16 @@ function ImportWizard({ wizard, setWizard, onImport, programas = [] }) {
               <p className="import-existe-n mono">
                 {fusion.conservados} conserva{fusion.conservados === 1 ? "" : "n"} historial · {fusion.nuevos} nuev{fusion.nuevos === 1 ? "o" : "os"}
               </p>
+              {/* Cambiar de dia conserva el id a proposito —es la misma maquina,
+                  el e1RM sigue— pero es justo lo que uno querria poder
+                  desmentir de un vistazo si el archivo tenia un error. */}
+              {fusion.mudados?.length > 0 && (
+                <p className="import-existe-d" style={{ marginTop: 6 }}>
+                  Cambian de día y siguen con su historial:{" "}
+                  {fusion.mudados.slice(0, 4).map((m) => `${m.name} (${m.de}→${m.a})`).join(", ")}
+                  {fusion.mudados.length > 4 ? "…" : ""}.
+                </p>
+              )}
             </div>
           )}
           <div className="navrow" style={{ marginTop: 16 }}>
