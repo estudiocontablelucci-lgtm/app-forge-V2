@@ -623,6 +623,16 @@ color. Ninguno puede salir de la familia del semaforo (verde/amarillo/rojo): el
 semaforo dice COMO TE FUE y la tecnica dice COMO SE HACE. La superserie era
 naranja `#F5A623`, a un paso del amarillo del semaforo, y por eso cambio.
 
+**El simbolo del chip sale de `TECNICAS`, no de la UI.** Estaba escrito a mano —una flecha
+para abajo, "bajá el peso"— y con una sola tecnica pasaba por adorno. Con dos deja de serlo:
+una flecha hacia abajo sobre una isometrica dice justo lo contrario de lo que hay que hacer.
+
+**`ISO-EST` lleva `pasos: 0` y eso NO es un detalle.** No agrega nada que registrar, que es lo
+que la separa del dropset. Con `pasos` en 1, `serieCerrada()` espera un escalon que nadie va a
+cargar y **el descanso no arranca nunca** en ese ejercicio — comprobado poniendolo en 1 a
+proposito. El clamp de `normalizar()` es por tecnica: aflojar el piso para la isometrica no
+puede permitir un dropset de cero bajadas.
+
 **La tecnica no puede ser texto libre.** En el Excel entra por alias
 (`porAlias`), igual que `superset: ["superserie","superset","ss"]`. Lo que no se
 reconoce entra como nada: pintar de violeta algo que nadie sabe ejecutar es peor
