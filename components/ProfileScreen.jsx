@@ -65,7 +65,7 @@ function Pref({ id, titulo, detalle, valor, onChange, deshabilitado = false }) {
  * ejercicios con `refKg: "BW"` (dominadas, fondos), que hoy quedan fuera del
  * progreso porque no hay con que multiplicar.
  */
-export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal, hayRed = true, prefs = PREFS_DEFAULT, onPrefs = () => {} }) {
+export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal, hayRed = true, prefs = PREFS_DEFAULT, onPrefs = () => {}, onCerrarSesion = () => signOut({ callbackUrl: "/" }) }) {
   const { data: session } = useSession();
   const [user, setUser] = useState(null);
   const [nombre, setNombre] = useState("");
@@ -426,7 +426,10 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
       <button className={user ? "btn-secondary" : "btn-primary"} onClick={onClose} style={{ marginTop: 20 }}>
         Volver a entrenar
       </button>
-      {user && <button className="btn-salir" onClick={() => signOut({ callbackUrl: "/" })}>Cerrar sesión</button>}
+      {/* No llama a `signOut` directo: cerrar sesion tiene que OLVIDAR tambien
+          el perfil y los datos locales, y eso vive en ForgeApp, que es quien
+          los tiene. Ver `cerrarSesion` alla. */}
+      {user && <button className="btn-salir" onClick={onCerrarSesion}>Cerrar sesión</button>}
     </div>
   );
 }

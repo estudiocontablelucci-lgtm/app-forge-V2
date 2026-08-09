@@ -144,7 +144,49 @@ def main() -> int:
             check("se vuelve a plegar", pg.locator(".pref").count() == 0,
                   "tocar el encabezado no la cerro")
 
+        # Va ANTES de cerrar sesion, no al final: `signOut` redirige a
+        # NEXTAUTH_URL, que en desarrollo es el 3000 y no el puerto del test.
+        # Ese salto de origen deja 404 de assets y un "Invalid or unexpected
+        # token" al parsear un HTML como JS — ruido del entorno, no del
+        # producto, que contado despues del logout ensucia esta comprobacion.
         check("sin errores de JavaScript", not errores, "; ".join(errores[:3]))
+
+        print("\ncerrar sesión OLVIDA la cuenta")
+        # Va al final porque despues de esto no hay sesion para nada mas.
+        #
+        # `perfilLocal` existe para que sin señal la app no le diga "Entrar" a
+        # quien tiene cuenta: /api/auth/session falla y next-auth responde "no
+        # autenticado", cierto como estado y falso como conclusion. Pero al
+        # CERRAR SESION el servidor responde exactamente lo mismo, asi que la
+        # app no podia distinguir "no hay sesion porque no hay red" de "no hay
+        # sesion porque me fui" — y seguia mostrando al usuario adentro, con el
+        # cartel de "Sin conexión", para siempre.
+        antes = pg.evaluate("JSON.parse(localStorage.getItem('forge-v2')||'{}')")
+        check("antes de salir la app recuerda el perfil", bool(antes.get("perfilLocal")),
+              "no habia perfilLocal: el test no prueba nada")
+
+        salir = pg.locator("button.btn-salir")
+        check("el botón de cerrar sesión existe", salir.count() > 0, "no aparece")
+        if salir.count():
+            salir.first.click()
+            pg.wait_for_timeout(4000)
+            # HAY QUE VOLVER AL ORIGEN ANTES DE MIRAR. `signOut` redirige a
+            # NEXTAUTH_URL, que en desarrollo es otro puerto — o sea otro
+            # origen, con OTRO localStorage, vacio. Leerlo ahi daba "olvidó el
+            # perfil" tambien con el bug puesto: el test pasaba sin probar nada.
+            pg.goto(base, wait_until="networkidle", timeout=30000)
+            pg.wait_for_timeout(3000)
+            check("se esta mirando el localStorage de la app", pg.url.startswith(base),
+                  f"quedo en {pg.url}, que tiene su propio almacenamiento")
+            despues = pg.evaluate("JSON.parse(localStorage.getItem('forge-v2')||'{}')")
+            check("olvida el perfil", not despues.get("perfilLocal"),
+                  f"quedo {despues.get('perfilLocal')} — la app te sigue mostrando adentro")
+            # Los programas son de la cuenta que se fue. Si quedan, la cuenta
+            # siguiente los MERGEA y los sube como propios: asi es como el
+            # programa de una persona termina en la cuenta de otra.
+            check("y se lleva los programas de esa cuenta", not (despues.get("programs") or []),
+                  f"quedaron {len(despues.get('programs') or [])} programas de la cuenta anterior")
+
         nav.close()
 
     print()

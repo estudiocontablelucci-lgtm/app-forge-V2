@@ -476,6 +476,24 @@ pestaña y varias suites se rompieron a la vez. Las pestañas se tocan por
 `sw.js` cuyo unico contenido sea `self.registration.unregister()`: los
 navegadores revalidan ese archivo en cada navegacion y se despublica solo.
 
+**Cerrar sesion tiene que OLVIDAR el perfil, y esto dejo el programa de una persona en la
+cuenta de otra.** `perfilLocal` existe para que sin señal la app no le diga "Entrar" a quien
+tiene cuenta. Pero al cerrar sesion el servidor responde EXACTAMENTE lo mismo que sin red —"no
+autenticado"— asi que la app no podia distinguir *me fui* de *no hay señal*: seguia mostrando al
+usuario adentro, con el cartel de "Sin conexión", para siempre. Lo que las separa no es una
+respuesta del servidor sino que **cerrar sesion es un acto deliberado**: estar sin red nunca
+borra el perfil, tocar el boton siempre lo borra. Mismo error de forma que el del beep — una
+señal con dos significados.
+
+`cerrarSesion` limpia ademas **programas, historial y catalogo**: son de la cuenta que se va, y
+si quedan, la cuenta siguiente los MERGEA y los sube como propios. El servidor ya los tiene.
+`limpiarEstado()` cancela el guardado con debounce de `saveState`, o el estado de la cuenta
+vieja se re-escribe 500 ms despues de haberlo borrado.
+
+**El test de esto pasaba sin el arreglo.** `signOut` redirige a `NEXTAUTH_URL`, que en
+desarrollo es otro puerto: otro ORIGEN, con otro `localStorage`, vacio. Leerlo ahi da "olvidó el
+perfil" siempre. Hay que volver a `--base` antes de mirar.
+
 **Sin red, `/api/auth/session` falla y next-auth responde "no autenticado".** Es
 correcto como estado momentaneo y falso como conclusion. La app guarda el ultimo
 perfil conocido (`perfilLocal`) y lo usa para dos cosas: no decir "Entrar" a
@@ -632,6 +650,12 @@ que la separa del dropset. Con `pasos` en 1, `serieCerrada()` espera un escalon 
 cargar y **el descanso no arranca nunca** en ese ejercicio — comprobado poniendolo en 1 a
 proposito. El clamp de `normalizar()` es por tecnica: aflojar el piso para la isometrica no
 puede permitir un dropset de cero bajadas.
+
+**La plantilla de import lleva `Programa` y `Nombre sesion`, repetidas en cada fila.** Sin esas
+columnas el programa se llamaba como el ARCHIVO —de ahi salio un "forge-programa-vigente"— y las
+sesiones quedaban "Sesion A", "Sesion B", que es lo unico que se ve al elegir que entrenar. En
+`FIELD_ALIASES` van PRIMERAS: `matchColumn` se queda con el primer alias CONTENIDO en el
+encabezado, y "Nombre sesion" contiene tanto "sesion" como "nombre".
 
 **La tecnica no puede ser texto libre.** En el Excel entra por alias
 (`porAlias`), igual que `superset: ["superserie","superset","ss"]`. Lo que no se
