@@ -38,3 +38,6 @@ export async function cargarProgramaVigente() {
   }
   return import(pathToFileURL(PROGRAMA_VIGENTE).href);
 }
+
+/** El `.md` que MANDA. El `.mjs` es su transcripcion, no una segunda fuente. */
+export const PROGRAMA_MD = `${CARPETA_SALUD}/programa/programa-vigente.md`;

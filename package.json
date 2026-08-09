@@ -41,7 +41,8 @@
     "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor && npm run verify:identidad && npm run verify:medidas && npm run verify:asistencia && npm run verify:progreso && npm run verify:tecnicas && npm run verify:descanso && npm run verify:aviso && npm run verify:huerfanos && npm run verify:importar",
     "verify:huerfanos": "node scripts/verify-catalogo-huerfanos.mjs",
     "verify:huerfanos-ui": "python scripts/check_huerfanos_ui.py",
-    "verify:importar": "node scripts/verify-importar.mjs"
+    "verify:importar": "node scripts/verify-importar.mjs",
+    "verify:programa": "node scripts/verificar-programa.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
