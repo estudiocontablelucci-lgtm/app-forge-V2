@@ -8,6 +8,7 @@ import { TECNICAS, defDe, pasosDe, pasosDeLog, pasoHecho, serieCerrada, normaliz
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas, sinReferenciasHuerfanas } from "@/lib/catalog";
 import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos, hayServidor } from "@/lib/sync/client";
 import { crearProgramaBasico } from "@/lib/programa-basico";
+import { fusionarPrograma, candidatoAActualizar } from "@/lib/importar";
 import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
 import { crearDescanso, restante, avance, restaurarDescanso, normalizarPrefs } from "@/lib/descanso";
 import { despertarAudio, agendarBeep, beepArmado, audioVivo, sonarAhora, notificarFinDescanso, limpiarAviso } from "@/lib/aviso";
@@ -2219,7 +2220,20 @@ export default function ForgeApp() {
         )}
 
         {/* ======== IMPORT WIZARD ======== */}
-        {importWizard && <ImportWizard wizard={importWizard} setWizard={setImportWizard} onImport={(name, preview) => {
+        {importWizard && <ImportWizard wizard={importWizard} setWizard={setImportWizard} programas={programs} onImport={(name, preview, actualizar) => {
+          // Actualizar el que ya existe en vez de duplicarlo. Lo importante no
+          // es evitar la copia: es que los ejercicios CONSERVEN SU ID, porque
+          // los logs son `week|exId|setN` y con ids nuevos las series quedan
+          // colgando del programa viejo. Ver `lib/importar.js`.
+          if (actualizar) {
+            const { program } = fusionarPrograma(actualizar, { name, sessions: preview.sessions, exercises: preview.exercises });
+            setPrograms((ps) => ps.map((p) => (p.id === program.id ? program : p)));
+            setActiveProgramId(program.id);
+            setProgSession(null);
+            setProgramListView(false);
+            setImportWizard(null);
+            return;
+          }
           const id = uid();
           const newProg = {
             id,
@@ -2585,7 +2599,7 @@ function exportHistory(entries, programName) {
   XLSX.writeFile(wb, `forge-historial-${slug}-${stamp(Date.now()).slice(0, 10)}.xlsx`);
 }
 
-function ImportWizard({ wizard, setWizard, onImport }) {
+function ImportWizard({ wizard, setWizard, onImport, programas = [] }) {
   const fileRef = useRef(null);
 
   function handleFile(e) {
@@ -2689,6 +2703,13 @@ function ImportWizard({ wizard, setWizard, onImport }) {
   if (wizard.step === 3) {
     const { exercises, sessions } = wizard.preview;
     const groups = [...new Set(exercises.map((e) => e.group).filter(Boolean))];
+    const yaExiste = candidatoAActualizar(programas, wizard.name);
+    // Se calcula para MOSTRARLO, no para aplicarlo: cuantos conservan historial
+    // y cuales salen. Un import que actualiza en silencio no deja ver que se
+    // sustituyo un ejercicio.
+    const fusion = yaExiste
+      ? fusionarPrograma(yaExiste, { name: wizard.name, sessions, exercises })
+      : { conservados: 0, nuevos: exercises.length, quitados: [] };
     return (
       <div className="overlay" onClick={() => setWizard(null)}>
         <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -2711,10 +2732,34 @@ function ImportWizard({ wizard, setWizard, onImport }) {
               </div>
             ))}
           </div>
+          {/* Ya hay un programa con este nombre. Se ofrece ACTUALIZARLO, y se
+              dice antes de tocar nada que pasa con lo registrado: importar de
+              nuevo sin esto deja dos copias y las series colgadas de la vieja. */}
+          {yaExiste && (
+            <div className="import-existe">
+              <p className="import-existe-t">Ya tenés «{yaExiste.name}»</p>
+              <p className="import-existe-d">
+                Actualizarlo conserva lo que ya entrenaste: los ejercicios que siguen llamándose
+                igual mantienen su historial. Los que cambiaron de nombre entran como ejercicio
+                nuevo.
+                {fusion.quitados.length > 0 && ` Sale${fusion.quitados.length === 1 ? "" : "n"} ${fusion.quitados.length}: ${fusion.quitados.slice(0, 3).join(", ")}${fusion.quitados.length > 3 ? "…" : ""}.`}
+              </p>
+              <p className="import-existe-n mono">
+                {fusion.conservados} conserva{fusion.conservados === 1 ? "" : "n"} historial · {fusion.nuevos} nuev{fusion.nuevos === 1 ? "o" : "os"}
+              </p>
+            </div>
+          )}
           <div className="navrow" style={{ marginTop: 16 }}>
             <button className="navbtn" onClick={() => setWizard((w) => ({ ...w, step: 2, preview: null }))}>Atras</button>
-            <button className="navbtn pri" onClick={() => onImport(wizard.name, wizard.preview)}>Importar</button>
+            {yaExiste
+              ? <button className="navbtn pri" onClick={() => onImport(wizard.name, wizard.preview, yaExiste)}>Actualizar</button>
+              : <button className="navbtn pri" onClick={() => onImport(wizard.name, wizard.preview)}>Importar</button>}
           </div>
+          {yaExiste && (
+            <button className="import-otro" onClick={() => onImport(wizard.name, wizard.preview)}>
+              Crear uno nuevo aparte
+            </button>
+          )}
         </div>
       </div>
     );
@@ -3283,6 +3328,14 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .import-sess-label { font-size: 12px; font-weight: 700; color: #2C6BED; letter-spacing: .1em; text-transform: uppercase; padding: 10px 0 6px; }
 .import-preview-list { max-height: 45vh; overflow-y: auto; }
 .import-ex-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #F2F2F7; font-size: 13px; color: #3A3A3C; }
+/* El aviso de "ya lo tenés". Azul y no amarillo: no es una advertencia, es la
+   opcion buena — actualizar conserva el historial y duplicar lo parte. */
+.import-existe { margin-top: 14px; padding: 12px 14px; background: #EEF3FE; border: 1px solid #D3E0FB; border-radius: 12px; }
+.import-existe-t { margin: 0 0 4px; font-weight: 700; font-size: 14px; color: #1B4FBF; }
+.import-existe-d { margin: 0; font-size: 13px; line-height: 1.45; color: #3A3A3C; }
+.import-existe-n { margin: 8px 0 0; font-size: 12px; color: #1B4FBF; font-weight: 600; }
+/* Crear una copia aparte existe, pero no compite visualmente con actualizar. */
+.import-otro { display: block; width: 100%; margin-top: 10px; padding: 10px; background: none; border: none; color: #6C6C70; font-size: 13px; text-decoration: underline; cursor: pointer; }
 .import-btn { border-color: #2C6BED; color: #2C6BED; border-style: dashed; }
 .import-divider { display: flex; align-items: center; gap: 12px; margin: 14px 0; color: #AEAEB2; font-size: 13px; }
 .import-divider::before, .import-divider::after { content: ''; flex: 1; height: 1px; background: #D1D1D6; }

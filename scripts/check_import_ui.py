@@ -194,6 +194,71 @@ def main() -> int:
         check("con deload", bool(prog.get("hasDeload")),
               "quedo sin deload — hay que activarlo a mano en Programa")
 
+        print("\nreimportar el MISMO programa no lo duplica ni parte el historial")
+        # Lo que se protege no es la copia: los logs son `week|exId|setN`, asi
+        # que un id nuevo equivale a perder lo registrado de ese ejercicio. Se
+        # simula haber entrenado escribiendo un log contra un id real.
+        primerEx = ejercicios[0]
+        pg.evaluate(
+            "(exId) => { const st = JSON.parse(localStorage.getItem('forge-v2')||'{}');"
+            " st.logs = { ...(st.logs||{}), ['1|' + exId + '|1']: { kg: 60, reps: 8, done: true } };"
+            " localStorage.setItem('forge-v2', JSON.stringify(st)); }", primerEx.get("id"))
+        pg.reload(wait_until="networkidle")
+        pg.wait_for_timeout(2500)
+
+        antesN = len(pg.evaluate("(JSON.parse(localStorage.getItem('forge-v2')||'{}').programs)||[]"))
+        pg.locator(".tabbar button").nth(0).click()
+        pg.wait_for_timeout(1200)
+        lista = pg.get_by_role("button", name="Programas")
+        if lista.count():
+            lista.first.click()
+            pg.wait_for_timeout(900)
+        pg.get_by_role("button", name="Importar Excel").first.click()
+        pg.wait_for_timeout(1500)
+        pg.locator("input[type=file]").first.set_input_files(str(xlsx))
+        pg.wait_for_timeout(3000)
+        for _ in range(6):
+            caja = pg.locator(".overlay")
+            if not caja.count():
+                break
+            b = None
+            botones = caja.first.locator("button")
+            for i in range(botones.count()):
+                cand = botones.nth(i)
+                try:
+                    if not cand.is_visible():
+                        continue
+                    t = cand.inner_text().strip().lower()
+                except Exception:
+                    continue
+                # "Actualizar" antes que "Importar": es la opcion que conserva.
+                if any(k in t for k in ("vista previa", "actualizar", "importar")):
+                    b = cand
+                    break
+            if b is None:
+                break
+            b.click()
+            pg.wait_for_timeout(2000)
+
+        st2 = pg.evaluate("JSON.parse(localStorage.getItem('forge-v2')||'{}')")
+        check("ofrecio actualizar en vez de duplicar", len(st2.get("programs") or []) == antesN,
+              f"habia {antesN} programas y quedaron {len(st2.get('programs') or [])}")
+        # Se mira el programa ACTIVO, no el viejo. Con el duplicado, el viejo
+        # sigue ahi intacto —asi que comprobarlo pasa igual y no prueba nada— y
+        # el que la app te muestra es la copia, con ids nuevos: la serie que
+        # registraste no aparece por ningun lado.
+        activo = [x for x in (st2.get("programs") or []) if x.get("id") == st2.get("activeProgramId")]
+        check("el programa activo sigue siendo el de siempre",
+              activo and activo[0].get("id") == prog.get("id"),
+              f"quedo activo {activo[0].get('id') if activo else None}, no {prog.get('id')}")
+        if activo:
+            ids2 = {e.get("id") for e in (activo[0].get("exercises") or [])}
+            check("y el ejercicio entrenado conserva su id ahí",
+                  primerEx.get("id") in ids2,
+                  "el ejercicio con series registradas no está en el programa activo: se perdió de la pantalla")
+            check("sigue teniendo los 36 ejercicios", len(activo[0].get("exercises") or []) == 36,
+                  f"quedaron {len(activo[0].get('exercises') or [])}")
+
         check("la app no tiro errores", not errores, str(errores[:2]))
 
         nav.close()

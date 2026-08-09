@@ -651,6 +651,19 @@ cargar y **el descanso no arranca nunca** en ese ejercicio — comprobado ponien
 proposito. El clamp de `normalizar()` es por tecnica: aflojar el piso para la isometrica no
 puede permitir un dropset de cero bajadas.
 
+**Reimportar un programa que ya existe lo ACTUALIZA, no lo duplica** (`lib/importar.js`). Lo que
+se protege no es la copia: los logs son `week|exId|setN`, asi que con ids nuevos las series
+registradas quedan colgando del programa viejo y **desaparecen de la pantalla**, porque el activo
+pasa a ser la copia. Es el flujo normal de este repo —editar `programa-vigente.mjs`,
+`npm run gen:programa`, reimportar— asi que pasaria en cada revision del ciclo.
+
+Se empareja por **sesion + nombre normalizado**, nunca por posicion: el orden es una de las cosas
+que se reordenan al revisar un programa (el trap bar paso de cuarto a primero). Del ejercicio que
+ya estaba se conservan tres cosas y solo tres: `id` (de el cuelgan los logs), `exerciseId` y
+`refsByWeek` —las refs ya entrenadas son un HECHO, no una prescripcion—. Todo lo demas viene del
+archivo. **Un nombre distinto es una SUSTITUCION y recibe id nuevo**, que es la misma regla que
+ya aplica el editor para no encadenar el e1RM de dos maquinas distintas.
+
 **La plantilla de import lleva `Programa` y `Nombre sesion`, repetidas en cada fila.** Sin esas
 columnas el programa se llamaba como el ARCHIVO —de ahi salio un "forge-programa-vigente"— y las
 sesiones quedaban "Sesion A", "Sesion B", que es lo unico que se ve al elegir que entrenar. En
