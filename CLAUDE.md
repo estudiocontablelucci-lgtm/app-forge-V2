@@ -618,8 +618,33 @@ lo vigila comparando la POSICION en pantalla de los dos, no el CSS.
 
 **Un hamburguesa significa "el menu de la app".** En Programa abria la lista de
 programas y nadie lo adivinaba; ahora es un boton rotulado. El nombre del programa
-se parte en dos renglones antes que cortarse: "Hipertrofia …" no identifica a un
-programa, y es el dato que esa pantalla existe para mostrar.
+se parte en TRES renglones antes que cortarse: "Hipertrofia …" no identifica a un
+programa, y es el dato que esa pantalla existe para mostrar. Con dos, "Plan de
+fuerza — Martín" entraba por un caracter y quedaba en "Plan de fuerza —…".
+
+**Y un lapiz suelto es el mismo error.** El de las sesiones vivia entre los chips
+de dia —tercera fila, cuando el programa tiene cuatro— sin decir que abria. Ahora
+"Editar programa" y "Editar días" son dos botones rotulados juntos (`.prog-acciones`),
+debajo de los dias porque son lo secundario: primero se lee el plan.
+
+**Lo que la pantalla Programa tiene que contestar sin abrir nada:** cuantos
+ejercicios tiene cada dia (el numero estaba en el editor de sesiones, no donde se
+elige), y por cada ejercicio el **RIR y el descanso** — el RIR es contra lo que el
+semaforo juzga la serie y el descanso es lo que se mira ANTES de empezar; los dos
+vivian solo adentro de Entrenar. El chip de tecnica usa `corto` de `TECNICAS`
+("Isométrica"), no `nombre`: "Isométrica en estiramiento" entero ocupaba dos
+renglones adentro de la fila.
+
+**Y lo que sigue despues de leerla es entrenar ese dia**, asi que el boton esta ahi
+(`.prog-entrenar-btn`, tambien en un programa asignado) y pasa por el mismo
+`startSession` — si esa sesion ya tiene series cargadas, pregunta igual. Antes habia
+que ir a Entrenar y volver a elegir el mismo dia. Un dia SIN ejercicios no lo ofrece
+y dice por que: la lista vacia con un boton se veia como una pantalla rota.
+
+**"sin ref" y no "máquina"** cuando el ejercicio no tiene referencia de carga. Leido
+en la fila, al lado de un "140kg", "máquina" se lee como una unidad de peso — y
+ademas no es lo que pasa: no hay ref cargada, que es distinto de que el ejercicio
+sea en maquina.
 
 **Las ayudas viven donde nace la duda, no en un tour.** Un tour explica todo el
 primer dia, cuando todavia no hay ninguna pregunta, y no esta el dia que la

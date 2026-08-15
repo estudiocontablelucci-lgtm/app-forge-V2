@@ -41,7 +41,10 @@ const round1 = (v) => Math.round(v * 10) / 10;
 const fmtDate = (ts) => new Date(ts).toLocaleDateString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 function refLine(ex, week, deload) {
   const ref = refFor(ex, week);
-  const kg = ref === null || ref === "" ? "máquina" : ref === "BW" ? "BW" : `${ref}${isNum(ref) ? "kg" : ""}`;
+  // "sin ref" y no "máquina": no hay referencia cargada, que no es lo mismo que
+  // que el ejercicio sea en maquina — y leido en la fila del programa, al lado
+  // de un "140kg", "máquina" se lee como si fuera una unidad de carga.
+  const kg = ref === null || ref === "" ? "sin ref" : ref === "BW" ? "BW" : `${ref}${isNum(ref) ? "kg" : ""}`;
   // En deload por reps el rango baja: mostrar el original seria pedir el
   // volumen de una semana normal.
   const { min, max } = repsFor(ex, week, deload);
@@ -1396,7 +1399,7 @@ export default function ForgeApp() {
         {/* ======== HEALTH CHECK ======== */}
         {tab === "entrenar" && session !== null && healthCheck && (
           <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Como te sentís hoy?</h1><p className="sub">{weekLabel(week)} · {sessName(session)}</p></header>
+            <header className="top"><div className="brand">FORGE</div><h1>¿Cómo te sentís hoy?</h1><p className="sub">{weekLabel(week)} · {sessName(session)}</p></header>
             {[
               { key: "sleep", label: "Sueño", emoji: ["😴", "😪", "😐", "😊", "😁"] },
               { key: "stress", label: "Estrés", emoji: ["🧘", "😌", "😐", "😣", "😤"] },
@@ -1610,7 +1613,13 @@ export default function ForgeApp() {
         {/* ======== PROGRAMA — LIST VIEW ======== */}
         {tab === "programa" && verListaDeProgramas && (
           <div className="screen">
-            <header className="top"><div className="brand">FORGE</div><h1>Programas</h1><p className="sub">{programs.length} programa{programs.length !== 1 ? "s" : ""}</p></header>
+            {/* "El que toques pasa a ser el activo" no es un detalle de la
+                pantalla: el programa activo es el que gobierna Entrenar,
+                Historial y Progreso, y hasta ahora eso pasaba en silencio. Con
+                uno solo no hay nada que elegir y el aviso sobra. */}
+            <header className="top"><div className="brand">FORGE</div><h1>Programas</h1>
+              <p className="sub">{programs.length > 1 ? "Tocá el que quieras entrenar" : `${programs.length} programa${programs.length !== 1 ? "s" : ""}`}</p>
+            </header>
 
             {/* Cuenta nueva. Lo primero que ofrece es sincronizar, no crear: si
                 alguien la invito como alumna, su programa ya existe del otro
@@ -1663,7 +1672,7 @@ export default function ForgeApp() {
             ))}
             <button className="addbtn" onClick={() => {
               const id = uid();
-              setPrograms((ps) => [...ps, { id, name: "Nuevo programa", weeks: 4, hasDeload: true, sessions: [{ id: "A", name: "Sesion A" }], exercises: [], status: "draft", createdAt: Date.now() }]);
+              setPrograms((ps) => [...ps, { id, name: "Nuevo programa", weeks: 4, hasDeload: true, sessions: [{ id: "A", name: "Sesión A" }], exercises: [], status: "draft", createdAt: Date.now() }]);
               setActiveProgramId(id);
               setProgSession(null);
               setProgramListView(false);
@@ -1700,20 +1709,36 @@ export default function ForgeApp() {
                   <span aria-hidden="true">☰</span> Programas
                 </button>
               </div>
-              <p className="sub">{esAsignado && <span className="prog-coach">de {activeProgram.coachName}</span>}{activeProgram?.weeks || 4} sem{activeProgram?.hasDeload ? " + deload" : ""} · {sessions.length} sesiones · {program.length} ejercicios {session === null && !esAsignado && <button className="prog-edit-link" onClick={() => setEditingProgram({ ...activeProgram })}>Editar programa</button>}</p>
+              <p className="sub">{esAsignado && <span className="prog-coach">de {activeProgram.coachName}</span>}{activeProgram?.weeks || 4} sem{activeProgram?.hasDeload ? " + deload" : ""} · {sessions.length} sesiones · {program.length} ejercicios</p>
             </header>
+            {/* Los dias con cuantos ejercicios tiene cada uno. El numero estaba
+                —el editor de sesiones lo muestra— pero no donde se elige. */}
             <div className="weekchips">
-              {sessions.map((s) => (<button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>{s.name}</button>))}
-              {/* `!esAsignado` no es simetria con los otros botones de edicion:
-                  este era la unica puerta que quedaba abierta en un programa de
-                  solo lectura. Renombrar la sesion del entrenador ya es raro
-                  —el pull siguiente reemplaza el programa entero y lo deshace
-                  sin avisar—, pero el editor tambien BORRA la sesion con sus
-                  ejercicios, y los logs son `week|exId|setN`: las series
-                  registradas quedan colgando de ejercicios que ya no existen.
-                  Eso no lo deshace ningun pull. */}
-              {session === null && !esAsignado && <button className="chip chip-edit" onClick={() => setEditingSessions(true)}>&#9998;</button>}
+              {sessions.map((s) => {
+                const n = program.filter((e) => e.session === s.id).length;
+                return (
+                  <button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>
+                    {s.name}<span className="chip-n">{n}</span>
+                  </button>
+                );
+              })}
             </div>
+            {/* Las dos ediciones juntas y ROTULADAS. El lapiz suelto entre los
+                chips era el hamburguesa otra vez: un icono sin nombre, y encima
+                caia en una tercera fila cuando el programa tiene cuatro dias.
+
+                `!esAsignado` no es simetria: el editor de sesiones era la unica
+                puerta que quedaba abierta en un programa de solo lectura, y
+                ademas de renombrar BORRA la sesion con sus ejercicios. Los logs
+                son `week|exId|setN`, asi que las series registradas quedan
+                colgando de ejercicios que ya no existen — y eso no lo deshace
+                ningun pull. */}
+            {session === null && !esAsignado && (
+              <div className="prog-acciones">
+                <button className="prog-accion" onClick={() => setEditingProgram({ ...activeProgram })}>Editar programa</button>
+                <button className="prog-accion prog-dias-btn" onClick={() => setEditingSessions(true)}>Editar días</button>
+              </div>
+            )}
             <div className="plist">
               {progBlocks.map((b, bi) => (
                 <div key={bi} className={b.type === "superset" ? "prog-ss-group" : ""}>
@@ -1727,15 +1752,42 @@ export default function ForgeApp() {
                       if (esAsignado) { setDescModal(e); return; }
                       setEditing({ ...e });
                     }}>
-                      <div className="pmain"><div className="pname">{e.name}{e.description && <span className="desc-hint-sm">i</span>}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}{(() => { const t = defDe(e); return t ? <span className="tecchip" style={{ marginLeft: 6 }}>{t.icono} {t.nombre}</span> : null; })()}</div></div>
-                      <div className="pnums mono">{e.sets}x{e.repsMin}-{e.repsMax} · {refLine(e, null, deloadCfg).split(" ×")[0]}</div>
+                      <div className="pmain"><div className="pname">{e.name}{e.description && <span className="desc-hint-sm">i</span>}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}{(() => { const t = defDe(e); return t ? <span className="tecchip" style={{ marginLeft: 6 }}>{t.icono} {t.corto || t.nombre}</span> : null; })()}</div></div>
+                      {/* El RIR y el descanso estaban solo adentro de Entrenar.
+                          El RIR es contra lo que el semaforo juzga la serie, y
+                          el descanso es lo que uno mira ANTES de empezar: los
+                          dos datos que se van a buscar leyendo el programa. */}
+                      <div className="pnums mono">
+                        <div>{e.sets}x{e.repsMin}-{e.repsMax} · {refLine(e, null, deloadCfg).split(" ×")[0]}</div>
+                        <div className="pnums-2">{[String(e.rir ?? "").trim() && `RIR ${e.rir}`, e.rest && `D ${fmtRest(e.rest)}`].filter(Boolean).join(" · ")}</div>
+                      </div>
                     </button>
                   ))}
                 </div>
               ))}
             </div>
+            {/* Un dia sin ejercicios se veia como una pantalla rota: la lista
+                vacia y un boton. En un programa asignado ni eso. */}
+            {!progBlocks.length && (
+              <div className="empty">
+                {esAsignado
+                  ? "Tu entrenador todavía no cargó ejercicios en este día."
+                  : "Este día está vacío. Agregá el primer ejercicio acá abajo."}
+              </div>
+            )}
             {session === null && (
-              <button className="addbtn" hidden={esAsignado} onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, technique: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
+              <>
+                {/* Mirando el dia, lo que sigue es entrenarlo. Antes habia que
+                    ir a Entrenar y volver a elegirlo ahi. Usa la semana que ya
+                    esta elegida en Entrenar, y pasa por el mismo camino: si esa
+                    sesion ya tiene series cargadas, pregunta igual. */}
+                {progBlocks.length > 0 && (
+                  <button className="prog-entrenar-btn" onClick={() => { setTab("entrenar"); startSession(activeProgSession); }}>
+                    Entrenar {sessions.find((s) => s.id === activeProgSession)?.name || "este día"}
+                  </button>
+                )}
+                <button className="addbtn" hidden={esAsignado} onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, technique: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
+              </>
             )}
           </div>
         )}
@@ -2527,9 +2579,9 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
               vista desde dos lados: como se ejecuta. Pero no son lo mismo — una
               agrupa ejercicios y la otra pasa adentro de una serie — asi que
               llevan colores de familia distintos. */}
-          <label className="ed-full"><span>Tecnica</span>
+          <label className="ed-full"><span>Técnica</span>
             <select value={draft.technique?.tipo ?? ""} onChange={(e) => set("technique", e.target.value ? normalizarTecnica({ tipo: e.target.value }) : null)}>
-              <option value="">— sin tecnica —</option>
+              <option value="">— sin técnica —</option>
               {Object.values(TECNICAS).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
             </select>
           </label>
@@ -2545,15 +2597,15 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
                   </select>
                 </label>
               )}
-              <label><span>En que series</span>
+              <label><span>En qué series</span>
                 <select value={draft.technique.aplica} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, aplica: e.target.value }))}>
-                  <option value="ultima">Solo la ultima</option>
+                  <option value="ultima">Solo la última</option>
                   <option value="todas">Todas</option>
                 </select>
               </label>
             </>
           )}
-          <label className="ed-full"><span>Notas / Descripcion</span><textarea className="ed-textarea" rows={3} value={draft.description ?? ""} onChange={(e) => set("description", e.target.value)} placeholder="Postura, agarre, indicaciones del entrenador..." /></label>
+          <label className="ed-full"><span>Notas / Descripción</span><textarea className="ed-textarea" rows={3} value={draft.description ?? ""} onChange={(e) => set("description", e.target.value)} placeholder="Postura, agarre, indicaciones del entrenador..." /></label>
         </div>
         <div className="sheetactions">
           {!isNew && <button className="del" onClick={() => onDelete(draft.id)}>Eliminar</button>}
@@ -3084,6 +3136,7 @@ const CSS = `
 .pname { font-weight: 600; font-size: 15px; color: #1C1C1E; }
 .pmeta { color: #636366; font-size: 12px; margin-top: 2px; }
 .pnums { color: #48484A; font-size: 13px; text-align: right; flex-shrink: 0; }
+.pnums-2 { color: #8E8E93; font-size: 11.5px; margin-top: 2px; }
 .addbtn { width: 100%; margin-top: 12px; height: 50px; border-radius: 12px; border: 1.5px dashed #C7C7CC; background: transparent; color: #2C6BED; font: 600 14px 'Inter'; cursor: pointer; }
 .chip-edit { border-style: dashed; color: #2C6BED; border-color: #2C6BED; background: transparent; font-size: 15px; padding: 7px 12px; }
 
@@ -3483,11 +3536,22 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
    boton de la lista rotulado ("Programas" en vez de un hamburguesa) queda menos
    ancho, y "Hipertrofia …" no identifica a un programa: es justo el dato que la
    pantalla existe para mostrar. */
-.prog-header-row h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* Tres renglones y no dos: el nombre del programa es el dato que esta pantalla
+   existe para mostrar, y con el boton al lado "Plan de fuerza — Martín" entraba
+   justo por un caracter y quedaba en "Plan de fuerza —…". */
+.prog-header-row h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .prog-switch-btn { height: 38px; padding: 0 13px; gap: 7px; border-radius: 999px; background: #FFF; border: 1px solid #2C6BED; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
 .export-btn { height: 38px; padding: 0 14px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; }
 .export-btn:active { background: #F2F2F7; }
-.prog-edit-link { background: none; border: none; color: #2C6BED; font: 500 12px 'Inter'; cursor: pointer; padding: 0; margin-left: 4px; text-decoration: underline; }
+/* Las dos ediciones del programa, juntas y con nombre. Van despues de los dias
+   porque son lo secundario de esta pantalla: primero se lee el plan. */
+.prog-acciones { display: flex; gap: 8px; margin: -6px 0 14px; }
+.prog-accion { height: 34px; padding: 0 13px; border-radius: 999px; border: 1px solid #D1D1D6; background: #FFF; color: #48484A; font: 600 12.5px 'Inter'; cursor: pointer; }
+.prog-accion:active { background: #F2F2F7; }
+/* Lo que sigue despues de leer el dia. Solido y azul: es la unica accion de
+   esta pantalla que lleva a otra parte. */
+.prog-entrenar-btn { width: 100%; height: 50px; margin-top: 14px; padding: 0 14px; border: none; border-radius: 12px; background: #2C6BED; color: #FFF; font: 600 15px 'Inter'; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prog-entrenar-btn:active { background: #2559C7; }
 .prog-dup-btn { width: 100%; height: 46px; border-radius: 12px; border: 1px solid #D1D1D6; background: #FFF; color: #1C1C1E; font: 600 14px 'Inter'; cursor: pointer; }
 .ed-toggle-row { display: flex; }
 .ed-toggle { height: 42px; width: 100%; border-radius: 10px; border: 1.5px solid #D1D1D6; background: #F2F2F7; color: #636366; font: 600 14px 'Inter'; cursor: pointer; transition: all .15s; }
