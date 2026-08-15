@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import AlumnoFicha from "./AlumnoFicha";
+import { haceCuanto } from "./fechas";
 import "./coach.css";
 
 /**
@@ -131,14 +132,28 @@ export default function CoachApp() {
             )}
 
             <div className="alista">
+              {/* La lista decia inicial, nombre y mail: para saber si a alguien
+                  le estaba pasando algo habia que entrar a cada ficha, una por
+                  una. Ahora dice lo minimo para elegir a quien mirar — cuando
+                  entreno por ultima vez, cuanto lleva en la semana, y si dejo
+                  una nota sin leer. */}
               {alumnos.map((a) => (
                 <button key={a.id} className={`aitem ${seleccionado?.id === a.id ? "on" : ""}`}
                   onClick={() => setSeleccionado(a)}>
                   <span className="aini">{(a.name || a.email || "?").trim().charAt(0).toUpperCase()}</span>
                   <span className="ainfo">
                     <span className="aname">{a.name || a.email}</span>
-                    <span className="asub">{a.email}</span>
+                    <span className="asub">
+                      {a.ultima
+                        ? `${haceCuanto(a.ultima)} · ${a.sesiones7} ${a.sesiones7 === 1 ? "sesión" : "sesiones"} en 7 días`
+                        : "todavía no entrenó"}
+                    </span>
                   </span>
+                  {a.notasNuevas > 0 && (
+                    <span className="anota" title={`${a.notasNuevas} nota${a.notasNuevas === 1 ? "" : "s"} sin leer`}>
+                      {a.notasNuevas === 1 ? "1 nota" : `${a.notasNuevas} notas`}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
