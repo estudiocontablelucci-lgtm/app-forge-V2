@@ -81,6 +81,26 @@ function reubicar(exercises, ex, despuesDe) {
   return exercises.map((e) => (orden.has(e.id) ? { ...e, order: orden.get(e.id) } : e));
 }
 
+/**
+ * Kilos movidos en una sesion del historial.
+ *
+ * Los escalones de un dropset SUMAN: es carga movida igual. Vive aca y no
+ * adentro de una pantalla porque lo usan dos —el grafico de bienestar y el
+ * historial— y dos copias de la misma suma se separan al primer cambio.
+ */
+function tonelajeSesion(h) {
+  let t = 0;
+  for (const ex of h?.exercises || []) {
+    for (const st of ex.sets || []) {
+      for (const c of [st, ...(Array.isArray(st.pasos) ? st.pasos : [])]) {
+        const kg = parseFloat(c.kg), reps = parseInt(c.reps);
+        if (isNum(kg) && reps) t += kg * reps;
+      }
+    }
+  }
+  return t;
+}
+
 /* ---------- Blocks: group exercises into singles + superset groups ---------- */
 function getBlocks(exercises) {
   const sorted = [...exercises].sort((a, b) => a.order - b.order);
@@ -306,6 +326,9 @@ export default function ForgeApp() {
   const [progSession, setProgSession] = useState(null); // session id
   const [editingSessions, setEditingSessions] = useState(false);
   const [verDias, setVerDias] = useState(false);   // el desplegable de dias del programa
+  // Grupos de la lista de programas que el usuario cerro a mano. Lo que NO esta
+  // aca cae al default: abierto el grupo del programa activo.
+  const [gruposCerrados, setGruposCerrados] = useState({});
   const [healthCheck, setHealthCheck] = useState(null);
   const [savedHealth, setSavedHealth] = useState(null);
   const [sessionStart, setSessionStart] = useState(null);
@@ -1377,19 +1400,7 @@ export default function ForgeApp() {
    * corresponda a la sesion que se estaba respondiendo.
    */
   const datosBienestar = useMemo(() => {
-    const tonelajeDe = (h) => {
-      let t = 0;
-      for (const ex of h.exercises || []) {
-        for (const st of ex.sets || []) {
-          // Los escalones del dropset suman: es carga movida igual.
-          for (const c of [st, ...(Array.isArray(st.pasos) ? st.pasos : [])]) {
-            const kg = parseFloat(c.kg), reps = parseInt(c.reps);
-            if (isNum(kg) && reps) t += kg * reps;
-          }
-        }
-      }
-      return t || null;
-    };
+    const tonelajeDe = (h) => tonelajeSesion(h) || null;
     const propias = history.filter((h) => !h.programId || h.programId === activeProgramId);
     return bienestar(propias, tonelajeDe);
   }, [history, activeProgramId]);
@@ -1730,16 +1741,33 @@ export default function ForgeApp() {
             {/* Los grupos se derivan, no hay un campo "tipo de programa": uno
                 puede ser propio hoy y estar asignado manana sin cambiar de
                 naturaleza. Con un solo grupo no se muestran encabezados. */}
-            {gruposDeProgramas.map(({ titulo, ayuda, lista }) => (
+            {/* Los grupos se pliegan. Con uno solo no hay nada que ordenar y no
+                se dibujan encabezados; con tres —los mios, los de mis alumnos,
+                el de mi entrenador— la lista es de tres cosas distintas y se
+                busca en la de uno. Arranca abierto el que tiene el programa que
+                se esta entrenando: es el que se vino a buscar. */}
+            {gruposDeProgramas.map(({ titulo, ayuda, lista }) => {
+              const solo = gruposDeProgramas.length === 1;
+              const abierto = solo || (gruposCerrados[titulo] === undefined
+                ? lista.some((p) => p.id === activeProgramId)
+                : !gruposCerrados[titulo]);
+              return (
               <div key={titulo} className="prog-grupo">
-                {gruposDeProgramas.length > 1 && (
-                  <div className="prog-grupo-head">
+                {!solo && (
+                  <button className="prog-grupo-head" aria-expanded={abierto}
+                    onClick={() => setGruposCerrados((g) => ({ ...g, [titulo]: abierto }))}>
+                    <span className="prog-grupo-flecha" aria-hidden="true">{abierto ? "▾" : "▸"}</span>
                     <span className="prog-grupo-t">{titulo}</span>
                     <span className="prog-grupo-n">{lista.length}</span>
-                  </div>
+                    {!abierto && lista.some((p) => p.id === activeProgramId) && <span className="prog-grupo-act">activo</span>}
+                  </button>
                 )}
-                {ayuda && gruposDeProgramas.length > 1 && <p className="prog-grupo-ayuda">{ayuda}</p>}
-                <div className="prog-list">
+                {ayuda && !solo && abierto && <p className="prog-grupo-ayuda">{ayuda}</p>}
+                {/* No se renderiza cuando esta cerrado, en vez de `hidden`: el
+                    atributo pone `display: none` con la especificidad del
+                    navegador y `.prog-list` lo pisa con su `display: flex` —
+                    los grupos se veian "cerrados" con todo a la vista. */}
+                {abierto && <div className="prog-list">
                   {lista.map((p) => (
                     <button key={p.id} className={`prog-card ${p.id === activeProgramId ? "active" : ""}`} onClick={() => { setVistoId(p.id); setProgSession(null); setProgramListView(false); }}>
                       <div className="prog-card-main">
@@ -1749,9 +1777,10 @@ export default function ForgeApp() {
                       {p.id === activeProgramId && <span className="prog-active-badge">Activo</span>}
                     </button>
                   ))}
-                </div>
+                </div>}
               </div>
-            ))}
+              );
+            })}
             <button className="addbtn" onClick={() => {
               const id = uid();
               setPrograms((ps) => [...ps, { id, name: "Nuevo programa", weeks: 4, hasDeload: true, sessions: [{ id: "A", name: "Sesión A" }], exercises: [], status: "draft", createdAt: Date.now() }]);
@@ -1922,15 +1951,30 @@ export default function ForgeApp() {
         {/* ======== HISTORIAL ======== */}
         {tab === "historial" && (() => {
           const histProg = history.filter((h) => !h.programId || h.programId === activeProgramId);
+          // Por semana del programa, en el orden en que aparecen. Una lista
+          // plana de tarjetas iguales obliga a leer el titulo de cada una para
+          // saber donde termina una semana y empieza la otra.
+          const porSemana = [];
+          for (const h of histProg) {
+            const clave = String(h.week);
+            const grupo = porSemana.find((g) => g.clave === clave);
+            if (grupo) grupo.sesiones.push(h);
+            else porSemana.push({ clave, week: h.week, sesiones: [h] });
+          }
           return (
           <div className="screen">
+            {/* El boton de Excel NO va al lado del titulo: exportar es lo ultimo
+                que se hace en esta pantalla y ahi arriba le disputaba el lugar
+                al encabezado, igual que le pasaba al selector de programa. Vive
+                al pie, despues de lo que se vino a leer. */}
             <header className="top">
               <div className="brand">FORGE</div>
-              <div className="prog-header-row">
-                <h1>Historial</h1>
-                {histProg.length > 0 && <button className="export-btn" onClick={() => exportHistory(histProg, activeProgram?.name)}>↓ Excel</button>}
-              </div>
-              <p className="sub">{histProg.length} sesiones registradas</p>
+              <h1>Historial</h1>
+              <p className="sub">
+                {histProg.length} {histProg.length === 1 ? "sesión" : "sesiones"}
+                {porSemana.length > 1 ? ` en ${porSemana.length} semanas` : ""}
+                {activeProgram ? ` · ${activeProgram.name}` : ""}
+              </p>
             </header>
             {histProg.length === 0 && <div className="empty">Completá tu primera sesión para verla acá.</div>}
             {/* El punto de color existe desde la primera version y hasta ahora
@@ -1948,31 +1992,77 @@ export default function ForgeApp() {
                 <p style={{ marginTop: 7 }}><b>Verde</b>: llegaste al tope de repeticiones con el RIR que pedía — la próxima va más peso. <b>Amarillo</b>: llegaste a las repeticiones pero con menos reserva de la pedida — mantené la carga. <b>Rojo</b>: no llegaste al rango; revisá la carga, el descanso o cómo llegaste ese día.</p>
               </Ayuda>
             )}
-            {histProg.map((h) => (
-              <div key={h.id} className="hist-card">
-                <button className="hist-head" onClick={() => setExpandedLog(expandedLog === h.id ? null : h.id)}>
-                  <div className="hist-left">
-                    <div className="hist-title">
-                      {weekLabel(h.week)} · {h.sessionName || sessName(h.session)}
-                      {h.pendiente && <span className="hist-pend" title="Guardado en este teléfono, todavía no subió">sin subir</span>}
-                    </div>
-                    <div className="hist-meta">{fmtDate(h.date)}{h.duration ? ` · ${h.duration} min` : ""}</div>
-                  </div>
-                  {h.health && <div className="hist-health mono"><span>😴{h.health.sleep}</span><span>😤{h.health.stress}</span><span>⚡{h.health.energy}</span></div>}
-                  <span className="hist-chev">{expandedLog === h.id ? "▲" : "▼"}</span>
-                </button>
-                {expandedLog === h.id && (
-                  <div className="hist-body">
-                    {h.exercises.filter((e) => e.sets.length > 0).map((e) => (
-                      <div key={e.id} className="hist-ex">
-                        <div className="hist-exhead"><span className="hist-exname">{e.name}</span><span className="sem-dot-sm" style={{ background: SEM_COLORS[e.sem] }} /></div>
-                        <div className="hist-sets mono">{e.sets.map((s, i) => <span key={i}>{isNum(s.kg) ? s.kg : "BW"}×{s.reps}{isNum(s.rir) ? ` @${s.rir}` : ""}</span>)}</div>
+            {porSemana.map(({ clave, week, sesiones }) => (
+              <div key={clave} className="hist-semana">
+                <div className="hist-semana-head">
+                  <span className="hist-semana-t">{weekLabel(week)}</span>
+                  <span className="hist-semana-n">{sesiones.length} {sesiones.length === 1 ? "sesión" : "sesiones"}</span>
+                </div>
+                {sesiones.map((h) => {
+                  const hechos = h.exercises.filter((e) => e.sets.length > 0);
+                  const ton = tonelajeSesion(h);
+                  // Como fue la sesion, sin abrirla: cuantos ejercicios
+                  // quedaron en cada color. El semaforo ya existia adentro y
+                  // habia que desplegar para verlo, ejercicio por ejercicio.
+                  const conteo = { green: 0, yellow: 0, red: 0 };
+                  for (const e of hechos) if (conteo[e.sem] !== undefined) conteo[e.sem]++;
+                  const abierta = expandedLog === h.id;
+                  return (
+                  <div key={h.id} className="hist-card">
+                    <button className="hist-head" aria-expanded={abierta} onClick={() => setExpandedLog(abierta ? null : h.id)}>
+                      <div className="hist-left">
+                        <div className="hist-title">
+                          {h.sessionName || sessName(h.session)}
+                          {h.pendiente && <span className="hist-pend" title="Guardado en este teléfono, todavía no subió">sin subir</span>}
+                        </div>
+                        <div className="hist-meta">
+                          {fmtDate(h.date)}{h.duration ? ` · ${h.duration} min` : ""}
+                          {ton > 0 ? ` · ${round1(ton / 1000)}t` : ""} · {hechos.length} ej.
+                        </div>
+                        <div className="hist-sem">
+                          {["green", "yellow", "red"].map((c) => (conteo[c] ? (
+                            <span key={c} className="hist-sem-p">
+                              <i style={{ background: SEM_COLORS[c] }} />{conteo[c]}
+                            </span>
+                          ) : null))}
+                          {h.health && (
+                            <span className="hist-health mono">😴{h.health.sleep} 😤{h.health.stress} ⚡{h.health.energy}</span>
+                          )}
+                        </div>
                       </div>
-                    ))}
+                      <span className="hist-chev">{abierta ? "▴" : "▾"}</span>
+                    </button>
+                    {abierta && (
+                      <div className="hist-body">
+                        {h.note && <p className="hist-nota">{h.note}</p>}
+                        {hechos.map((e) => (
+                          <div key={e.id} className="hist-ex">
+                            <div className="hist-exhead"><span className="sem-dot-sm" style={{ background: SEM_COLORS[e.sem] }} /><span className="hist-exname">{e.name}</span></div>
+                            {/* Una serie por pastilla. Corridas en una linea
+                                monoespaciada —"120×10 @4 130×10 @3"— hay que
+                                contar donde termina cada una. */}
+                            <div className="hist-sets">
+                              {e.sets.map((s, i) => (
+                                <span key={i} className="hist-set mono">
+                                  {isNum(s.kg) ? s.kg : "BW"}<i>×</i>{s.reps}
+                                  {isNum(s.rir) ? <em>@{s.rir}</em> : null}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                  );
+                })}
               </div>
             ))}
+            {histProg.length > 0 && (
+              <button className="btn-secondary" onClick={() => exportHistory(histProg, activeProgram?.name)}>
+                ↓ Exportar a Excel
+              </button>
+            )}
           </div>
           );
         })()}
@@ -3339,7 +3429,7 @@ const CSS = `
 .hist-left { flex: 1; min-width: 0; }
 .hist-title { font-weight: 600; font-size: 15px; }
 .hist-meta { font-size: 12px; color: #636366; margin-top: 2px; }
-.hist-health { display: flex; gap: 6px; font-size: 12px; color: #48484A; flex-shrink: 0; }
+.hist-health { display: inline-flex; gap: 6px; font-size: 11.5px; color: #8E8E93; flex-shrink: 0; margin-left: auto; }
 .hist-chev { color: #AEAEB2; font-size: 12px; }
 .hist-body { padding: 0 16px 14px; border-top: 1px solid #F2F2F7; }
 .hist-ex { padding: 8px 0; border-bottom: 1px solid #F2F2F7; }
@@ -3347,7 +3437,22 @@ const CSS = `
 .hist-exhead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .hist-exname { font-weight: 500; font-size: 14px; }
 .sem-dot-sm { width: 8px; height: 8px; border-radius: 50%; }
-.hist-sets { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #48484A; }
+/* Una pastilla por serie: corridas en una linea monoespaciada hay que contar
+   donde termina cada una. */
+.hist-sets { display: flex; flex-wrap: wrap; gap: 6px; }
+.hist-set { padding: 3px 8px; border-radius: 8px; background: #F2F2F7; color: #1C1C1E; font-size: 12px; white-space: nowrap; }
+.hist-set i { color: #AEAEB2; font-style: normal; margin: 0 1px; }
+.hist-set em { color: #8E8E93; font-style: normal; margin-left: 4px; }
+/* Las sesiones, por semana del programa. */
+.hist-semana { margin-bottom: 6px; }
+.hist-semana-head { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 8px; }
+.hist-semana-t { font: 600 11px 'Inter'; letter-spacing: .12em; text-transform: uppercase; color: #636366; }
+.hist-semana-n { font: 400 11px 'Inter'; color: #AEAEB2; }
+/* Como fue la sesion, sin abrirla. */
+.hist-sem { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.hist-sem-p { display: inline-flex; align-items: center; gap: 4px; font: 600 11.5px 'Inter'; color: #636366; }
+.hist-sem-p i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.hist-nota { margin: 10px 0 4px; padding: 9px 11px; border-radius: 10px; background: #F7F7FA; border-left: 3px solid #D1D1D6; font: 400 13px 'Inter'; line-height: 1.5; color: #3A3A3C; white-space: pre-wrap; }
 
 /* Progress */
 .card { background: #FFF; border: none; border-radius: 14px; padding: 18px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
@@ -3485,7 +3590,9 @@ const CSS = `
 .ed-hint2 { width: 100%; margin: 2px 0 0; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; text-transform: none; letter-spacing: 0; }
 .btn-peligro { width: 100%; height: 50px; margin-top: 16px; border: 0; border-radius: 12px; background: #D93025; color: #fff; font: 600 15px 'Inter'; cursor: pointer; }
 .prog-grupo { margin-bottom: 6px; }
-.prog-grupo-head { display: flex; align-items: center; gap: 8px; margin: 16px 0 6px; }
+.prog-grupo-head { display: flex; align-items: center; gap: 8px; width: 100%; margin: 16px 0 6px; padding: 4px 0; background: none; border: 0; cursor: pointer; text-align: left; }
+.prog-grupo-flecha { color: #2C6BED; font-size: 11px; }
+.prog-grupo-act { margin-left: auto; padding: 1px 8px; border-radius: 999px; border: 1px solid #2C6BED; color: #2C6BED; font: 700 10px 'Inter'; text-transform: uppercase; letter-spacing: .06em; }
 .prog-grupo-t { font: 600 11px 'Inter'; letter-spacing: .12em; text-transform: uppercase; color: #636366; }
 .prog-grupo-n { padding: 1px 7px; border-radius: 999px; background: #F2F2F7; color: #8E8E93; font: 600 10px 'Inter'; }
 .prog-grupo-ayuda { margin: 0 0 8px; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; }

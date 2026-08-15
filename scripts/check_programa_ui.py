@@ -87,7 +87,24 @@ DE_ALUMNOS = dict(
 # conserva su id y estas series se van con el.
 LOGS = {"1|e4|1": {"kg": 40, "reps": 12, "rir": "2", "done": True}}
 
-ESTADO = dict(programs=[MIO, ASIGNADO, DE_ALUMNOS], logs=LOGS, history=[], borrados={},
+# Dos sesiones en dos semanas distintas, una con nota: el historial se agrupa
+# por semana y la nota que se escribe al cerrar tiene que verse en algun lado.
+def _ses(i, week, ejercicios, note=None):
+    return dict(id=f"h{i}", programId="p1", week=week, session="A", sessionName="Día A",
+                date=1_754_000_000_000 + i * 86_400_000, duration=55 + i,
+                health={"sleep": 4, "stress": 2, "energy": 3}, note=note,
+                exercises=[dict(id=e[0], name=e[1], sem=e[2],
+                                sets=[{"kg": 100, "reps": 10, "rir": 2, "done": True}] * 3)
+                           for e in ejercicios])
+
+
+HISTORIAL = [
+    _ses(2, 2, [("e1", "Prensa 45", "green"), ("e4", "Gemelo de pie", "yellow")],
+         note="La prensa quedó corta, subo a 150."),
+    _ses(1, 1, [("e1", "Prensa 45", "yellow")]),
+]
+
+ESTADO = dict(programs=[MIO, ASIGNADO, DE_ALUMNOS], logs=LOGS, history=HISTORIAL, borrados={},
               prefs={"ayudas": True, "cronometro": True, "sonido": True,
                      "vibracion": True, "notificacion": False})
 
@@ -179,6 +196,44 @@ def main() -> int:
         pg.wait_for_timeout(500)
 
         # ---------------------------------------------------------------
+        print("\nla lista agrupa y pliega")
+        abrir("p1")
+        pg.locator(".prog-switch-btn").click()
+        pg.wait_for_timeout(800)
+        check("hay un grupo por para quien es", pg.locator(".prog-grupo-head").count() == 3,
+              f"{pg.locator('.prog-grupo-head').count()} grupos")
+        # Abierto el del programa que se entrena; los otros dos, cerrados.
+        visibles = pg.locator(".prog-card").count()
+        check("solo se despliega el grupo del programa activo", visibles == 1,
+              f"se ven {visibles} tarjetas: los grupos cerrados no ocultan nada")
+        cerrado = pg.locator(".prog-grupo-head", has_text="Para alumnos").first
+        cerrado.click()
+        pg.wait_for_timeout(500)
+        check("y el que se abre a mano muestra los suyos", pg.locator(".prog-card").count() == 2,
+              f"se ven {pg.locator('.prog-card').count()} tarjetas")
+
+        print("\nel historial")
+        pg.locator(".tabbar button").nth(2).click()
+        pg.wait_for_timeout(1000)
+        check("el boton de Excel no le disputa el lugar al titulo",
+              pg.locator(".top .export-btn").count() == 0,
+              "sigue arriba, al lado del encabezado")
+        check("y esta al pie", "Exportar a Excel" in pg.inner_text("body"),
+              "no hay forma de exportar")
+        cab = pg.locator(".hist-head").first.inner_text().replace("\n", " ")
+        check("cada sesion dice como fue sin abrirla",
+              "min" in cab and "ej." in cab and "t " in cab,
+              f"la cabecera dice {cab!r}")
+        check("las sesiones se agrupan por semana", pg.locator(".hist-semana-head").count() >= 2,
+              f"{pg.locator('.hist-semana-head').count()} encabezados de semana")
+        pg.locator(".hist-head").first.click()
+        pg.wait_for_timeout(600)
+        check("cada serie es una pastilla", pg.locator(".hist-set").count() >= 3,
+              "las series siguen corridas en una linea")
+        check("y la nota de la sesion se ve", pg.locator(".hist-nota").count() == 1,
+              "la nota que se escribio al cerrar no aparece en ningun lado")
+
+        # ---------------------------------------------------------------
         print("\nabrir un programa NO lo activa")
         abrir("p1")
 
@@ -187,6 +242,9 @@ def main() -> int:
 
         pg.locator(".prog-switch-btn").click()      # a la lista
         pg.wait_for_timeout(800)
+        # Su grupo arranca cerrado: el que se abre solo es el del activo.
+        pg.locator(".prog-grupo-head", has_text="Para alumnos").first.click()
+        pg.wait_for_timeout(500)
         # La tarjeta del programa que le escribi a un alumno.
         pg.get_by_text("Recomposición — Julia").click()
         pg.wait_for_timeout(1000)
