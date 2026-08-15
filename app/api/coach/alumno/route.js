@@ -14,7 +14,7 @@
  */
 import { getServerSession } from "@/lib/auth/nextauth-interop";
 import { authOptions } from "@/lib/auth/options";
-import { getCoachDe, puedeVer } from "@/lib/repo/coaching.js";
+import { getCoachDe, puedeVer, marcarNotasVistas } from "@/lib/repo/coaching.js";
 import { getProgram } from "@/lib/repo/programs.js";
 import { asignacionDeMiAlumno, loQueEntreno } from "@/lib/repo/training.js";
 import { unscope, unscopeProgram } from "@/lib/sync/ids.js";
@@ -54,6 +54,10 @@ export async function GET(request) {
     // ejercicios del programa y toda la ficha queda en cero.
     sets: sets.map((x) => ({ ...x, programExerciseId: unscope(s.user.id, x.programExerciseId) })),
   });
+
+  // Abrir la ficha es leer sus notas: estan ahi abajo. Va sin await —si falla,
+  // la ficha se muestra igual y el punto de "nota nueva" se apaga la proxima.
+  marcarNotasVistas({ coachId: coach.id, athleteId: alumno }).catch(() => {});
 
   return Response.json({
     programa: {

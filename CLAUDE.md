@@ -64,6 +64,8 @@ app-forge-v2/
 │   ├── v04_catalogo_por_usuario.sql # el catalogo es del usuario, no del coach
 │   ├── v05_email_canon.sql # la cuenta es la casilla, no la grafia
 │   ├── v06_asistencia.sql # meses de asistencia anteriores a la app
+│   ├── v07_dropset.sql    # escalones de la serie (set_logs.steps_json)
+│   ├── v08_notas_vistas.sql # cuando el coach leyo las notas de cada alumno
 │   └── *.db               # bases locales (gitignored)
 ├── public/                # assets estaticos
 │   ├── sw.js              # service worker escrito a mano (leer sus reglas)
@@ -827,6 +829,34 @@ Tres reglas que valen mas que su implementacion:
   vuelve a prefijar**. En un programa asignado el id del servidor es el canonico. Ver
   `lib/sync/ids.js`. Vale tambien para los ids que genera el SERVIDOR (duplicar un
   programa): si nacen pelados, el push siguiente los prefija y duplica el programa.
+
+**La nota del alumno ya llegaba; lo que faltaba era que alguien AVISARA.** Se
+escribe al cerrar la sesion, viaja con ella y se muestra en la ficha — pero el
+entrenador se enteraba al entrar por otro motivo, que puede ser nunca, y la nota
+tipica ("me molesto el hombro") caduca. Ahora hay dos senales:
+
+- **La lista de alumnos** dice cuando entreno cada uno, cuantas sesiones lleva en
+  7 dias, y marca las **notas sin leer**. Antes decia inicial, nombre y mail: para
+  saber si a alguien le estaba pasando algo habia que entrar a cada ficha.
+- **Un mail al entrenador** (`lib/coach/nota-email.js`, mismo camino que la
+  invitacion) cuando el alumno cierra una sesion CON nota. Solo con nota: un mail
+  por sesion terminada es ruido, y el ruido se filtra — en dos semanas la carpeta
+  va a spam y el aviso que importa se pierde con el resto. Sale despues de guardar
+  y sin bloquear: que Resend tarde no puede demorar el telefono de alguien que
+  acaba de terminar de entrenar.
+
+**El mail NO transcribe la nota, y eso es a proposito.** Bajo la Ley 25.326 "me
+molesto el hombro" es dato sensible de un tercero: copiarlo al mail lo saca del
+unico lugar donde el acceso esta controlado —la ficha, detras del vinculo
+activo— para dejarlo en una casilla, en el proveedor de correo y en cualquier
+reenvio. El aviso dice QUE hay una nota y de quien; leerla es entrar.
+
+**"Leido" vive en el VINCULO** (`coach_athletes.notes_seen_at`, v08), no en el
+usuario ni en el localStorage del coach: es una propiedad del PAR —dos
+entrenadores del mismo alumno lo leen cada uno por su lado— y tiene que
+sobrevivir al cambio de dispositivo, que es justo lo que un flag local no hace.
+Se marca al ABRIR la ficha: verlas es leerlas, y un boton "marcar como leido"
+aparte seria una tarea nueva para el mismo hecho.
 
 **"Solo lectura" se verifica puerta por puerta, no boton por boton.** En el lado del
 atleta un programa asignado ocultaba "+ Agregar ejercicio" y "Editar programa" pero

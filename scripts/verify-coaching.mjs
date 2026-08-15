@@ -370,6 +370,70 @@ await check("la invitacion aparece aunque se registre con el mail escrito distin
   return true;
 });
 
+/* ---------- la nota del alumno llega a la lista del entrenador ---------- */
+
+await check("la lista de alumnos dice cuando entreno cada uno", async () => {
+  const [fila] = (await co.listarAlumnos(invitacionAna.coachId)).filter((a) => a.id === ana.id);
+  if (!fila) return "Ana no aparece en la lista";
+  if (!fila.ultima) return "no dice cuando entreno por ultima vez";
+  if (fila.sesiones7 < 1) return `dice ${fila.sesiones7} sesiones en 7 dias y entreno recien`;
+  return true;
+});
+
+await check("una sesion SIN nota no marca nada", async () => {
+  const [fila] = (await co.listarAlumnos(invitacionAna.coachId)).filter((a) => a.id === ana.id);
+  if (fila.notasNuevas !== 0) return `marca ${fila.notasNuevas} notas y no escribio ninguna`;
+  return true;
+});
+
+await check("la nota que deja al cerrar aparece como SIN LEER", async () => {
+  const asignado = (await pullForUser(ana.id)).programs.find((p) => p.readOnly);
+  await pushForUser(ana.id, {
+    program: asignado,
+    entry: {
+      week: 2, session: "A", sessionName: "Full A", date: Date.now(),
+      note: "Me molestó el hombro en la última serie.",
+      exercises: [{ id: asignado.exercises[0].id, name: "Press banca", sets: [{ setN: 1, kg: 40, reps: 10, rir: 2 }] }],
+    },
+  });
+  const [fila] = (await co.listarAlumnos(invitacionAna.coachId)).filter((a) => a.id === ana.id);
+  if (fila.notasNuevas !== 1) return `marca ${fila.notasNuevas} notas sin leer, esperaba 1`;
+  return true;
+});
+
+await check("abrir su ficha las da por leidas", async () => {
+  await co.marcarNotasVistas({ coachId: invitacionAna.coachId, athleteId: ana.id });
+  const [fila] = (await co.listarAlumnos(invitacionAna.coachId)).filter((a) => a.id === ana.id);
+  if (fila.notasNuevas !== 0) return `siguen marcadas ${fila.notasNuevas} despues de leerlas`;
+  return true;
+});
+
+await check("y una nota POSTERIOR vuelve a marcar", async () => {
+  const asignado = (await pullForUser(ana.id)).programs.find((p) => p.readOnly);
+  await pushForUser(ana.id, {
+    program: asignado,
+    entry: {
+      week: 3, session: "A", sessionName: "Full A", date: Date.now() + 1000,
+      note: "Hoy sí pude con 45.",
+      exercises: [{ id: asignado.exercises[0].id, name: "Press banca", sets: [{ setN: 1, kg: 45, reps: 8, rir: 1 }] }],
+    },
+  });
+  const [fila] = (await co.listarAlumnos(invitacionAna.coachId)).filter((a) => a.id === ana.id);
+  if (fila.notasNuevas !== 1) return `marca ${fila.notasNuevas}, esperaba solo la nueva`;
+  return true;
+});
+
+await check("el entrenador de un alumno se resuelve por el vinculo ACTIVO", async () => {
+  const quien = await co.entrenadorDe(ana.id);
+  if (!quien) return "no encontro entrenador para un alumno que si lo tiene";
+  if (quien.coachId !== invitacionAna.coachId) return `devolvio el coach ${quien.coachId}`;
+  if (!quien.email) return "sin mail no hay a donde avisar";
+  // Quien entrena solo no tiene a quien avisarle, y eso NO es un error.
+  const solo = await users.findOrCreate({ email: "solo@example.com", displayName: "Solo" });
+  if (await co.entrenadorDe(solo.id)) return "le encontro entrenador a alguien que entrena solo";
+  return true;
+});
+
 await check("no se puede invitar dos veces a la misma casilla escribiendola distinto", async () => {
   const r = await co.invitar({ ownerUserId: otroCoach.id, email: "car.la.demo+otra@gmail.com" });
   if (r.ok) return "creo una segunda invitacion para alguien que ya es alumno";

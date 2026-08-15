@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AsignarPrograma from "./AsignarPrograma";
 import EditorPrograma from "./EditorPrograma";
+import { fmtFecha, haceCuanto } from "./fechas";
 
 /**
  * Ficha de seguimiento: como le esta yendo al alumno.
@@ -308,23 +309,3 @@ function miles(n) {
   return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
 }
 
-function fmtFecha(iso) {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? "—"
-    : d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
-}
-
-/**
- * "hoy" / "ayer" / "hace 3 días". El entrenador no necesita la fecha exacta,
- * necesita saber si el alumno esta entrenando o desaparecio.
- */
-function haceCuanto(iso) {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return "—";
-  const dias = Math.floor((Date.now() - t) / 86400000);
-  if (dias <= 0) return "hoy";
-  if (dias === 1) return "ayer";
-  if (dias < 30) return `hace ${dias} días`;
-  return fmtFecha(iso);
-}

@@ -100,6 +100,15 @@ def main() -> int:
 
         # El ancho es la razon de que esta seccion exista aparte de la del atleta.
         ancho = pagina.evaluate("document.querySelector('.coach-layout')?.getBoundingClientRect().width || 0")
+        # La lista decia inicial, nombre y mail: para saber si a alguien le
+        # estaba pasando algo habia que entrar a cada ficha. El badge de notas
+        # sin leer se verifica en `verify-coaching` —abrir la ficha las marca
+        # leidas, asi que en el navegador no seria estable entre corridas.
+        lista_txt = pagina.locator(".alista").inner_text()
+        check("la lista dice cuando entreno cada alumno",
+              "sesiones en 7 días" in lista_txt or "todavía no entrenó" in lista_txt,
+              f"la lista dice: {lista_txt[:120]!r}")
+
         check("aprovecha el ancho en escritorio (no queda en 430px)", ancho > 900, f"ancho {ancho}")
         cols = pagina.evaluate(
             "getComputedStyle(document.querySelector('.coach-layout')).gridTemplateColumns"
@@ -499,7 +508,16 @@ def main() -> int:
             editar.first.click()
             p1.wait_for_timeout(600)
             p1.get_by_text("Eliminar programa").first.click()
-            p1.wait_for_timeout(1500)
+            p1.wait_for_timeout(600)
+            # Borrar ya no pregunta con `window.confirm` —la caja del sistema—
+            # sino con la de la app, que ademas dice que se lleva puesto. El
+            # `on("dialog")` de arriba se queda por si aparece alguno.
+            confirmar = p1.locator(".confirm-del")
+            check("borrar pregunta con la caja de la app", confirmar.count() == 1,
+                  "no aparecio la confirmacion propia")
+            if confirmar.count():
+                confirmar.first.click()
+                p1.wait_for_timeout(1500)
 
         check("borrar el ultimo programa no rompe la app",
               "Todavía no tenés ningún programa" in p1.inner_text("body"),
@@ -533,9 +551,14 @@ def main() -> int:
         pa.locator(".tabbar button").nth(2).click()
         pa.wait_for_timeout(1200)
         hist = pa.inner_text("body")
+        # El encabezado dice "N sesiones en M semanas · <programa>", y N cuenta
+        # las del programa ACTIVO: el historial se filtra por programa desde
+        # siempre, asi que puede ser menor que el total del localStorage.
         check("el Historial muestra las sesiones sincronizadas",
-              "sesiones registradas" in hist and "0 sesiones" not in hist,
+              " sesiones" in hist and "0 sesiones" not in hist,
               f"{activo['hist']} sesiones en local pero la pantalla dice: {hist[:120]}")
+        check("y las agrupa por semana", "SEM" in hist.upper(),
+              "no hay encabezados de semana")
 
         pa.locator(".tabbar button").nth(3).click()
         pa.wait_for_timeout(1200)
