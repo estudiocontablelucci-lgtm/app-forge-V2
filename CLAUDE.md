@@ -625,6 +625,23 @@ para cambiar de programa es el patron de mobile, no cuesta ancho, y el `▾` es 
 que lo delata. El nombre se parte en TRES renglones antes que cortarse: "Hipertrofia
 …" no identifica a un programa, y es el dato que esa pantalla existe para mostrar.
 
+**La lista de programas pliega por grupo**, y arranca abierto el del programa que
+se esta entrenando. Con un solo grupo no se dibujan encabezados. Ojo con el
+atributo `hidden` para esto: pone `display: none` con la especificidad del
+navegador y `.prog-list` lo pisa con su `display: flex` — los grupos se veian
+"cerrados" con todas las tarjetas a la vista. Se resuelve no renderizando.
+
+**El Historial se agrupa por semana y cada sesion dice como fue sin abrirla**:
+duracion, tonelaje, cuantos ejercicios, y **cuantos quedaron en cada color del
+semaforo**. El semaforo ya existia adentro y habia que desplegar la sesion para
+verlo ejercicio por ejercicio. Adentro, **cada serie es una pastilla**: corridas
+en una linea monoespaciada —"120×10 @4 130×10 @3"— hay que contar donde termina
+cada una. Y la **nota que se escribe al cerrar la sesion** ahora se ve ahi: se
+guardaba, viajaba al entrenador y el propio autor no la volvia a leer nunca.
+
+**El boton de Excel esta al PIE.** Arriba le disputaba el lugar al titulo, igual
+que el selector de programa: exportar es lo ultimo que se hace en esa pantalla.
+
 **Los catorce campos del editor de ejercicio estan en tres secciones plegables**
 (`EdSec`). Arriba queda lo que se cambia seguido —que ejercicio, donde va, series,
 reps, ref, RIR—; abajo, plegado, lo que se define una vez al escribir el programa:
