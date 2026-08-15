@@ -115,6 +115,13 @@ def main() -> int:
         pg.add_init_script(
             "window.__confirms = []; window.confirm = (m) => { window.__confirms.push(m); return false; };")
 
+        def elegir_dia(i: int) -> None:
+            """Los dias viven en un desplegable, no en chips: abrirlo y elegir."""
+            pg.locator(".dia-sel-btn").click()
+            pg.wait_for_timeout(400)
+            pg.locator(".dia-op").nth(i).click()
+            pg.wait_for_timeout(700)
+
         def abrir(program_id: str) -> None:
             estado = dict(ESTADO, activeProgramId=program_id)
             pg.goto(base, wait_until="networkidle", timeout=60000)
@@ -238,16 +245,27 @@ def main() -> int:
         # ---------------------------------------------------------------
         print("\nlo que la fila y los chips cuentan")
         abrir("p1")
-        chips = [pg.locator(".weekchips .chip").nth(i).inner_text()
-                 for i in range(pg.locator(".weekchips .chip").count())]
-        check("cada dia dice cuantos ejercicios tiene", chips == ["Día A3", "Día B1"],
-              f"los chips dicen {chips}")
+        # El rotulo "DÍA" va en mayusculas por CSS y el ▾ es del control.
+        check("el selector muestra el dia y su conteo",
+              pg.locator(".dia-sel-btn").inner_text().replace("\n", " ").upper() == "DÍA DÍA A 3 EJ. ▾",
+              f"el selector dice {pg.locator('.dia-sel-btn').inner_text()!r}")
+        pg.locator(".dia-sel-btn").click()
+        pg.wait_for_timeout(400)
+        ops = [pg.locator(".dia-op").nth(i).inner_text().replace("\n", " ").strip()
+               for i in range(pg.locator(".dia-op").count())]
+        check("desplegado se leen todos los dias enteros, con su conteo",
+              ops == ["✓ Día A 3 ej.", "Día B 1 ej."], f"el desplegable dice {ops}")
+        pg.keyboard.press("Escape")
+        pg.locator(".dia-backdrop").click()
+        pg.wait_for_timeout(400)
+        check("y se cierra tocando afuera", pg.locator(".dia-menu").count() == 0,
+              "el desplegable quedo abierto: la unica salida seria volver a tocarlo")
         fila = pg.locator(".prow").first.inner_text()
         check("la fila del ejercicio muestra el RIR", "RIR 2" in fila, f"la fila dice {fila!r}")
         check("y el descanso", "D 2'" in fila, f"la fila dice {fila!r}")
 
         print("\nentrenar el dia que se esta mirando")
-        pg.locator(".weekchips .chip").nth(1).click()   # Día B: sin series cargadas
+        elegir_dia(1)   # Día B: sin series cargadas
         pg.wait_for_timeout(700)
         boton = pg.locator(".prog-entrenar-btn")
         check("el boton nombra el dia", boton.inner_text().strip() == "Entrenar Día B",
@@ -269,7 +287,7 @@ def main() -> int:
         pg.wait_for_timeout(500)
         pg.locator(".sheethead .x").click()
         pg.wait_for_timeout(600)
-        pg.locator(".weekchips .chip").nth(2).click()
+        elegir_dia(2)
         pg.wait_for_timeout(700)
         check("un dia sin ejercicios lo explica", "Este día está vacío" in pg.inner_text("body"),
               "la lista queda vacia y no dice nada")
@@ -322,7 +340,7 @@ def main() -> int:
               "el ejercicio desaparece de la pantalla sin explicacion")
 
         print("\nmudarse de dia suelta la superserie")
-        pg.locator(".weekchips .chip").nth(0).click()   # Día A
+        elegir_dia(0)   # Día A
         pg.wait_for_timeout(700)
         pg.locator(".prow").nth(0).click()              # Prensa 45, en superserie con Curl
         pg.wait_for_timeout(800)
@@ -337,7 +355,7 @@ def main() -> int:
               f"apunta a {exs['e2']['superset']} — una superserie con otro dia no significa nada")
 
         print("\nreordenar dentro del dia")
-        pg.locator(".weekchips .chip").nth(1).click()   # Día B
+        elegir_dia(1)   # Día B
         pg.wait_for_timeout(700)
         antes = filas()
         check("el dia B tiene tres", len(antes) == 3, str(antes))
@@ -354,6 +372,33 @@ def main() -> int:
               f"antes {antes} → ahora {despues}")
 
         # ---------------------------------------------------------------
+        print("\nel editor no muestra catorce campos de una")
+        abrir("p1")
+        # Uno SIN superserie ni tecnica: los que tienen algo cargado abren la
+        # seccion sola, que es justo lo que no hay que esconder.
+        pg.locator(".prow", has_text="Gemelo de pie").first.click()
+        pg.wait_for_timeout(800)
+        secs = {pg.locator(".ed-sec-t").nth(i).inner_text().strip().lower()
+                for i in range(pg.locator(".ed-sec-t").count())}
+        check("lo que se define una vez esta plegado",
+              {"referencias por semana", "cómo se ejecuta", "notas"} <= secs, str(secs))
+        check("el descanso NO se ve mientras esta plegado",
+              pg.locator(".ed-form input").count() < 10,
+              f"muestra {pg.locator('.ed-form input').count()} campos: sigue estando todo abierto")
+        ejecuta = pg.locator(".ed-sec", has_text="Cómo se ejecuta").first
+        check("y cerrado dice lo que hay adentro",
+              "2'" in ejecuta.locator(".ed-sec-r").inner_text(),
+              f"el resumen dice {ejecuta.locator('.ed-sec-r').inner_text()!r}")
+        ejecuta.locator(".ed-sec-head").click()
+        pg.wait_for_timeout(400)
+        # Las etiquetas del editor van en mayusculas por CSS, y `inner_text`
+        # devuelve lo RENDERIZADO. Es el mismo tropiezo que con "DROPSET".
+        check("y se abre al tocarlo",
+              "superserie con" in pg.locator(".sheet").inner_text().lower(),
+              "el toque no despliega la seccion")
+        pg.locator(".sheethead .x").click()
+        pg.wait_for_timeout(500)
+
         print("\nborrar una sesion del programa propio")
         abrir("p1")
         check("el programa propio SI deja editar los dias", pg.locator(".prog-dias-btn").count() == 1,

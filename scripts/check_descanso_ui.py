@@ -102,6 +102,14 @@ def main() -> int:
             "localStorage.setItem('forge-v2', JSON.stringify(%s)); } catch (e) {}"
             % json.dumps(ESTADO)
         )
+        # En `next dev` el overlay de desarrollo tapa la pagina entera para el
+        # mouse. En produccion no existe, asi que esto no cambia nada ahi — y
+        # permite correr el check contra un dev server sin buildear.
+        pg.add_init_script(
+            "document.addEventListener('DOMContentLoaded', () => {"
+            "  const s = document.createElement('style');"
+            "  s.textContent = 'nextjs-portal{display:none!important}';"
+            "  document.head.appendChild(s); });")
         # El reloj falso se instala ANTES de cargar: despues, la app ya tomo el
         # `Date.now()` de verdad y adelantarlo no le dice nada.
         pg.clock.install()
@@ -219,10 +227,15 @@ def main() -> int:
         pg.locator(".tabbar button").nth(0).click()
         pg.wait_for_timeout(700)
         b = pg.locator(".prog-switch-btn")
-        # Un hamburguesa suelto significa "el menu de la app". Que abra la lista
-        # de programas para cambiar de programa no lo adivina nadie.
-        check("dice a donde lleva", b.count() > 0 and "programa" in b.first.inner_text().lower(),
-              b.first.inner_text() if b.count() else "no existe el boton")
+        # Primero fue un hamburguesa suelto —que significa "el menu de la app"—,
+        # despues un boton rotulado que le disputaba el ancho al titulo, y ahora
+        # es el titulo mismo: dice el nombre del programa y lleva un ▾ que es lo
+        # que delata que se despliega.
+        check("el selector dice que programa es",
+              b.count() > 0 and len(b.first.inner_text().strip()) > 1,
+              b.first.inner_text() if b.count() else "no existe el selector")
+        check("y se ve que despliega", pg.locator(".prog-titulo-chevron").count() > 0,
+              "sin el ▾ nada dice que el titulo se toca")
         if b.count():
             b.first.click()
             pg.wait_for_timeout(800)
