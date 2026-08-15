@@ -280,6 +280,12 @@ export default function ForgeApp() {
   const [sessionNote, setSessionNote] = useState(""); // nota que el alumno deja al cerrar
   const [reentryChoice, setReentryChoice] = useState(null); // session id pending choice
   const [descModal, setDescModal] = useState(null); // exercise object to show description
+  // Borrar una sesion o un programa preguntaba con `window.confirm`, que en el
+  // telefono es una caja del SISTEMA: bloquea la app, no se parece a nada del
+  // resto y en una PWA instalada delata que abajo hay un navegador. Es lo mismo
+  // que la app ya evita para los avisos, y estas dos eran justo las decisiones
+  // destructivas. `{ mensaje, detalle, textoOk, onOk }`.
+  const [confirmarBorrado, setConfirmarBorrado] = useState(null);
   const [programListView, setProgramListView] = useState(false); // show program list vs active program
   const [editingProgram, setEditingProgram] = useState(null); // program metadata editor
   const [importWizard, setImportWizard] = useState(null); // { step, data, mapping, preview, name }
@@ -520,6 +526,7 @@ export default function ForgeApp() {
   // Las superpuestas tambien: el atras del telefono tiene que cerrarlas a ellas
   // primero. Sin esto la caja quedaba abierta y la app de atras se movia sola.
   const descModalRef = useRef(descModal); descModalRef.current = descModal;
+  const confirmarBorradoRef = useRef(confirmarBorrado); confirmarBorradoRef.current = confirmarBorrado;
   const confirmActionRef = useRef(confirmAction); confirmActionRef.current = confirmAction;
   const editingRef = useRef(editing); editingRef.current = editing;
   const editingProgramRef = useRef(editingProgram); editingProgramRef.current = editingProgram;
@@ -1144,6 +1151,9 @@ export default function ForgeApp() {
       // confirmacion se dibujan ARRIBA de todo, asi que son las primeras en
       // cerrarse: si no, el atras movia la app de abajo y la caja se quedaba
       // flotando encima de otra pantalla.
+      // La confirmacion de borrado se dibuja sobre los editores, asi que va
+      // primera: el atras tiene que cancelarla a ella, no cerrar lo de abajo.
+      if (confirmarBorradoRef.current) { setConfirmarBorrado(null); return quedarse(); }
       if (descModalRef.current) { setDescModal(null); return quedarse(); }
       if (confirmActionRef.current) { setConfirmAction(null); return quedarse(); }
       if (editingRef.current) { setEditing(null); return quedarse(); }
@@ -1646,7 +1656,15 @@ export default function ForgeApp() {
             </header>
             <div className="weekchips">
               {sessions.map((s) => (<button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>{s.name}</button>))}
-              {session === null && <button className="chip chip-edit" onClick={() => setEditingSessions(true)}>&#9998;</button>}
+              {/* `!esAsignado` no es simetria con los otros botones de edicion:
+                  este era la unica puerta que quedaba abierta en un programa de
+                  solo lectura. Renombrar la sesion del entrenador ya es raro
+                  —el pull siguiente reemplaza el programa entero y lo deshace
+                  sin avisar—, pero el editor tambien BORRA la sesion con sus
+                  ejercicios, y los logs son `week|exId|setN`: las series
+                  registradas quedan colgando de ejercicios que ya no existen.
+                  Eso no lo deshace ningun pull. */}
+              {session === null && !esAsignado && <button className="chip chip-edit" onClick={() => setEditingSessions(true)}>&#9998;</button>}
             </div>
             <div className="plist">
               {progBlocks.map((b, bi) => (
@@ -2014,19 +2032,47 @@ export default function ForgeApp() {
           </div>
         )}
 
-        {/* ======== DESCRIPTION MODAL ======== */}
-        {descModal && (
+        {/* ======== DESCRIPTION MODAL ========
+            En un programa asignado esta ficha es lo UNICO que devuelve tocar una
+            fila, y dibujaba nada mas que `description`: los ejercicios sin nota
+            —que son la mayoria— abrian una caja muda con el nombre y un OK.
+            Ahora lo primero es la prescripcion, que existe siempre; la nota del
+            entrenador es lo que se agrega cuando la hay. */}
+        {descModal && (() => {
+          const tec = defDe(descModal);
+          const ref = refFor(descModal, null);
+          const carga = ref === null || ref === "" ? null
+            : ref === "BW" ? "peso corporal"
+            : `${ref}${isNum(ref) ? " kg" : ""}`;
+          const detalle = [
+            String(descModal.rir ?? "").trim() && `RIR ${descModal.rir}`,
+            descModal.rest && `descanso ${fmtRest(descModal.rest)}`,
+            descModal.tempo && `tempo ${descModal.tempo}`,
+          ].filter(Boolean).join(" · ");
+          return (
           <div className="overlay centered" onClick={() => setDescModal(null)}>
             <div className="confirm-box desc-modal" onClick={(e) => e.stopPropagation()}>
               <div className="desc-modal-head">
                 <div className="eyebrow">{descModal.group}</div>
                 <h3>{descModal.name}</h3>
               </div>
-              <p className="desc-modal-body">{descModal.description}</p>
+              <p className="desc-modal-presc mono">
+                {descModal.sets} × {descModal.repsMin}-{descModal.repsMax} {descModal.unit === "pasos" ? "pasos" : "reps"}
+                {carga ? ` · ${carga}` : ""}
+              </p>
+              {detalle && <p className="desc-modal-meta">{detalle}</p>}
+              {tec && (
+                <>
+                  <p className="desc-modal-tec"><span className="tecchip">{tec.icono} {tec.nombre}{tec.pasos > 1 ? ` ×${tec.pasos}` : ""}</span></p>
+                  <p className="tec-ayuda">{tec.ayuda}</p>
+                </>
+              )}
+              {descModal.description && <p className="desc-modal-body">{descModal.description}</p>}
               <button className="confirm-ok" style={{ width: "100%", marginTop: 12 }} onClick={() => setDescModal(null)}>OK</button>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ======== CONFIRM MODAL ======== */}
         {confirmAction && (
@@ -2069,10 +2115,18 @@ export default function ForgeApp() {
                       <input className="sess-name-input" value={s.name} onChange={(e) => setSessions((S) => S.map((x) => x.id === s.id ? { ...x, name: e.target.value } : x))} />
                       <span className="sess-count mono">{exCount} ej.</span>
                       <button className="sess-del" onClick={() => {
-                        if (exCount > 0 && !window.confirm(`"${s.name}" tiene ${exCount} ejercicios. Eliminar sesión y sus ejercicios?`)) return;
-                        setSessions((S) => S.filter((x) => x.id !== s.id));
-                        setProgram((P) => P.filter((e) => e.session !== s.id));
-                        if (activeProgSession === s.id) setProgSession(null);
+                        const borrar = () => {
+                          setSessions((S) => S.filter((x) => x.id !== s.id));
+                          setProgram((P) => P.filter((e) => e.session !== s.id));
+                          if (activeProgSession === s.id) setProgSession(null);
+                        };
+                        if (!exCount) return borrar();
+                        setConfirmarBorrado({
+                          mensaje: `¿Eliminar "${s.name}"?`,
+                          detalle: `Se van con ella ${exCount} ejercicio${exCount === 1 ? "" : "s"}. Las series que ya registraste quedan en el historial, pero sin el ejercicio del que colgaban.`,
+                          textoOk: "Eliminar",
+                          onOk: borrar,
+                        });
                       }}>×</button>
                     </div>
                   );
@@ -2195,24 +2249,28 @@ export default function ForgeApp() {
                     un parche: sin estado vacio, quedarse sin programas rompia la
                     app. Ahora la pantalla vacia existe y ofrece los tres caminos. */}
                 {(
-                  <button className="del" style={{ width: "100%" }} onClick={() => {
-                    if (!window.confirm(`Eliminar "${activeProgram.name}"? Esta accion no se puede deshacer.`)) return;
-                    const remaining = programs.filter((p) => p.id !== activeProgramId);
-                    // Lapida: el borrado tiene que viajar. Sin esto el pull
-                    // siguiente lo trae de vuelta como si nada.
-                    if (!activeProgram.readOnly) {
-                      setBorrados((b) => ({ ...b, [activeProgramId]: Date.now() }));
-                      if (signedIn) pushBorrados([activeProgramId]);
-                    }
-                    setPrograms(remaining);
-                    // Puede no quedar ninguno: `remaining[0].id` reventaba la app
-                    // al borrar el ultimo, que desde que las cuentas arrancan
-                    // vacias dejo de ser un caso imposible.
-                    setActiveProgramId(remaining[0]?.id ?? null);
-                    setProgSession(null);
-                    setEditingProgram(null);
-                    setProgramListView(true);
-                  }}>Eliminar programa</button>
+                  <button className="del" style={{ width: "100%" }} onClick={() => setConfirmarBorrado({
+                    mensaje: `¿Eliminar "${activeProgram.name}"?`,
+                    detalle: "No se puede deshacer. El historial de las sesiones que ya hiciste se queda.",
+                    textoOk: "Eliminar",
+                    onOk: () => {
+                      const remaining = programs.filter((p) => p.id !== activeProgramId);
+                      // Lapida: el borrado tiene que viajar. Sin esto el pull
+                      // siguiente lo trae de vuelta como si nada.
+                      if (!activeProgram.readOnly) {
+                        setBorrados((b) => ({ ...b, [activeProgramId]: Date.now() }));
+                        if (signedIn) pushBorrados([activeProgramId]);
+                      }
+                      setPrograms(remaining);
+                      // Puede no quedar ninguno: `remaining[0].id` reventaba la app
+                      // al borrar el ultimo, que desde que las cuentas arrancan
+                      // vacias dejo de ser un caso imposible.
+                      setActiveProgramId(remaining[0]?.id ?? null);
+                      setProgSession(null);
+                      setEditingProgram(null);
+                      setProgramListView(true);
+                    },
+                  })}>Eliminar programa</button>
                 )}
               </div>
             </div>
@@ -2251,6 +2309,25 @@ export default function ForgeApp() {
           setProgramListView(false);
           setImportWizard(null);
         }} />}
+
+        {/* ======== CONFIRM DE BORRADO ========
+            Va DESPUES de los editores a proposito: todos los `.overlay` comparten
+            el mismo z-index, asi que el que gana es el ultimo del DOM — y esta
+            caja se abre desde adentro del editor de sesiones y del de programa. */}
+        {confirmarBorrado && (
+          <div className="overlay centered" onClick={() => setConfirmarBorrado(null)}>
+            <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+              <p className="confirm-msg">{confirmarBorrado.mensaje}</p>
+              {confirmarBorrado.detalle && <p className="confirm-detalle">{confirmarBorrado.detalle}</p>}
+              <div className="confirm-actions">
+                <button className="confirm-cancel" onClick={() => setConfirmarBorrado(null)}>Cancelar</button>
+                <button className="confirm-del" onClick={() => { const f = confirmarBorrado.onOk; setConfirmarBorrado(null); f(); }}>
+                  {confirmarBorrado.textoOk || "Eliminar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {confirmarSalida && (
           <div className="salir-aviso">Tocá atrás otra vez para salir de FORGE</div>
@@ -3021,6 +3098,12 @@ const CSS = `
 .note-hint { font-size: 11px; color: #8E8E93; text-align: left; margin: 6px 0 14px; line-height: 1.4; }
 .confirm-cancel { flex: 1; height: 44px; border-radius: 10px; border: 1px solid #D1D1D6; background: #FFF; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
 .confirm-ok { flex: 1; height: 44px; border-radius: 10px; border: none; background: #2C6BED; color: #FFF; font: 600 15px 'Inter'; cursor: pointer; }
+/* El detalle va bajo la pregunta: que se lleva puesto el borrado. La pregunta
+   sola —"¿Eliminar X?"— no alcanza para decidir. */
+.confirm-detalle { font-size: 13px; color: #636366; line-height: 1.45; text-align: left; margin: -12px 0 18px; }
+/* Confirmar un borrado no puede ser el mismo boton azul que confirma cualquier
+   otra cosa: el color es la mitad del aviso. */
+.confirm-del { flex: 1; height: 44px; border-radius: 10px; border: none; background: #FF3B30; color: #FFF; font: 600 15px 'Inter'; cursor: pointer; }
 
 /* Reentry modal */
 .reentry-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
@@ -3326,6 +3409,14 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .desc-modal-head { margin-bottom: 12px; }
 .desc-modal-head h3 { font-size: 18px; font-weight: 700; margin-top: 4px; }
 .desc-modal-body { font-size: 14px; color: #3A3A3C; line-height: 1.6; white-space: pre-wrap; }
+/* La prescripcion va antes que la nota y con el peso de un titulo: es el dato
+   que se busca parado al lado de la maquina. */
+.desc-modal-presc { font-size: 16px; font-weight: 500; color: #1C1C1E; }
+.desc-modal-meta { font-size: 13px; color: #636366; margin-top: 4px; }
+.desc-modal-tec { margin-top: 10px; }
+.desc-modal-tec + .tec-ayuda { margin-top: 6px; }
+.desc-modal-presc + .desc-modal-body, .desc-modal-meta + .desc-modal-body,
+.tec-ayuda + .desc-modal-body { margin-top: 12px; border-top: 1px solid #F2F2F7; padding-top: 12px; }
 /* Import wizard */
 .import-desc { font-size: 14px; color: #636366; line-height: 1.5; margin-bottom: 8px; }
 .import-mapping { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }

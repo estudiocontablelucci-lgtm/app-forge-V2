@@ -89,6 +89,7 @@ app-forge-v2/
 │   ├── check_pwa.py           # headless: instalable y ABRE SIN RED (contra next start)
 │   ├── gen_iconos.py          # rasteriza favicon.svg a los PNG del manifest
 │   ├── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
+│   ├── check_programa_ui.py   # headless: solo lectura, la ficha y los borrados
 │   ├── verify-descanso.mjs    # el vencimiento, la restauracion y las preferencias
 │   ├── check_descanso_ui.py   # headless: el cronometro, con el reloj adelantado
 │   └── check_perfil_ui.py     # headless: orden, secciones plegadas y renglones
@@ -304,10 +305,13 @@ extension lumbar liviana.
 `npm run gen:programa` genera `data/*.xlsx` para importar por el wizard (el SEED solo aplica a
 instalaciones nuevas). `npm run verify` corre las suites sin navegador (255 checks).
 
-Para lo que el verify no ve, que es donde aparecieron los ultimos bugs, hay dos
-verificadores con navegador: `npm run verify:ui` (generico) y
-`scripts/check_coach_ui.py` (la seccion de entrenador, con dos sesiones reales).
-Ver `docs/e4-seccion-entrenador.md` para como levantarlos.
+Para lo que el verify no ve, que es donde aparecieron los ultimos bugs, hay tres
+verificadores con navegador: `npm run verify:ui` (generico),
+`npm run verify:programa-ui` (la pantalla Programa: que deja tocar un programa
+asignado, que contesta la ficha de un ejercicio y con que se pregunta antes de
+borrar — sin cuenta ni base) y `scripts/check_coach_ui.py` (la seccion de
+entrenador, con dos sesiones reales). Ver `docs/e4-seccion-entrenador.md` para
+como levantarlos.
 
 Los datos de salud (lesiones en `description` y `note`) son **dato sensible** bajo la Ley 25.326
 cuando son de terceros. Antes de onboardear un alumno real hace falta consentimiento expreso —
@@ -573,6 +577,16 @@ del sistema operativo: bloquea la app, no se parece en nada al resto y hay que
 tocarla para seguir. El candado del programa usa `.toast`, que flota sobre la
 tabbar y se va solo. Para lo que SI es una decision esta `confirm-box`.
 
+**Y los borrados tampoco son `confirm()`.** Borrar una sesion y borrar un programa
+eran las dos ultimas cajas del sistema que quedaban, justo en las dos decisiones
+destructivas — en una PWA instalada eso delata que abajo hay un navegador. Van por
+`confirmarBorrado` (`{ mensaje, detalle, textoOk, onOk }`), que ademas dice **que
+se lleva puesto**: "se van con ella 2 ejercicios" es lo que hace falta para
+decidir, y `window.confirm` no tiene donde ponerlo. Dos cosas al agregar otro:
+la caja se dibuja **al final del JSX** —todos los `.overlay` comparten z-index,
+gana el ultimo del DOM y esta se abre desde adentro de otro editor— y va **primera
+en la cadena del boton atras**, por lo mismo.
+
 **El Perfil se lee de un vistazo o no se lee.** Paso de tres tarjetas a seis y
 para llegar a "Entrenar a otros" habia que bajar por veinte lineas de
 preferencias. Orden: Perfil → puerta al entrenador → **Configuración** →
@@ -713,6 +727,22 @@ Tres reglas que valen mas que su implementacion:
   vuelve a prefijar**. En un programa asignado el id del servidor es el canonico. Ver
   `lib/sync/ids.js`. Vale tambien para los ids que genera el SERVIDOR (duplicar un
   programa): si nacen pelados, el push siguiente los prefija y duplica el programa.
+
+**"Solo lectura" se verifica puerta por puerta, no boton por boton.** En el lado del
+atleta un programa asignado ocultaba "+ Agregar ejercicio" y "Editar programa" pero
+dejaba el **lapiz de sesiones**, que ademas de renombrar BORRA la sesion con sus
+ejercicios. Renombrar era inocuo —el pull siguiente reemplaza el programa entero y lo
+deshace—, pero el borrado no: los logs son `week|exId|setN`, asi que las series ya
+registradas quedan colgando de ejercicios que no existen mas y eso no lo deshace
+ningun pull. Al agregar cualquier control de edicion a la pantalla Programa,
+preguntarse `esAsignado`.
+
+**Y la contracara: en un programa asignado, tocar una fila es lo UNICO que devuelve
+la app**, porque no abre el editor sino la ficha (`descModal`). Esa ficha dibujaba
+solo `description`, asi que los ejercicios sin nota —la mayoria— abrian una caja con
+el nombre y un OK. Ahora lo primero es la **prescripcion**, que existe siempre
+(series × reps, carga, RIR, descanso, tempo, y la tecnica con su ayuda); la nota del
+entrenador se suma cuando la hay. `npm run verify:programa-ui` cubre las dos reglas.
 
 ## Roadmap
 
