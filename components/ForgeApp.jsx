@@ -48,6 +48,36 @@ function refLine(ex, week, deload) {
   return `${kg} × ${min}-${max} ${ex.unit === "pasos" ? "pasos" : ""}`.trim();
 }
 
+/**
+ * Ubica `ex` en su dia justo despues de `despuesDe` (o primero, si es vacio) y
+ * renumera los `order` de TODO el programa, dia por dia, 1..n.
+ *
+ * Renumerar y no buscarle un hueco al ejercicio movido: `order` solo existe para
+ * ordenar, dos ejercicios con el mismo numero quedan en un orden que nadie
+ * eligio, y mudar uno de dia deja el dia viejo con un salto. Renumerar entero
+ * cuesta lo mismo y no deja ninguna de las dos cosas.
+ *
+ * `exercises` ya tiene a `ex` adentro con su sesion NUEVA — esto no mueve nada
+ * entre dias, solo decide el orden dentro del que le toca.
+ */
+function reubicar(exercises, ex, despuesDe) {
+  const porDia = new Map();
+  for (const e of [...exercises].sort((a, b) => a.order - b.order)) {
+    if (e.id === ex.id) continue;
+    if (!porDia.has(e.session)) porDia.set(e.session, []);
+    porDia.get(e.session).push(e);
+  }
+  if (!porDia.has(ex.session)) porDia.set(ex.session, []);
+  const destino = porDia.get(ex.session);
+  // Un `despuesDe` que no esta en el dia destino (o vacio) lo deja primero.
+  const i = despuesDe ? destino.findIndex((e) => e.id === despuesDe) : -1;
+  destino.splice(i + 1, 0, ex);
+
+  const orden = new Map();
+  for (const lista of porDia.values()) lista.forEach((e, n) => orden.set(e.id, n + 1));
+  return exercises.map((e) => (orden.has(e.id) ? { ...e, order: orden.get(e.id) } : e));
+}
+
 /* ---------- Blocks: group exercises into singles + superset groups ---------- */
 function getBlocks(exercises) {
   const sorted = [...exercises].sort((a, b) => a.order - b.order);
@@ -1076,17 +1106,35 @@ export default function ForgeApp() {
    * Cambiar el ejercicio SIN series registradas es corregir lo que se cargo mal:
    * ahi se edita en el lugar y no se parte nada.
    */
-  function saveExercise(draft) {
+  function saveExercise(draft, despuesDe) {
     const esSustitucion = Boolean(nombreSustituido(draft));
+    // Mudarlo lo saca de la pantalla que se esta mirando. Sin decirlo, guardar
+    // se ve igual que borrarlo — y ademas hay que decir lo que NO pasa: el
+    // ejercicio conserva su id, asi que las series y el e1RM se van con el.
+    const original = program.find((e) => e.id === draft.id);
+    if (original && original.session !== draft.session && !esSustitucion) {
+      const dia = sessions.find((s) => s.id === draft.session);
+      setAviso(`"${draft.name}" pasó a ${dia?.name || draft.session}. Sus series registradas van con él.`);
+    }
     setProgram((P) => {
+      const antes = P.find((e) => e.id === draft.id);
+      // Mudarse de dia rompe toda superserie: agrupa ejercicios que se hacen uno
+      // atras del otro, y en otro dia no hay tal cosa. Se suelta la del que se
+      // va y la de quien lo apuntaba, en los dos sentidos.
+      const cambioDeDia = Boolean(antes) && antes.session !== draft.session;
+      let ex = cambioDeDia ? { ...draft, superset: null } : draft;
+      let lista;
       if (esSustitucion) {
-        const sustituto = { ...draft, id: uid() };
-        return P
-          .map((e) => (e.superset === draft.id ? { ...e, superset: sustituto.id } : e))
-          .map((e) => (e.id === draft.id ? sustituto : e));
+        ex = { ...ex, id: uid() };
+        lista = P
+          .map((e) => (e.superset === draft.id ? { ...e, superset: cambioDeDia ? null : ex.id } : e))
+          .map((e) => (e.id === draft.id ? ex : e));
+      } else {
+        const exists = P.some((e) => e.id === draft.id);
+        lista = exists ? P.map((e) => (e.id === draft.id ? ex : e)) : [...P, ex];
+        if (cambioDeDia) lista = lista.map((e) => (e.superset === ex.id && e.id !== ex.id ? { ...e, superset: null } : e));
       }
-      const exists = P.some((e) => e.id === draft.id);
-      return exists ? P.map((e) => (e.id === draft.id ? draft : e)) : [...P, draft];
+      return reubicar(lista, ex, despuesDe);
     });
     setEditing(null);
   }
@@ -2153,6 +2201,8 @@ export default function ForgeApp() {
           onCrearEjercicio={crearEjercicio}
           sustituido={nombreSustituido(editing)}
           semanasDelPrograma={weeks}
+          sessions={sessions}
+          todos={program}
         />}
 
         {/* ======== PROGRAM EDITOR MODAL ======== */}
@@ -2358,12 +2408,38 @@ export default function ForgeApp() {
 /** Cuantas semanas tienen una referencia propia. */
 const contarRefs = (ex) => Object.keys(ex?.refsByWeek || {}).length;
 
-function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, catalog, onCrearEjercicio, sustituido, semanasDelPrograma }) {
+function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, catalog, onCrearEjercicio, sustituido, semanasDelPrograma, sessions, todos }) {
   const set = (f, v) => setDraft((d) => ({ ...d, [f]: v }));
   const num = (v, int) => { const n = int ? parseInt(v) : parseFloat(v); return isNaN(n) ? "" : n; };
   // Se abre solo si ya hay refs cargadas: para la mayoria de los ejercicios la
   // referencia general alcanza y esto seria ruido.
   const [verRefs, setVerRefs] = useState(contarRefs(draft) > 0);
+
+  /**
+   * Donde va el ejercicio: dia y posicion.
+   *
+   * La posicion se pregunta como "va despues de tal ejercicio" y no como un
+   * numero. El numero obliga a contar filas para responder algo que la pantalla
+   * de al lado ya muestra en orden, y despues a re-contar si uno se equivoca.
+   *
+   * `enDia` son los hermanos del dia ELEGIDO —no del dia original—, asi que al
+   * cambiar de dia la lista de destinos se rehace sola.
+   */
+  const enDia = (s) => todos.filter((e) => e.session === s && e.id !== draft.id).sort((a, b) => a.order - b.order);
+  const [despues, setDespues] = useState(() => {
+    const previos = enDia(draft.session).filter((e) => e.order < draft.order);
+    return previos.length ? previos[previos.length - 1].id : "";
+  });
+  const hermanos = enDia(draft.session);
+  const cambiarDeDia = (s) => {
+    // Al final del dia nuevo: es donde uno espera que caiga lo que acaba de
+    // mudar, y cualquier otra posicion seria una que nadie pidio.
+    const destino = enDia(s);
+    setDespues(destino.length ? destino[destino.length - 1].id : "");
+    // La superserie apunta a un ejercicio del dia viejo: en el nuevo no
+    // significa nada. `saveExercise` la suelta igual, esto lo muestra antes.
+    setDraft((d) => ({ ...d, session: s, superset: null }));
+  };
   // Elegir otro ejercicio del catalogo es sustituir, no renombrar: el nombre y
   // el grupo pasan a ser los del ejercicio nuevo.
   const elegirDelCatalogo = (c) => setDraft((d) => ({ ...d, exerciseId: c.id, name: c.name, group: c.group || "", unit: c.unit || d.unit }));
@@ -2379,6 +2455,23 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
               <strong> {sustituido}</strong> y su e1RM no se encadena con el nuevo.
             </p>
           )}
+          {/* `ed-donde` no es decorativa: es como se agarran estos dos selects
+              sin contar por indice. El editor tiene cinco, y el de Unidad
+              ocupaba este lugar hasta hoy — un test por posicion pasaba con la
+              pantalla vieja. */}
+          <div className="ed-row2 ed-donde">
+            <label><span>Día</span>
+              <select value={draft.session} onChange={(e) => cambiarDeDia(e.target.value)}>
+                {(sessions || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+            <label><span>Va después de</span>
+              <select value={despues} onChange={(e) => setDespues(e.target.value)}>
+                <option value="">— primero del día —</option>
+                {hermanos.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+          </div>
           <div className="ed-row3">
             <label><span>Series</span><input className="mono" inputMode="numeric" value={draft.sets} onChange={(e) => set("sets", num(e.target.value, true))} /></label>
             <label><span>Reps min</span><input className="mono" inputMode="numeric" value={draft.repsMin} onChange={(e) => set("repsMin", num(e.target.value, true))} /></label>
@@ -2464,7 +2557,7 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
         </div>
         <div className="sheetactions">
           {!isNew && <button className="del" onClick={() => onDelete(draft.id)}>Eliminar</button>}
-          <button className="save" disabled={!draft.name || !draft.sets} onClick={() => onSave({ ...draft, repsMin: draft.repsMin || 0, repsMax: draft.repsMax || 0, rest: draft.rest || 90 })}>Guardar</button>
+          <button className="save" disabled={!draft.name || !draft.sets} onClick={() => onSave({ ...draft, repsMin: draft.repsMin || 0, repsMax: draft.repsMax || 0, rest: draft.rest || 90 }, despues)}>Guardar</button>
         </div>
       </div>
     </div>

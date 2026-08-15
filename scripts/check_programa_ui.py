@@ -22,6 +22,10 @@ son los tres que estaban mal:
      del SISTEMA operativo: bloquea la app y en una PWA instalada delata que
      abajo hay un navegador. La app ya evita eso para los avisos.
 
+  4. Un ejercicio no se podia mover de dia ni reordenar: el modelo tiene
+     `session` y `order` y el import los usa, pero el editor no los preguntaba.
+     El unico camino era reimportar el Excel.
+
 El 3 se verifica interceptando `window.confirm`: si la app lo llama, se sabe.
 """
 import argparse
@@ -52,8 +56,10 @@ def ex(i, sess, order, name, group, **kw):
 MIO = dict(
     id="p1", name="Mi programa", weeks=4, hasDeload=True,
     sessions=[{"id": "A", "name": "Día A"}, {"id": "B", "name": "Día B"}],
-    exercises=[ex(1, "A", 1, "Prensa 45", "Piernas", refKg=140),
-               ex(2, "A", 2, "Curl femoral", "Isquios"),
+    # e1 y e2 van en superserie: mudar uno de dia tiene que soltarla.
+    exercises=[ex(1, "A", 1, "Prensa 45", "Piernas", refKg=140, superset="e2"),
+               ex(2, "A", 2, "Curl femoral", "Isquios", superset="e1"),
+               ex(4, "A", 3, "Gemelo de pie", "Gemelos"),
                ex(3, "B", 1, "Press banca", "Pecho")],
     status="active", createdAt=1_740_000_000_000)
 
@@ -69,7 +75,11 @@ ASIGNADO = dict(
                   technique={"tipo": "dropset", "pasos": 2, "aplica": "ultima"})],
     status="active", createdAt=1_748_000_000_000)
 
-ESTADO = dict(programs=[MIO, ASIGNADO], logs={}, history=[], borrados={},
+# Series registradas del gemelo: mudarlo de dia NO es sustituirlo, asi que
+# conserva su id y estas series se van con el.
+LOGS = {"1|e4|1": {"kg": 40, "reps": 12, "rir": "2", "done": True}}
+
+ESTADO = dict(programs=[MIO, ASIGNADO], logs=LOGS, history=[], borrados={},
               prefs={"ayudas": True, "cronometro": True, "sonido": True,
                      "vibracion": True, "notificacion": False})
 
@@ -151,13 +161,90 @@ def main() -> int:
         pg.wait_for_timeout(500)
 
         # ---------------------------------------------------------------
+        print("\nmover un ejercicio de dia")
+        abrir("p1")
+
+        def ejercicios(pid="p1"):
+            return pg.evaluate(
+                "id => JSON.parse(localStorage.getItem('forge-v2')).programs"
+                ".find(p => p.id === id).exercises", pid)
+
+        def filas():
+            return [pg.locator(".prow .pname").nth(i).inner_text().split("\n")[0]
+                    for i in range(pg.locator(".prow").count())]
+
+        pg.locator(".prow").nth(2).click()   # "Gemelo de pie", 3ro del día A
+        pg.wait_for_timeout(800)
+        # Por `.ed-donde` y no por indice: el editor tiene cinco selects y el de
+        # Unidad ocupaba este lugar, asi que un `select` a secas pasaba tambien
+        # con la pantalla vieja.
+        dia = pg.locator(".ed-donde select").first
+        opciones = dia.locator("option").all_inner_texts() if dia.count() else []
+        check("el editor pregunta el dia", opciones == ["Día A", "Día B"],
+              f"sin esto, mover de dia solo se puede reimportando el Excel — vi {opciones}")
+        posicion = pg.locator(".ed-donde select").nth(1)
+        check("y la posicion dentro del dia",
+              posicion.locator("option").all_inner_texts()[:1] == ["— primero del día —"],
+              "sin esto, un ejercicio nuevo entra siempre ultimo y ahi se queda")
+        dia.select_option(label="Día B")
+        pg.wait_for_timeout(400)
+        pg.locator(".sheetactions .save").click()
+        pg.wait_for_timeout(1200)
+
+        exs = {e["id"]: e for e in ejercicios()}
+        check("el ejercicio cambio de dia", exs["e4"]["session"] == "B",
+              f"quedo en {exs['e4']['session']}")
+        check("conservando su id (no es una sustitucion)", "e4" in exs)
+        logs = pg.evaluate("() => JSON.parse(localStorage.getItem('forge-v2')).logs")
+        check("y sus series registradas", "1|e4|1" in logs, f"los logs quedaron: {list(logs)}")
+        check("cae al final del dia nuevo", exs["e4"]["order"] == 2,
+              f"quedo en la posicion {exs['e4']['order']}")
+        check("el dia que dejo queda numerado 1..n",
+              sorted(e["order"] for e in exs.values() if e["session"] == "A") == [1, 2],
+              str({e["name"]: e["order"] for e in exs.values() if e["session"] == "A"}))
+        check("y la app avisa a donde se fue", "pasó a Día B" in pg.inner_text("body"),
+              "el ejercicio desaparece de la pantalla sin explicacion")
+
+        print("\nmudarse de dia suelta la superserie")
+        pg.locator(".weekchips .chip").nth(0).click()   # Día A
+        pg.wait_for_timeout(700)
+        pg.locator(".prow").nth(0).click()              # Prensa 45, en superserie con Curl
+        pg.wait_for_timeout(800)
+        pg.locator(".ed-donde select").first.select_option(label="Día B")
+        pg.wait_for_timeout(400)
+        pg.locator(".sheetactions .save").click()
+        pg.wait_for_timeout(1200)
+        exs = {e["id"]: e for e in ejercicios()}
+        check("el que se fue no sigue apuntando al que quedo", not exs["e1"]["superset"],
+              f"apunta a {exs['e1']['superset']}")
+        check("ni el que quedo al que se fue", not exs["e2"]["superset"],
+              f"apunta a {exs['e2']['superset']} — una superserie con otro dia no significa nada")
+
+        print("\nreordenar dentro del dia")
+        pg.locator(".weekchips .chip").nth(1).click()   # Día B
+        pg.wait_for_timeout(700)
+        antes = filas()
+        check("el dia B tiene tres", len(antes) == 3, str(antes))
+        pg.locator(".prow").nth(2).click()              # el ultimo
+        pg.wait_for_timeout(800)
+        pg.locator(".ed-donde select").nth(1).select_option(value="")   # primero del dia
+        pg.wait_for_timeout(400)
+        pg.locator(".sheetactions .save").click()
+        pg.wait_for_timeout(1200)
+        despues = filas()
+        check("el ultimo pasa a ser el primero", despues[0] == antes[2],
+              f"antes {antes} → ahora {despues}")
+        check("y los demas mantienen su orden relativo", despues[1:] == antes[:2],
+              f"antes {antes} → ahora {despues}")
+
+        # ---------------------------------------------------------------
         print("\nborrar una sesion del programa propio")
         abrir("p1")
         check("el programa propio SI tiene el lapiz", pg.locator(".chip-edit").count() == 1,
               "se oculto de mas: en un programa propio las sesiones se editan")
         pg.locator(".chip-edit").click()
         pg.wait_for_timeout(700)
-        pg.locator(".sess-del").first.click()   # "Día A" tiene 2 ejercicios
+        pg.locator(".sess-del").first.click()   # "Día A" tiene 3 ejercicios
         pg.wait_for_timeout(700)
 
         confirms = pg.evaluate("() => window.__confirms")
@@ -165,7 +252,7 @@ def main() -> int:
         caja = pg.locator(".confirm-box")
         check("pregunta con la caja de la app", caja.count() > 0)
         txt = caja.inner_text() if caja.count() else ""
-        check("y dice que se lleva puesto", "2 ejercicio" in txt, f"la caja dice: {txt!r}")
+        check("y dice que se lleva puesto", "3 ejercicio" in txt, f"la caja dice: {txt!r}")
 
         pg.locator(".confirm-cancel").click()
         pg.wait_for_timeout(800)
@@ -193,6 +280,8 @@ def main() -> int:
             "() => JSON.parse(localStorage.getItem('forge-v2')).programs.find(p => p.id === 'p1').exercises.length")
         check("confirmar SI borra la sesion", quedan == 1, f"quedaron {quedan} sesiones")
         check("y sus ejercicios", ejercicios == 1, f"quedaron {ejercicios} ejercicios de 1")
+        # `ejercicios` es el conteo del programa entero: de los 4 tienen que
+        # quedar los del dia B, que es uno solo.
 
         for e in errores:
             check("sin errores de pagina", False, e[:200])

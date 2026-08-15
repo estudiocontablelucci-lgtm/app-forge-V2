@@ -139,6 +139,19 @@ Cambiar `exerciseId` en un ejercicio **con series registradas es una sustitucion
 le da un id nuevo y saca el anterior del programa, para que los e1RM no se encadenen. Sin series
 registradas, edita en el lugar. Esa distincion es el motivo de que exista el catalogo.
 
+**Mover un ejercicio de dia o de posicion NO es una sustitucion** — es la misma maquina otro dia,
+asi que conserva su id y con el sus series y su e1RM. El editor lo pregunta con dos selects
+(`.ed-donde`): el dia, y **"va despues de"** en vez de un numero de orden, porque el numero
+obliga a contar filas para responder algo que la pantalla de al lado ya muestra ordenado.
+`reubicar()` renumera `order` 1..n en TODOS los dias despues de mover: dos ejercicios con el
+mismo numero quedan en un orden que nadie eligio, y mudar uno deja el dia viejo con un salto.
+
+Dos cosas que se van con la mudanza: **la superserie se suelta en los dos sentidos** (agrupa
+ejercicios que se hacen uno atras del otro; en otro dia no significa nada) y **la app avisa a
+donde se fue**, porque el ejercicio desaparece de la pantalla que se esta mirando y sin el aviso
+guardar se ve igual que borrar. Hasta la fase 8 esto solo se podia haciendo `npm run gen:programa`
+y reimportando el Excel.
+
 **Desde la v04 el catalogo se sincroniza entero** (`lib/repo/catalog.js`), incluidos los
 ejercicios que todavia no estan en ningun programa. El dueno es el USUARIO
 (`exercises.owner_user_id`), no el coach: un atleta que entrena solo no tiene fila en
