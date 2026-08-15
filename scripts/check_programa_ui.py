@@ -123,8 +123,11 @@ def main() -> int:
         check("es el programa del entrenador", "Martín Sosa" in texto, f"vi: {texto[:120]}")
         check("no ofrece agregar ejercicios", "Agregar ejercicio" not in texto)
         check("no ofrece editar el programa", "Editar programa" not in texto)
-        check("y TAMPOCO el lapiz de sesiones", pg.locator(".chip-edit").count() == 0,
+        check("y TAMPOCO editar los dias", pg.locator(".prog-dias-btn").count() == 0,
               "el editor de sesiones renombra y BORRA sesiones con sus ejercicios")
+        # Lo que un programa asignado SI tiene que dejar hacer.
+        check("pero si deja entrenarlo desde aca", pg.locator(".prog-entrenar-btn").count() == 1,
+              "habia que ir a Entrenar y volver a elegir el mismo dia")
 
         # ---------------------------------------------------------------
         print("\nla ficha de un ejercicio asignado")
@@ -159,6 +162,47 @@ def main() -> int:
               f"la caja dice: {ficha!r}")
         pg.locator(".desc-modal .confirm-ok").click()
         pg.wait_for_timeout(500)
+
+        # ---------------------------------------------------------------
+        print("\nlo que la fila y los chips cuentan")
+        abrir("p1")
+        chips = [pg.locator(".weekchips .chip").nth(i).inner_text()
+                 for i in range(pg.locator(".weekchips .chip").count())]
+        check("cada dia dice cuantos ejercicios tiene", chips == ["Día A3", "Día B1"],
+              f"los chips dicen {chips}")
+        fila = pg.locator(".prow").first.inner_text()
+        check("la fila del ejercicio muestra el RIR", "RIR 2" in fila, f"la fila dice {fila!r}")
+        check("y el descanso", "D 2'" in fila, f"la fila dice {fila!r}")
+
+        print("\nentrenar el dia que se esta mirando")
+        pg.locator(".weekchips .chip").nth(1).click()   # Día B: sin series cargadas
+        pg.wait_for_timeout(700)
+        boton = pg.locator(".prog-entrenar-btn")
+        check("el boton nombra el dia", boton.inner_text().strip() == "Entrenar Día B",
+              f"dice {boton.inner_text()!r}")
+        boton.click()
+        pg.wait_for_timeout(1200)
+        activa = [i for i in range(pg.locator(".tabbar button").count())
+                  if "on" in (pg.locator(".tabbar button").nth(i).get_attribute("class") or "")]
+        check("lleva a Entrenar", activa == [1], f"la pestaña activa es {activa}")
+        check("y arranca la sesion, no la lista de dias",
+              "te sentís hoy" in pg.inner_text("body"),
+              "cayo en el selector de sesion: hay que volver a elegir el mismo dia")
+
+        print("\nun dia vacio lo dice")
+        abrir("p1")
+        pg.locator(".prog-dias-btn").click()
+        pg.wait_for_timeout(600)
+        pg.locator(".addbtn").last.click()          # agrega el día C, vacío
+        pg.wait_for_timeout(500)
+        pg.locator(".sheethead .x").click()
+        pg.wait_for_timeout(600)
+        pg.locator(".weekchips .chip").nth(2).click()
+        pg.wait_for_timeout(700)
+        check("un dia sin ejercicios lo explica", "Este día está vacío" in pg.inner_text("body"),
+              "la lista queda vacia y no dice nada")
+        check("y no ofrece entrenarlo", pg.locator(".prog-entrenar-btn").count() == 0,
+              "entrar a entrenar un dia sin ejercicios no lleva a ningun lado")
 
         # ---------------------------------------------------------------
         print("\nmover un ejercicio de dia")
@@ -240,9 +284,9 @@ def main() -> int:
         # ---------------------------------------------------------------
         print("\nborrar una sesion del programa propio")
         abrir("p1")
-        check("el programa propio SI tiene el lapiz", pg.locator(".chip-edit").count() == 1,
+        check("el programa propio SI deja editar los dias", pg.locator(".prog-dias-btn").count() == 1,
               "se oculto de mas: en un programa propio las sesiones se editan")
-        pg.locator(".chip-edit").click()
+        pg.locator(".prog-dias-btn").click()
         pg.wait_for_timeout(700)
         pg.locator(".sess-del").first.click()   # "Día A" tiene 3 ejercicios
         pg.wait_for_timeout(700)
