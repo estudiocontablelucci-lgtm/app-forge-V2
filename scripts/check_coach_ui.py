@@ -220,7 +220,9 @@ def main() -> int:
         # Los rotulos del perfil tambien van en mayuscula por CSS (.flabel).
         perfil = a2.inner_text("body")
         alta = perfil.upper()
-        check("el perfil tiene nombre y peso corporal", "PESO CORPORAL" in alta and "NOMBRE" in alta)
+        # El peso dejo de ser un campo editable del Perfil: se carga con las
+        # medidas, que llevan fecha, y aca solo se MUESTRA la ultima.
+        check("el perfil tiene nombre y muestra el peso", "PESO CORPORAL" in alta and "NOMBRE" in alta)
         check("el perfil tiene sincronizacion", "SINCRONIZACIÓN" in alta)
         check("el perfil tiene cerrar sesion", "Cerrar sesión" in perfil)
         check("la seccion de entrenador ya NO vive adentro del perfil",

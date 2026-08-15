@@ -340,6 +340,30 @@ la tabla `health_consents` existe para registrarlo, pero todavia no hay UI que l
 circunferencia NO necesita migracion: el conjunto de campos lo define
 `lib/medidas.js` y la base solo lo transporta.
 
+**El peso corporal se carga CON las medidas y no en el Perfil.** Ahi vivio como un
+numero suelto en `users.body_weight_kg`: sin fecha, y al corregirlo no quedaba
+rastro del anterior — o sea, ninguna evolucion posible — mientras
+`body_measurements` guardaba una toma por fecha desde el primer dia. Dos lugares
+para el mismo dato, y el que servia estaba escondido detras de "Ver mis medidas".
+El Perfil ahora lo MUESTRA (ultimo valor y su fecha) y lleva a cargarlo.
+
+Ese hint ademas mentia: decia "se usa para el e1RM de los ejercicios con peso
+corporal" y **no lo leia ningun calculo** — era una intencion que nunca se cableo.
+La columna sigue existiendo y sin uso. Conectarla es otra tarea y toca numeros
+historicos: con las tomas fechadas, lo correcto es que cada sesion use el peso
+VIGENTE a esa fecha, no el de hoy.
+
+**La evolucion se ve en Progreso** (`components/EvolucionMedidas.jsx`), que es
+donde uno va a preguntarse si algo cambio; cargar sigue en su pantalla. **UNA
+metrica por vez, con selector**: peso (kg), grasa (%) y cintura (cm) no comparten
+escala, y meterlas en el mismo grafico obliga a dos ejes — que es la trampa mas
+comun de un grafico y hace que dos series se crucen donde el dato no se cruza.
+
+**Y sobre el PESO la app no opina.** El color del cambio dice "fue para donde
+queria ir": abajo en grasa y cintura, arriba en masa magra y FFMI. El peso no
+tiene direccion buena —en una recomposicion ese mismo −2 kg es exactamente el
+plan— asi que va en gris. `npm run verify:medidas-ui` lo cubre.
+
 Las formulas salen de la planilla original y estan verificadas contra sus
 numeros, no reconstruidas de memoria. Dos que importan:
 
