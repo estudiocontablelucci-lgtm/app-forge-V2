@@ -61,15 +61,19 @@ function Pref({ id, titulo, detalle, valor, onChange, deshabilitado = false }) {
 /**
  * Perfil: datos de la cuenta y lo poco que el usuario puede editar de si mismo.
  *
- * El peso corporal no es decorativo — es lo que permite calcular e1RM en los
- * ejercicios con `refKg: "BW"` (dominadas, fondos), que hoy quedan fuera del
- * progreso porque no hay con que multiplicar.
+ * El peso corporal se MUESTRA y no se edita. Vivio aca como un numero suelto —
+ * sin fecha, y al corregirlo no quedaba rastro del anterior— mientras
+ * `body_measurements` guardaba una toma por fecha desde el primer dia: dos
+ * lugares para el mismo dato, y el que servia estaba escondido. El hint decia
+ * ademas que se usaba para el e1RM de los ejercicios con `refKg: "BW"`, y eso
+ * era una intencion que nunca se cableo: no lo leia ningun calculo.
  */
-export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal, hayRed = true, prefs = PREFS_DEFAULT, onPrefs = () => {}, onCerrarSesion = () => signOut({ callbackUrl: "/" }) }) {
+export default function ProfileScreen({ onClose, syncState, onSync, syncing, perfilLocal, hayRed = true, prefs = PREFS_DEFAULT, onPrefs = () => {}, onCerrarSesion = () => signOut({ callbackUrl: "/" }), onVerMedidas = () => {} }) {
   const { data: session } = useSession();
   const [user, setUser] = useState(null);
   const [nombre, setNombre] = useState("");
-  const [peso, setPeso] = useState("");
+  // La ultima toma de medidas: se MUESTRA, no se edita. { v, fecha }
+  const [ultimoPeso, setUltimoPeso] = useState(null);
   const [estado, setEstado] = useState("cargando"); // cargando | listo | guardando | error
   const [error, setError] = useState(null);
   /**
@@ -112,6 +116,20 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
     return () => { vigente = false; };
   }, [perfilLocal]);
 
+  // La ultima toma, solo para mostrarla. Sin red no se pide: el peso de hace
+  // dos semanas no es lo que se viene a buscar al Perfil sin señal.
+  useEffect(() => {
+    let vigente = true;
+    fetch("/api/medidas")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const ultima = d?.medidas?.find((m) => m.valores?.peso != null);
+        if (vigente && ultima) setUltimoPeso({ v: ultima.valores.peso, fecha: ultima.fecha });
+      })
+      .catch(() => {});
+    return () => { vigente = false; };
+  }, []);
+
   useEffect(() => {
     let vigente = true;
     (async () => {
@@ -127,7 +145,7 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
         if (!vigente) return;
         setUser(user);
         setNombre(user.displayName || "");
-        setPeso(user.bodyWeightKg == null ? "" : String(user.bodyWeightKg));
+
         setEstado("listo");
       } catch {
         // Sin red el perfil no se puede pedir, pero eso no es una pantalla
@@ -162,7 +180,7 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
       const r = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: nombre, bodyWeightKg: peso === "" ? null : peso }),
+        body: JSON.stringify({ displayName: nombre }),
       });
       const data = await r.json();
       if (!r.ok) { setError(data.error || "no se pudo guardar"); setEstado("listo"); return; }
@@ -174,8 +192,7 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
     }
   };
 
-  const sucio = user && (nombre !== (user.displayName || "") ||
-    peso !== (user.bodyWeightKg == null ? "" : String(user.bodyWeightKg)));
+  const sucio = user && nombre !== (user.displayName || "");
 
   /**
    * Lo que dice cada seccion SIN abrirla.
@@ -247,10 +264,25 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
             <label className="flabel">Nombre</label>
             <input className="finput" value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={80} />
 
-            <label className="flabel">Peso corporal (kg)</label>
-            <input className="finput mono" inputMode="decimal" placeholder="—"
-              value={peso} onChange={(e) => setPeso(e.target.value)} />
-            <p className="fhint">Se usa para el e1RM de los ejercicios con peso corporal.</p>
+            {/* El peso YA NO se edita acá. Era un numero suelto sin fecha: al
+                corregirlo no quedaba rastro del anterior, asi que no habia
+                evolucion posible — y `body_measurements` guarda una toma por
+                fecha desde el primer dia. Dos lugares para el mismo dato, y el
+                que servia estaba escondido. */}
+            <div className="prof-peso">
+              <div>
+                <div className="prof-peso-l">Peso corporal</div>
+                <div className="prof-peso-v mono">
+                  {ultimoPeso ? `${ultimoPeso.v} kg` : "sin registrar"}
+                  {ultimoPeso && <i>{ultimoPeso.fecha}</i>}
+                </div>
+              </div>
+              <button className="cbtn-chico" onClick={onVerMedidas}>Medidas</button>
+            </div>
+            <p className="fhint">
+              Se registra con las medidas, fecha por fecha: así se puede ver la evolución
+              en Progreso en vez de un número que se pisa a sí mismo.
+            </p>
 
             {error && <p className="ferror">{error}</p>}
 

@@ -16,6 +16,7 @@ import AccountButton from "./AccountButton";
 import Ayuda from "./Ayuda";
 import ProfileScreen from "./ProfileScreen";
 import MedidasScreen from "./MedidasScreen";
+import EvolucionMedidas from "./EvolucionMedidas";
 import AsistenciaScreen from "./AsistenciaScreen";
 import ExercisePicker from "./ExercisePicker";
 import AvisoInvitacion from "./AvisoInvitacion";
@@ -329,6 +330,10 @@ export default function ForgeApp() {
   // Grupos de la lista de programas que el usuario cerro a mano. Lo que NO esta
   // aca cae al default: abierto el grupo del programa activo.
   const [gruposCerrados, setGruposCerrados] = useState({});
+  // Las tomas de medidas, para el grafico de evolucion en Progreso. Van contra
+  // el servidor y no por el localStorage: se cargan sentado despues de medirse,
+  // no en el gimnasio, asi que no hacen falta sin señal.
+  const [medidas, setMedidas] = useState([]);
   const [healthCheck, setHealthCheck] = useState(null);
   const [savedHealth, setSavedHealth] = useState(null);
   const [sessionStart, setSessionStart] = useState(null);
@@ -405,6 +410,23 @@ export default function ForgeApp() {
 
   /** Evidencia real: una sincronizacion que sale o que falla por falta de red. */
   const marcarRed = (llego) => setHayRed(llego);
+
+  /**
+   * Las medidas, cuando se abre Progreso.
+   *
+   * No al arrancar la app: son de otra pantalla y el gimnasio no las necesita.
+   * Se recargan al volver de cargar una toma —`showMedidas` pasa a false— asi
+   * el grafico no queda mostrando la version anterior.
+   */
+  useEffect(() => {
+    if (!signedIn || tab !== "progreso" || showMedidas) return;
+    let vigente = true;
+    fetch("/api/medidas")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vigente && d?.medidas) setMedidas(d.medidas); })
+      .catch(() => {});
+    return () => { vigente = false; };
+  }, [signedIn, tab, showMedidas]);
 
   const [perfilLocal, setPerfilLocal] = useState(null);
   useEffect(() => {
@@ -1470,6 +1492,7 @@ export default function ForgeApp() {
             prefs={prefs}
             onPrefs={(cambio) => setPrefs((p) => ({ ...p, ...cambio }))}
             onCerrarSesion={cerrarSesion}
+            onVerMedidas={() => { setShowProfile(false); setShowMedidas(true); }}
           />
         </div>
       </div>
@@ -2172,6 +2195,14 @@ export default function ForgeApp() {
                 Peso, composición, circunferencias y proporciones. El entrenamiento se mide
                 en el gimnasio; el resultado, con una cinta métrica.
               </p>
+              {/* La EVOLUCION va acá y no escondida detrás del botón: el peso
+                  del Perfil era un número sin fecha —se corregía y no quedaba
+                  rastro del anterior— mientras las tomas se guardan por fecha
+                  desde el primer día. El historial existía y no había dónde
+                  verlo. Cargar es otra tarea y sigue en su pantalla. */}
+              {signedIn && !hayRed && !medidas.length
+                ? <p className="fhint">Sin conexión no se pueden traer las mediciones.</p>
+                : <EvolucionMedidas tomas={medidas} />}
               <button className="btn-secondary" onClick={() => setShowMedidas(true)}>Ver mis medidas</button>
             </div>
 
@@ -3501,6 +3532,12 @@ const CSS = `
 .prof-ini { width: 52px; height: 52px; border-radius: 999px; background: #EEF3FE; color: #2C6BED; font: 700 20px 'Inter'; display: flex; align-items: center; justify-content: center; }
 .prof-name { font: 600 17px 'Inter'; color: #1C1C1E; }
 .prof-role { font: 400 13px 'Inter'; color: #8E8E93; margin-top: 2px; }
+/* El peso se muestra, no se edita: se carga con las medidas, que llevan fecha. */
+.prof-peso { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: #F7F7FA; border: 1px solid #ECECF1; }
+.prof-peso-l { font: 600 10px 'Inter'; letter-spacing: .06em; text-transform: uppercase; color: #8E8E93; }
+.prof-peso-v { font-size: 17px; color: #1C1C1E; margin-top: 3px; }
+.prof-peso-v i { font-style: normal; font-size: 11.5px; color: #AEAEB2; margin-left: 8px; }
+.cbtn-chico { flex-shrink: 0; height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid #2C6BED; background: #FFF; color: #2C6BED; font: 600 12.5px 'Inter'; cursor: pointer; }
 .flabel { display: block; font: 600 12px 'Inter'; color: #636366; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 6px; }
 .flabel:first-child { margin-top: 0; }
 .finput { width: 100%; height: 50px; box-sizing: border-box; padding: 0 14px; font-size: 16px; border: 1px solid #E5E5EA; border-radius: 12px; background: #FAFAFC; }
@@ -3729,6 +3766,19 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .pasos { margin: 10px 0 4px; padding-left: 20px; }
 .pasos li { font: 400 13px 'Inter'; color: #48484A; line-height: 1.55; margin-bottom: 8px; }
 .pasos b { color: #1C1C1E; font-weight: 600; }
+
+/* Evolucion de una medida en el tiempo. Una linea sin grilla: lo que se lee de
+   un vistazo es la FORMA, y un numero sobre cada punto convierte el grafico en
+   una tabla mal dibujada. */
+.evo { margin-bottom: 12px; }
+.evo-svg { width: 100%; height: 96px; display: block; overflow: visible; }
+.evo-pie { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.evo-ext { font-size: 12px; color: #636366; display: flex; flex-direction: column; line-height: 1.3; }
+.evo-ext.der { text-align: right; }
+.evo-ext i { font-style: normal; font-size: 10.5px; color: #AEAEB2; }
+.evo-delta { flex: 1; text-align: center; font-size: 11.5px; color: #8E8E93; align-self: center; }
+.evo-delta.up { color: #1E7A3D; }
+.evo-delta.dn { color: #B3261E; }
 
 /* Medidas corporales */
 .med-grupo { width: 100%; text-align: left; padding: 0; border: 0; background: none; font: 600 14px 'Inter'; color: #1C1C1E; cursor: pointer; }
