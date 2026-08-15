@@ -432,6 +432,26 @@ export default function ForgeApp() {
   const esAsignado = Boolean(activeProgram?.readOnly);
 
   /**
+   * MIRAR un programa y ENTRENARLO son dos cosas distintas.
+   *
+   * Eran la misma variable: abrir un programa de la lista para ver que tenia lo
+   * dejaba activo, y el activo es el que gobierna Entrenar, Historial y
+   * Progreso. Revisar la rutina que le escribiste a un alumno te cambiaba la
+   * tuya, en silencio y sin haber tocado nada mas que una tarjeta.
+   *
+   * `activeProgramId` sigue siendo EL QUE SE ENTRENA y no lo cambia nadie sin
+   * pedirlo. `vistoId` es lo que muestra la pestaña Programa; en null mira al
+   * activo, que es el caso de siempre.
+   */
+  const [vistoId, setVistoId] = useState(null);
+  const programaVisto = programs.find((p) => p.id === vistoId) || activeProgram;
+  const esElActivo = Boolean(programaVisto) && programaVisto.id === activeProgramId;
+  const deloadVisto = { ...DELOAD_DEFAULT, ...programaVisto?.deload };
+  const esAsignadoVisto = Boolean(programaVisto?.readOnly);
+  // Un programa que le escribiste a un alumno: existe para que lo entrene otro.
+  const esDeAlumnosVisto = Boolean(programaVisto?.asignadoA?.length || programaVisto?.paraAlumnos);
+
+  /**
    * Programas separados por para quien son.
    *
    * Se deriva de los datos en vez de guardar un "tipo": el mismo programa puede
@@ -480,18 +500,57 @@ export default function ForgeApp() {
     () => resolverEjercicios(activeProgram?.exercises || [], catalog),
     [activeProgram, catalog],
   );
+  // Lo mismo para el que se esta mirando. Cuando es el activo —el caso normal—
+  // las dos derivadas dan lo mismo.
+  const sesionesVistas = programaVisto?.sessions || DEFAULT_SESSIONS;
+  const ejerciciosVistos = useMemo(
+    () => resolverEjercicios(programaVisto?.exercises || [], catalog),
+    [programaVisto, catalog],
+  );
+  // Las semanas del que se mira: el editor de ejercicios pregunta las refs por
+  // semana, y un programa de 4 no tiene las mismas que uno de 6.
+  const semanasVistas = useMemo(() => {
+    const n = programaVisto?.weeks || 4;
+    const ws = Array.from({ length: n }, (_, i) => i + 1);
+    if (programaVisto?.hasDeload) ws.push("DL");
+    return ws;
+  }, [programaVisto?.weeks, programaVisto?.hasDeload]);
 
-  // Helpers to update active program fields
+  // Helpers to update the program on screen
   // Embudo unico de toda edicion de programa. Sella `updatedAt` porque de esa
   // marca depende quien gana entre dos dispositivos: sin ella, el que sincroniza
   // ultimo pisa al otro sin importar quien edito despues.
-  const updateActiveProgram = (updater) => setPrograms((ps) => ps.map((p) => {
-    if (p.id !== activeProgramId) return p;
+  //
+  // Edita el que se ESTA MIRANDO y no el activo: las dos unicas pantallas que
+  // editan un programa —el detalle y sus editores— muestran el visto, y un
+  // programa que se puede abrir sin activarlo tambien se tiene que poder
+  // corregir sin activarlo.
+  const updateProgramaVisto = (updater) => setPrograms((ps) => ps.map((p) => {
+    if (p.id !== programaVisto?.id) return p;
     const siguiente = typeof updater === "function" ? updater(p) : { ...p, ...updater };
     return { ...siguiente, updatedAt: Date.now() };
   }));
-  const setSessions = (updater) => updateActiveProgram((p) => ({ ...p, sessions: typeof updater === "function" ? updater(p.sessions) : updater }));
-  const setProgram = (updater) => updateActiveProgram((p) => ({ ...p, exercises: typeof updater === "function" ? updater(p.exercises) : updater }));
+  /**
+   * Un programa recien creado o importado se ABRE, y se activa solo si no habia
+   * ninguno: en una cuenta vacia no hay nada que proteger, y pedir un paso mas
+   * seria pedirlo justo cuando la app todavia no explico que es el activo.
+   */
+  const abrirProgramaNuevo = (id) => {
+    setVistoId(id);
+    if (!activeProgramId) setActiveProgramId(id);
+    setProgSession(null);
+    setProgramListView(false);
+  };
+
+  /** Pasa a ser el programa que se entrena. Siempre a pedido, nunca de rebote. */
+  const activarPrograma = (p) => {
+    if (!p) return;
+    setActiveProgramId(p.id);
+    setAviso(`Ahora entrenás "${p.name}". Entrenar, Historial y Progreso pasan a este programa.`);
+  };
+
+  const setSessions = (updater) => updateProgramaVisto((p) => ({ ...p, sessions: typeof updater === "function" ? updater(p.sessions) : updater }));
+  const setProgram = (updater) => updateProgramaVisto((p) => ({ ...p, exercises: typeof updater === "function" ? updater(p.exercises) : updater }));
 
   useEffect(() => {
     const s = loadState();
@@ -537,6 +596,15 @@ export default function ForgeApp() {
     setActiveProgramId((asignado || programs[0]).id);
   }, [loaded, programs, activeProgramId]);
 
+  // Lo mismo para el que se esta mirando: un pull puede borrar el programa que
+  // quedo abierto. `programaVisto` cae al activo igual, pero dejar el id
+  // colgado haria que un programa nuevo con ese id —imposible hoy, no manana—
+  // se abriera solo.
+  useEffect(() => {
+    if (!loaded || vistoId === null) return;
+    if (!programs.some((p) => p.id === vistoId)) setVistoId(null);
+  }, [loaded, programs, vistoId]);
+
   // El historial se lee dentro de sincronizar() sin que sea una dependencia:
   // asi el boton siempre ve el estado actual y la funcion no se recrea en cada
   // serie que se registra.
@@ -551,6 +619,7 @@ export default function ForgeApp() {
   // El listener de "atras" se registra una sola vez: lee el estado por ref para
   // no re-suscribirse en cada pestaña que se toca.
   const tabRef = useRef(tab); tabRef.current = tab;
+  const programListViewRef = useRef(programListView); programListViewRef.current = programListView;
   const sessionRef = useRef(session); sessionRef.current = session;
   const showProfileRef = useRef(showProfile); showProfileRef.current = showProfile;
   const showMedidasRef = useRef(showMedidas); showMedidasRef.current = showMedidas;
@@ -804,7 +873,7 @@ export default function ForgeApp() {
   }, [activeProgram?.weeks, activeProgram?.hasDeload]);
 
   const sessName = (id) => { const s = sessions.find((s) => s.id === id); return s ? s.name : id; };
-  const activeProgSession = progSession || (sessions[0]?.id ?? "A");
+  const activeProgSession = progSession || (sesionesVistas[0]?.id ?? "A");
   const sessionExs = useMemo(() => program.filter((e) => e.session === session).sort((a, b) => a.order - b.order), [program, session]);
   const blocks = useMemo(() => getBlocks(sessionExs), [sessionExs]);
   const block = blocks[blockIdx];
@@ -1088,7 +1157,7 @@ export default function ForgeApp() {
    * correccion de nombre.
    */
   function nombreSustituido(draft) {
-    const original = activeProgram?.exercises?.find((e) => e.id === draft.id);
+    const original = programaVisto?.exercises?.find((e) => e.id === draft.id);
     if (!original?.exerciseId || original.exerciseId === draft.exerciseId) return null;
 
     if (!tieneSeriesRegistradas(draft.id, logs, history)) return null;
@@ -1114,9 +1183,9 @@ export default function ForgeApp() {
     // Mudarlo lo saca de la pantalla que se esta mirando. Sin decirlo, guardar
     // se ve igual que borrarlo — y ademas hay que decir lo que NO pasa: el
     // ejercicio conserva su id, asi que las series y el e1RM se van con el.
-    const original = program.find((e) => e.id === draft.id);
+    const original = ejerciciosVistos.find((e) => e.id === draft.id);
     if (original && original.session !== draft.session && !esSustitucion) {
-      const dia = sessions.find((s) => s.id === draft.session);
+      const dia = sesionesVistas.find((s) => s.id === draft.session);
       setAviso(`"${draft.name}" pasó a ${dia?.name || draft.session}. Sus series registradas van con él.`);
     }
     setProgram((P) => {
@@ -1152,8 +1221,9 @@ export default function ForgeApp() {
    * hay senal, el resto de la edicion se guarda igual.
    */
   async function guardarPrograma(draft) {
-    const antes = activeProgram?.paraAlumnos ?? false;
-    updateActiveProgram({
+    const antes = programaVisto?.paraAlumnos ?? false;
+    const id = programaVisto?.id;
+    updateProgramaVisto({
       name: draft.name, weeks: draft.weeks, hasDeload: draft.hasDeload,
       deload: { ...DELOAD_DEFAULT, ...draft.deload },
       maxTest: draft.maxTest || null,
@@ -1162,11 +1232,11 @@ export default function ForgeApp() {
     setEditingProgram(null);
 
     if (signedIn && (draft.paraAlumnos ?? false) !== antes) {
-      const r = await marcarParaAlumnos(activeProgramId, draft.paraAlumnos ?? false);
+      const r = await marcarParaAlumnos(id, draft.paraAlumnos ?? false);
       if (!r.ok) {
         // Se revierte en pantalla: dejarlo marcado de un lado y no del otro es
         // peor que no haberlo marcado.
-        updateActiveProgram({ paraAlumnos: antes });
+        updateProgramaVisto({ paraAlumnos: antes });
         setSyncState(r.error || "No se pudo cambiar para quién es el programa.");
       }
     }
@@ -1217,6 +1287,13 @@ export default function ForgeApp() {
       // Mitad de un entrenamiento: el atras pide confirmacion como el boton de
       // salir de la pantalla, no descarta nada en silencio.
       if (sessionRef.current !== null) { setConfirmAction("exit"); return quedarse(); }
+      // El detalle de un programa esta un nivel ADENTRO de la lista, asi que el
+      // atras vuelve a la lista y no salta a Entrenar: se entro por ahi, y
+      // saltarse ese nivel obliga a rehacer el camino entero para mirar el
+      // programa siguiente. Sin programas la lista ya es lo unico que hay.
+      if (tabRef.current === "programa" && !programListViewRef.current && programsRef.current.length > 0) {
+        setProgramListView(true); return quedarse();
+      }
       if (tabRef.current !== "entrenar") { setTab("entrenar"); return quedarse(); }
 
       // Ya en Entrenar: el primer atras avisa, el segundo sale.
@@ -1337,7 +1414,7 @@ export default function ForgeApp() {
   }, [logs, program, exercisesFueraDelPrograma]);
 
   // Blocks for Programa tab (must be before early return)
-  const progBlocks = useMemo(() => getBlocks(program.filter((e) => e.session === activeProgSession)), [program, activeProgSession]);
+  const progBlocks = useMemo(() => getBlocks(ejerciciosVistos.filter((e) => e.session === activeProgSession)), [ejerciciosVistos, activeProgSession]);
 
   if (!loaded) return <div style={{ background: "#F2F2F7", minHeight: "100vh" }} />;
 
@@ -1613,12 +1690,12 @@ export default function ForgeApp() {
         {/* ======== PROGRAMA — LIST VIEW ======== */}
         {tab === "programa" && verListaDeProgramas && (
           <div className="screen">
-            {/* "El que toques pasa a ser el activo" no es un detalle de la
-                pantalla: el programa activo es el que gobierna Entrenar,
-                Historial y Progreso, y hasta ahora eso pasaba en silencio. Con
-                uno solo no hay nada que elegir y el aviso sobra. */}
+            {/* Tocar uno lo ABRE, no lo activa. El activo gobierna Entrenar,
+                Historial y Progreso: cambiarlo de rutina a alguien porque
+                entro a mirar que tenia el programa de un alumno es justo lo
+                que no puede pasar. Se activa entrenandolo, que es explicito. */}
             <header className="top"><div className="brand">FORGE</div><h1>Programas</h1>
-              <p className="sub">{programs.length > 1 ? "Tocá el que quieras entrenar" : `${programs.length} programa${programs.length !== 1 ? "s" : ""}`}</p>
+              <p className="sub">{programs.length > 1 ? "Tocá uno para verlo" : `${programs.length} programa${programs.length !== 1 ? "s" : ""}`}</p>
             </header>
 
             {/* Cuenta nueva. Lo primero que ofrece es sincronizar, no crear: si
@@ -1659,10 +1736,10 @@ export default function ForgeApp() {
                 {ayuda && gruposDeProgramas.length > 1 && <p className="prog-grupo-ayuda">{ayuda}</p>}
                 <div className="prog-list">
                   {lista.map((p) => (
-                    <button key={p.id} className={`prog-card ${p.id === activeProgramId ? "active" : ""}`} onClick={() => { setActiveProgramId(p.id); setProgSession(null); setProgramListView(false); }}>
+                    <button key={p.id} className={`prog-card ${p.id === activeProgramId ? "active" : ""}`} onClick={() => { setVistoId(p.id); setProgSession(null); setProgramListView(false); }}>
                       <div className="prog-card-main">
                         <div className="prog-card-name">{p.name}</div>
-                        <div className="prog-card-meta">{p.sessions.length} sesiones · {p.exercises.length} ejercicios · {p.weeks} sem{p.hasDeload ? " + deload" : ""}</div>
+                        <div className="prog-card-meta">{p.sessions.length} {p.sessions.length === 1 ? "sesión" : "sesiones"} · {p.exercises.length} ejercicio{p.exercises.length === 1 ? "" : "s"} · {p.weeks} sem{p.hasDeload ? " + deload" : ""}</div>
                       </div>
                       {p.id === activeProgramId && <span className="prog-active-badge">Activo</span>}
                     </button>
@@ -1673,16 +1750,12 @@ export default function ForgeApp() {
             <button className="addbtn" onClick={() => {
               const id = uid();
               setPrograms((ps) => [...ps, { id, name: "Nuevo programa", weeks: 4, hasDeload: true, sessions: [{ id: "A", name: "Sesión A" }], exercises: [], status: "draft", createdAt: Date.now() }]);
-              setActiveProgramId(id);
-              setProgSession(null);
-              setProgramListView(false);
+              abrirProgramaNuevo(id);
             }}>+ Crear programa</button>
             <button className="addbtn" style={{ marginTop: 8 }} onClick={() => {
               const basico = crearProgramaBasico(uid);
               setPrograms((ps) => [...ps, basico]);
-              setActiveProgramId(basico.id);
-              setProgSession(null);
-              setProgramListView(false);
+              abrirProgramaNuevo(basico.id);
             }}>+ Fullbody 3x básico</button>
             <button className="addbtn import-btn" style={{ marginTop: 8 }} onClick={() => setImportWizard({ step: 1 })}>+ Importar Excel</button>
           </div>
@@ -1694,10 +1767,7 @@ export default function ForgeApp() {
             <header className="top">
               <div className="brand">FORGE</div>
               <div className="prog-header-row">
-                <h1>{activeProgram?.name || "Programa"}</h1>
-                {/* Dice a donde lleva. Era un hamburguesa suelto, y ese icono
-                    en una app significa "el menu de la app": nadie adivina que
-                    abre la lista de programas para cambiar de programa. */}
+                <h1>{programaVisto?.name || "Programa"}</h1>
                 {/* Dice a donde lleva. Era un hamburguesa suelto, y ese icono
                     en una app significa "el menu de la app": nadie adivina que
                     abre la lista de programas para cambiar de programa.
@@ -1709,13 +1779,34 @@ export default function ForgeApp() {
                   <span aria-hidden="true">☰</span> Programas
                 </button>
               </div>
-              <p className="sub">{esAsignado && <span className="prog-coach">de {activeProgram.coachName}</span>}{activeProgram?.weeks || 4} sem{activeProgram?.hasDeload ? " + deload" : ""} · {sessions.length} sesiones · {program.length} ejercicios</p>
+              <p className="sub">{esAsignadoVisto && <span className="prog-coach">de {programaVisto.coachName}</span>}{programaVisto?.weeks || 4} sem{programaVisto?.hasDeload ? " + deload" : ""} · {sesionesVistas.length} {sesionesVistas.length === 1 ? "sesión" : "sesiones"} · {ejerciciosVistos.length} ejercicio{ejerciciosVistos.length === 1 ? "" : "s"}</p>
             </header>
+            {/* Estas mirando uno que NO es el que entrenas. Se dice arriba de
+                todo y con el nombre del otro: sin eso, la unica diferencia
+                entre revisar el programa de un alumno y haberse cambiado de
+                rutina es un badge en la pantalla anterior. */}
+            {!esElActivo && (
+              <div className="prog-revisando">
+                <p className="prog-revisando-t">
+                  {esDeAlumnosVisto
+                    ? "Este programa es para tus alumnos. Lo estás revisando."
+                    : "Lo estás revisando."}
+                  {activeProgram && <> Seguís entrenando <b>{activeProgram.name}</b>.</>}
+                </p>
+                <button className="prog-activar-btn" onClick={() => activarPrograma(programaVisto)}>
+                  {esDeAlumnosVisto ? "Entrenarlo yo" : "Entrenar este"}
+                </button>
+              </div>
+            )}
             {/* Los dias con cuantos ejercicios tiene cada uno. El numero estaba
                 —el editor de sesiones lo muestra— pero no donde se elige. */}
-            <div className="weekchips">
-              {sessions.map((s) => {
-                const n = program.filter((e) => e.session === s.id).length;
+            {/* En una linea que se desliza, no apilados. Con nombres de verdad
+                —"Volumen & Tempo", "Moderada & Variación"— entra uno por fila y
+                tres dias se comen media pantalla antes del primer ejercicio.
+                Que el ultimo quede cortado es lo que dice que hay mas. */}
+            <div className="weekchips dias">
+              {sesionesVistas.map((s) => {
+                const n = ejerciciosVistos.filter((e) => e.session === s.id).length;
                 return (
                   <button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>
                     {s.name}<span className="chip-n">{n}</span>
@@ -1733,9 +1824,9 @@ export default function ForgeApp() {
                 son `week|exId|setN`, asi que las series registradas quedan
                 colgando de ejercicios que ya no existen — y eso no lo deshace
                 ningun pull. */}
-            {session === null && !esAsignado && (
+            {session === null && !esAsignadoVisto && (
               <div className="prog-acciones">
-                <button className="prog-accion" onClick={() => setEditingProgram({ ...activeProgram })}>Editar programa</button>
+                <button className="prog-accion" onClick={() => setEditingProgram({ ...programaVisto })}>Editar programa</button>
                 <button className="prog-accion prog-dias-btn" onClick={() => setEditingSessions(true)}>Editar días</button>
               </div>
             )}
@@ -1749,7 +1840,7 @@ export default function ForgeApp() {
                       // sistema operativo: el candado ya explica que no se
                       // puede: esto explica por que, y se va solo.
                       if (session !== null) { setAviso("🔒 Estás entrenando. Terminá o cancelá la sesión para editar el programa."); return; }
-                      if (esAsignado) { setDescModal(e); return; }
+                      if (esAsignadoVisto) { setDescModal(e); return; }
                       setEditing({ ...e });
                     }}>
                       <div className="pmain"><div className="pname">{e.name}{e.description && <span className="desc-hint-sm">i</span>}{session !== null && <span className="lock-inline">🔒</span>}</div><div className="pmeta">{e.group}{(() => { const t = defDe(e); return t ? <span className="tecchip" style={{ marginLeft: 6 }}>{t.icono} {t.corto || t.nombre}</span> : null; })()}</div></div>
@@ -1758,7 +1849,9 @@ export default function ForgeApp() {
                           el descanso es lo que uno mira ANTES de empezar: los
                           dos datos que se van a buscar leyendo el programa. */}
                       <div className="pnums mono">
-                        <div>{e.sets}x{e.repsMin}-{e.repsMax} · {refLine(e, null, deloadCfg).split(" ×")[0]}</div>
+                        {/* "3x12-12" no es un rango, es un numero escrito dos
+                            veces. */}
+                        <div>{e.sets}x{e.repsMin === e.repsMax ? e.repsMin : `${e.repsMin}-${e.repsMax}`} · {refLine(e, null, deloadVisto).split(" ×")[0]}</div>
                         <div className="pnums-2">{[String(e.rir ?? "").trim() && `RIR ${e.rir}`, e.rest && `D ${fmtRest(e.rest)}`].filter(Boolean).join(" · ")}</div>
                       </div>
                     </button>
@@ -1770,7 +1863,7 @@ export default function ForgeApp() {
                 vacia y un boton. En un programa asignado ni eso. */}
             {!progBlocks.length && (
               <div className="empty">
-                {esAsignado
+                {esAsignadoVisto
                   ? "Tu entrenador todavía no cargó ejercicios en este día."
                   : "Este día está vacío. Agregá el primer ejercicio acá abajo."}
               </div>
@@ -1780,13 +1873,17 @@ export default function ForgeApp() {
                 {/* Mirando el dia, lo que sigue es entrenarlo. Antes habia que
                     ir a Entrenar y volver a elegirlo ahi. Usa la semana que ya
                     esta elegida en Entrenar, y pasa por el mismo camino: si esa
-                    sesion ya tiene series cargadas, pregunta igual. */}
-                {progBlocks.length > 0 && (
+                    sesion ya tiene series cargadas, pregunta igual.
+
+                    Solo en el programa activo: entrenar un dia de otro seria
+                    cambiar de programa sin decirlo, que es exactamente lo que
+                    hace el boton de arriba y por eso ese esta rotulado. */}
+                {progBlocks.length > 0 && esElActivo && (
                   <button className="prog-entrenar-btn" onClick={() => { setTab("entrenar"); startSession(activeProgSession); }}>
-                    Entrenar {sessions.find((s) => s.id === activeProgSession)?.name || "este día"}
+                    Entrenar {sesionesVistas.find((s) => s.id === activeProgSession)?.name || "este día"}
                   </button>
                 )}
-                <button className="addbtn" hidden={esAsignado} onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...program.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, technique: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
+                <button className="addbtn" hidden={esAsignadoVisto} onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...ejerciciosVistos.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, technique: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
               </>
             )}
           </div>
@@ -2157,7 +2254,7 @@ export default function ForgeApp() {
                 <h3>{descModal.name}</h3>
               </div>
               <p className="desc-modal-presc mono">
-                {descModal.sets} × {descModal.repsMin}-{descModal.repsMax} {descModal.unit === "pasos" ? "pasos" : "reps"}
+                {descModal.sets} × {descModal.repsMin === descModal.repsMax ? descModal.repsMin : `${descModal.repsMin}-${descModal.repsMax}`} {descModal.unit === "pasos" ? "pasos" : "reps"}
                 {carga ? ` · ${carga}` : ""}
               </p>
               {detalle && <p className="desc-modal-meta">{detalle}</p>}
@@ -2245,16 +2342,16 @@ export default function ForgeApp() {
         {editing && <ExerciseEditor
           draft={editing}
           setDraft={setEditing}
-          siblings={program.filter((e) => e.session === editing.session && e.id !== editing.id)}
+          siblings={ejerciciosVistos.filter((e) => e.session === editing.session && e.id !== editing.id)}
           onSave={saveExercise}
           onDelete={deleteExercise}
           isNew={!program.some((e) => e.id === editing.id)}
           catalog={catalog}
           onCrearEjercicio={crearEjercicio}
           sustituido={nombreSustituido(editing)}
-          semanasDelPrograma={weeks}
-          sessions={sessions}
-          todos={program}
+          semanasDelPrograma={semanasVistas}
+          sessions={sesionesVistas}
+          todos={ejerciciosVistos}
         />}
 
         {/* ======== PROGRAM EDITOR MODAL ======== */}
@@ -2330,7 +2427,7 @@ export default function ForgeApp() {
                     <select value={editingProgram.maxTest?.session || ""}
                       disabled={!editingProgram.maxTest}
                       onChange={(e) => setEditingProgram((p) => ({ ...p, maxTest: { ...p.maxTest, session: e.target.value } }))}>
-                      {(activeProgram?.sessions || []).map((s) => <option key={s.id} value={s.id}>{s.id}</option>)}
+                      {(programaVisto?.sessions || []).map((s) => <option key={s.id} value={s.id}>{s.id}</option>)}
                     </select>
                   </label>
                 </div>
@@ -2340,10 +2437,13 @@ export default function ForgeApp() {
                 <button className="save" onClick={() => { guardarPrograma(editingProgram); }}>Guardar</button>
                 <button className="prog-dup-btn" onClick={() => {
                   const id = uid();
-                  const dup = { ...activeProgram, id, name: activeProgram.name + " (copia)", exercises: activeProgram.exercises.map((e) => ({ ...e, id: uid() })), createdAt: Date.now(), updatedAt: Date.now(), readOnly: false, assignmentId: undefined, coachName: undefined };
+                  const dup = { ...programaVisto, id, name: programaVisto.name + " (copia)", exercises: programaVisto.exercises.map((e) => ({ ...e, id: uid() })), createdAt: Date.now(), updatedAt: Date.now(), readOnly: false, assignmentId: undefined, coachName: undefined, asignadoA: undefined };
                   setPrograms((ps) => [...ps, dup]);
-                  setActiveProgramId(id);
-                  setProgSession(null);
+                  // La copia se abre, no se activa: duplicar es casi siempre el
+                  // primer paso de escribirle algo a alguien, no de cambiarse
+                  // uno de rutina. Y la copia de un programa asignado no hereda
+                  // a quien estaba asignado el original.
+                  abrirProgramaNuevo(id);
                   setEditingProgram(null);
                 }}>Duplicar programa</button>
                 {/* Se puede borrar el ultimo. Antes estaba escondido tras
@@ -2352,22 +2452,27 @@ export default function ForgeApp() {
                     app. Ahora la pantalla vacia existe y ofrece los tres caminos. */}
                 {(
                   <button className="del" style={{ width: "100%" }} onClick={() => setConfirmarBorrado({
-                    mensaje: `¿Eliminar "${activeProgram.name}"?`,
-                    detalle: "No se puede deshacer. El historial de las sesiones que ya hiciste se queda.",
+                    mensaje: `¿Eliminar "${programaVisto.name}"?`,
+                    detalle: esElActivo
+                      ? "No se puede deshacer. El historial de las sesiones que ya hiciste se queda."
+                      : "No se puede deshacer. Es el que estás revisando, no el que entrenás.",
                     textoOk: "Eliminar",
                     onOk: () => {
-                      const remaining = programs.filter((p) => p.id !== activeProgramId);
+                      const id = programaVisto.id;
+                      const remaining = programs.filter((p) => p.id !== id);
                       // Lapida: el borrado tiene que viajar. Sin esto el pull
                       // siguiente lo trae de vuelta como si nada.
-                      if (!activeProgram.readOnly) {
-                        setBorrados((b) => ({ ...b, [activeProgramId]: Date.now() }));
-                        if (signedIn) pushBorrados([activeProgramId]);
+                      if (!programaVisto.readOnly) {
+                        setBorrados((b) => ({ ...b, [id]: Date.now() }));
+                        if (signedIn) pushBorrados([id]);
                       }
                       setPrograms(remaining);
-                      // Puede no quedar ninguno: `remaining[0].id` reventaba la app
-                      // al borrar el ultimo, que desde que las cuentas arrancan
+                      // Solo si se borro el que se estaba entrenando. Puede no
+                      // quedar ninguno: `remaining[0].id` reventaba la app al
+                      // borrar el ultimo, que desde que las cuentas arrancan
                       // vacias dejo de ser un caso imposible.
-                      setActiveProgramId(remaining[0]?.id ?? null);
+                      if (id === activeProgramId) setActiveProgramId(remaining[0]?.id ?? null);
+                      setVistoId(null);
                       setProgSession(null);
                       setEditingProgram(null);
                       setProgramListView(true);
@@ -2388,9 +2493,7 @@ export default function ForgeApp() {
           if (actualizar) {
             const { program } = fusionarPrograma(actualizar, { name, sessions: preview.sessions, exercises: preview.exercises });
             setPrograms((ps) => ps.map((p) => (p.id === program.id ? program : p)));
-            setActiveProgramId(program.id);
-            setProgSession(null);
-            setProgramListView(false);
+            abrirProgramaNuevo(program.id);
             setImportWizard(null);
             return;
           }
@@ -2406,9 +2509,7 @@ export default function ForgeApp() {
             createdAt: Date.now(),
           };
           setPrograms((ps) => [...ps, newProg]);
-          setActiveProgramId(id);
-          setProgSession(null);
-          setProgramListView(false);
+          abrirProgramaNuevo(id);
           setImportWizard(null);
         }} />}
 
@@ -3013,6 +3114,11 @@ const CSS = `
 .sub { color: #636366; font-size: 13px; margin-top: 4px; }
 .dlnote { font-size: 13px; color: #7A5600; background: #FFF8E1; border: 1px solid #E8C840; padding: 8px 14px; border-radius: 10px; margin-bottom: 12px; font-weight: 500; }
 .weekchips { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+/* Los dias del programa, a diferencia de las SEMANAS, tienen nombre propio y
+   largo. En una sola linea deslizable: apilados se comen la pantalla. */
+.weekchips.dias { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+.weekchips.dias::-webkit-scrollbar { display: none; }
+.weekchips.dias .chip { flex-shrink: 0; }
 .chip { padding: 9px 16px; border-radius: 999px; border: 1px solid #D1D1D6; background: #FFF; color: #636366; font: 600 13px 'Inter'; cursor: pointer; transition: all .15s; }
 .chip.on { background: #2C6BED; border-color: #2C6BED; color: #FFF; }
 .chip.dl.on { background: #E8A317; border-color: #E8A317; color: #FFF; }
@@ -3532,19 +3638,22 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 /* El boton de cuenta flota arriba a la derecha (position absolute), asi que
    esta fila tiene que dejarle su lugar o el menu de programas le queda debajo. */
 .prog-header-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-right: 46px; }
-/* El nombre del programa se PARTE en dos renglones antes que cortarse. Con el
-   boton de la lista rotulado ("Programas" en vez de un hamburguesa) queda menos
-   ancho, y "Hipertrofia …" no identifica a un programa: es justo el dato que la
-   pantalla existe para mostrar. */
-/* Tres renglones y no dos: el nombre del programa es el dato que esta pantalla
-   existe para mostrar, y con el boton al lado "Plan de fuerza — Martín" entraba
-   justo por un caracter y quedaba en "Plan de fuerza —…". */
-.prog-header-row h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* El nombre del programa se PARTE en renglones antes que cortarse: es justo el
+   dato que la pantalla existe para mostrar, y "Hipertrofia …" no identifica a
+   ninguno. Tres y no dos, porque con el boton al lado "Plan de fuerza — Martín"
+   entraba por un caracter. Y break-word, no anywhere: anywhere parte la palabra
+   aunque entre entera en el renglon siguiente ("Recomposició / n — Julia"). */
+.prog-header-row h1 { flex: 1; min-width: 0; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .prog-switch-btn { height: 38px; padding: 0 13px; gap: 7px; border-radius: 999px; background: #FFF; border: 1px solid #2C6BED; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
 .export-btn { height: 38px; padding: 0 14px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; }
 .export-btn:active { background: #F2F2F7; }
 /* Las dos ediciones del programa, juntas y con nombre. Van despues de los dias
    porque son lo secundario de esta pantalla: primero se lee el plan. */
+/* Estas mirando uno que no es el que entrenas. Amarillo de aviso y no rojo de
+   error: no esta mal mirar, pero tiene que notarse. */
+.prog-revisando { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 11px 13px; border-radius: 12px; background: #FFF8E1; border: 1px solid #E8C840; }
+.prog-revisando-t { flex: 1; font: 400 12.5px 'Inter'; line-height: 1.45; color: #7A5600; }
+.prog-activar-btn { flex-shrink: 0; height: 34px; padding: 0 13px; border-radius: 999px; border: none; background: #2C6BED; color: #FFF; font: 600 12.5px 'Inter'; cursor: pointer; }
 .prog-acciones { display: flex; gap: 8px; margin: -6px 0 14px; }
 .prog-accion { height: 34px; padding: 0 13px; border-radius: 999px; border: 1px solid #D1D1D6; background: #FFF; color: #48484A; font: 600 12.5px 'Inter'; cursor: pointer; }
 .prog-accion:active { background: #F2F2F7; }

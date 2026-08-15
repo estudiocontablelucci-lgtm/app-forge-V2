@@ -622,10 +622,38 @@ se parte en TRES renglones antes que cortarse: "Hipertrofia …" no identifica a
 programa, y es el dato que esa pantalla existe para mostrar. Con dos, "Plan de
 fuerza — Martín" entraba por un caracter y quedaba en "Plan de fuerza —…".
 
+**MIRAR un programa y ENTRENARLO son dos cosas distintas, y eran la misma
+variable.** Abrir uno de la lista para ver que tenia lo dejaba activo, y el activo
+gobierna Entrenar, Historial y Progreso: revisar la rutina que le escribiste a un
+alumno te cambiaba la tuya, sin haber tocado nada mas que una tarjeta.
+`activeProgramId` es EL QUE SE ENTRENA y no lo cambia nadie sin pedirlo; `vistoId`
+es lo que muestra la pestaña Programa (en null mira al activo, que es el caso de
+siempre). El detalle y sus editores trabajan sobre las derivadas del visto
+—`programaVisto`, `sesionesVistas`, `ejerciciosVistos`, `semanasVistas`,
+`deloadVisto`, `esAsignadoVisto`— y `updateProgramaVisto` reemplaza a
+`updateActiveProgram`: un programa que se puede abrir sin activarlo tambien se
+tiene que poder corregir sin activarlo. Entrenar, Historial y Progreso siguen
+leyendo el activo y no se tocaron.
+
+Se activa a pedido: el boton de la barra amarilla (`.prog-revisando`), que ademas
+dice cual seguis entrenando. Crear, importar y duplicar ABREN el programa nuevo y
+solo lo activan **si no habia ninguno** — en una cuenta vacia no hay nada que
+proteger. Y "Entrenar <dia>" al pie aparece solo en el activo: entrenar un dia de
+otro programa seria cambiarse de programa sin decirlo.
+
+**El atras, en Programa, vuelve a la LISTA.** El detalle esta un nivel adentro de
+ella; saltar directo a Entrenar obliga a rehacer el camino entero para mirar el
+programa siguiente. Va en la cadena de `popstate` justo antes del `setTab`.
+
 **Y un lapiz suelto es el mismo error.** El de las sesiones vivia entre los chips
 de dia —tercera fila, cuando el programa tiene cuatro— sin decir que abria. Ahora
 "Editar programa" y "Editar días" son dos botones rotulados juntos (`.prog-acciones`),
 debajo de los dias porque son lo secundario: primero se lee el plan.
+
+**Los dias van en UNA linea que se desliza** (`.weekchips.dias`), no apilados. Con
+nombres de verdad —"Volumen & Tempo", "Moderada & Variación"— entra uno por fila y
+tres dias se comen media pantalla antes del primer ejercicio. Las SEMANAS de
+Entrenar siguen con wrap: son cortas y conviene verlas todas juntas.
 
 **Lo que la pantalla Programa tiene que contestar sin abrir nada:** cuantos
 ejercicios tiene cada dia (el numero estaba en el editor de sesiones, no donde se
