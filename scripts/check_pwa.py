@@ -145,9 +145,13 @@ def main() -> int:
         texto = pg.inner_text("body")
         check("y sin pantalla de error", "Application error" not in texto and "sin conexión a internet" not in texto.lower(),
               texto[:200])
+        # Sin cookies la cuenta esta vacia, y desde el 2026-08-02 una instalacion
+        # nueva ya no trae el SEED: lo correcto ahi es la tarjeta que manda a
+        # elegir un programa. El check pedia sesiones o el vacio de la pestaña
+        # PROGRAMA —que no es esta pantalla— asi que sin cuenta fallaba siempre.
         check("los programas locales siguen estando",
-              pg.locator(".scard").count() > 0 or "Todavía no tenés ningún programa" in texto,
-              "no se ve ni el programa ni el estado vacio")
+              pg.locator(".scard").count() > 0 or "Primero necesitás un programa" in texto,
+              f"ni sesiones ni el estado vacio de Entrenar: {texto[:160]!r}")
         # Sin red no se puede confirmar la sesion, pero decir "Entrar" es
         # afirmar que no tenes cuenta, que es otra cosa.
         if args.cookies:
