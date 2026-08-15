@@ -75,11 +75,19 @@ ASIGNADO = dict(
                   technique={"tipo": "dropset", "pasos": 2, "aplica": "ultima"})],
     status="active", createdAt=1_748_000_000_000)
 
+# El que le escribiste a un alumno: abrirlo para revisarlo no puede cambiarte
+# la rutina a vos.
+DE_ALUMNOS = dict(
+    id="p3", name="Recomposición — Julia", weeks=8, hasDeload=True, paraAlumnos=True,
+    sessions=[{"id": "A", "name": "Torso"}],
+    exercises=[ex(30, "A", 1, "Press banca", "Pecho"), ex(31, "A", 2, "Remo", "Espalda")],
+    status="active", createdAt=1_745_000_000_000)
+
 # Series registradas del gemelo: mudarlo de dia NO es sustituirlo, asi que
 # conserva su id y estas series se van con el.
 LOGS = {"1|e4|1": {"kg": 40, "reps": 12, "rir": "2", "done": True}}
 
-ESTADO = dict(programs=[MIO, ASIGNADO], logs=LOGS, history=[], borrados={},
+ESTADO = dict(programs=[MIO, ASIGNADO, DE_ALUMNOS], logs=LOGS, history=[], borrados={},
               prefs={"ayudas": True, "cronometro": True, "sonido": True,
                      "vibracion": True, "notificacion": False})
 
@@ -162,6 +170,70 @@ def main() -> int:
               f"la caja dice: {ficha!r}")
         pg.locator(".desc-modal .confirm-ok").click()
         pg.wait_for_timeout(500)
+
+        # ---------------------------------------------------------------
+        print("\nabrir un programa NO lo activa")
+        abrir("p1")
+
+        def activo():
+            return pg.evaluate("() => JSON.parse(localStorage.getItem('forge-v2')).activeProgramId")
+
+        pg.locator(".prog-switch-btn").click()      # a la lista
+        pg.wait_for_timeout(800)
+        # La tarjeta del programa que le escribi a un alumno.
+        pg.get_by_text("Recomposición — Julia").click()
+        pg.wait_for_timeout(1000)
+        texto = pg.inner_text("body")
+        check("abre el que se toco", "Recomposición — Julia" in texto)
+        check("y el que se entrena sigue siendo el otro", activo() == "p1",
+              f"el activo paso a ser {activo()!r} por haberlo mirado")
+        check("la pantalla dice que solo lo esta revisando",
+              "Lo estás revisando" in texto and "Mi programa" in texto,
+              "nada distingue revisar de haberse cambiado de rutina")
+        check("y dice que es para alumnos", "para tus alumnos" in texto, texto[:200])
+        check("no ofrece entrenar el dia", pg.locator(".prog-entrenar-btn").count() == 0,
+              "entrenar un dia de otro programa seria cambiarse de programa sin decirlo")
+        boton = pg.locator(".prog-activar-btn")
+        check("ofrece activarlo, con nombre", boton.inner_text().strip() == "Entrenarlo yo",
+              f"dice {boton.inner_text()!r}")
+
+        print("\neditar el que se revisa edita a ESE")
+        pg.locator(".prow").first.click()
+        pg.wait_for_timeout(800)
+        pg.locator(".ed-donde select").nth(1).select_option(value="")   # primero del dia
+        pg.wait_for_timeout(300)
+        pg.locator(".sheetactions .save").click()
+        pg.wait_for_timeout(1000)
+        ordenes = pg.evaluate(
+            "() => Object.fromEntries(JSON.parse(localStorage.getItem('forge-v2')).programs"
+            ".flatMap(p => p.exercises.map(e => [p.id + ':' + e.id, e.order])))")
+        check("el cambio entro en el programa que se veia", ordenes.get("p3:e30") == 1,
+              f"ordenes: {ordenes}")
+        check("y no toco el activo",
+              ordenes.get("p1:e1") == 1 and ordenes.get("p1:e4") == 3,
+              f"ordenes: {ordenes}")
+
+        print("\nactivarlo es un acto aparte")
+        boton.click()
+        pg.wait_for_timeout(1000)
+        check("recien ahi cambia el que se entrena", activo() == "p3", f"el activo es {activo()!r}")
+        check("y la app lo dice", "Ahora entrenás" in pg.inner_text("body"),
+              "cambiar de programa cambia Entrenar, Historial y Progreso sin avisar")
+        check("ya no dice que lo esta revisando", "Lo estás revisando" not in pg.inner_text("body"))
+
+        print("\nel atras vuelve a la lista, no a Entrenar")
+        pg.go_back()
+        pg.wait_for_timeout(1000)
+        check("vuelve a la lista de programas", pg.locator(".prog-list").count() > 0,
+              f"quedo en: {pg.inner_text('body')[:120]!r}")
+        activa = [i for i in range(pg.locator(".tabbar button").count())
+                  if "on" in (pg.locator(".tabbar button").nth(i).get_attribute("class") or "")]
+        check("sin cambiar de pestaña", activa == [0], f"la pestaña activa es {activa}")
+        pg.go_back()
+        pg.wait_for_timeout(1000)
+        activa = [i for i in range(pg.locator(".tabbar button").count())
+                  if "on" in (pg.locator(".tabbar button").nth(i).get_attribute("class") or "")]
+        check("y recien el siguiente atras va a Entrenar", activa == [1], f"la pestaña activa es {activa}")
 
         # ---------------------------------------------------------------
         print("\nlo que la fila y los chips cuentan")
