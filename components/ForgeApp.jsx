@@ -48,6 +48,36 @@ function refLine(ex, week, deload) {
   return `${kg} × ${min}-${max} ${ex.unit === "pasos" ? "pasos" : ""}`.trim();
 }
 
+/**
+ * Ubica `ex` en su dia justo despues de `despuesDe` (o primero, si es vacio) y
+ * renumera los `order` de TODO el programa, dia por dia, 1..n.
+ *
+ * Renumerar y no buscarle un hueco al ejercicio movido: `order` solo existe para
+ * ordenar, dos ejercicios con el mismo numero quedan en un orden que nadie
+ * eligio, y mudar uno de dia deja el dia viejo con un salto. Renumerar entero
+ * cuesta lo mismo y no deja ninguna de las dos cosas.
+ *
+ * `exercises` ya tiene a `ex` adentro con su sesion NUEVA — esto no mueve nada
+ * entre dias, solo decide el orden dentro del que le toca.
+ */
+function reubicar(exercises, ex, despuesDe) {
+  const porDia = new Map();
+  for (const e of [...exercises].sort((a, b) => a.order - b.order)) {
+    if (e.id === ex.id) continue;
+    if (!porDia.has(e.session)) porDia.set(e.session, []);
+    porDia.get(e.session).push(e);
+  }
+  if (!porDia.has(ex.session)) porDia.set(ex.session, []);
+  const destino = porDia.get(ex.session);
+  // Un `despuesDe` que no esta en el dia destino (o vacio) lo deja primero.
+  const i = despuesDe ? destino.findIndex((e) => e.id === despuesDe) : -1;
+  destino.splice(i + 1, 0, ex);
+
+  const orden = new Map();
+  for (const lista of porDia.values()) lista.forEach((e, n) => orden.set(e.id, n + 1));
+  return exercises.map((e) => (orden.has(e.id) ? { ...e, order: orden.get(e.id) } : e));
+}
+
 /* ---------- Blocks: group exercises into singles + superset groups ---------- */
 function getBlocks(exercises) {
   const sorted = [...exercises].sort((a, b) => a.order - b.order);
@@ -280,6 +310,12 @@ export default function ForgeApp() {
   const [sessionNote, setSessionNote] = useState(""); // nota que el alumno deja al cerrar
   const [reentryChoice, setReentryChoice] = useState(null); // session id pending choice
   const [descModal, setDescModal] = useState(null); // exercise object to show description
+  // Borrar una sesion o un programa preguntaba con `window.confirm`, que en el
+  // telefono es una caja del SISTEMA: bloquea la app, no se parece a nada del
+  // resto y en una PWA instalada delata que abajo hay un navegador. Es lo mismo
+  // que la app ya evita para los avisos, y estas dos eran justo las decisiones
+  // destructivas. `{ mensaje, detalle, textoOk, onOk }`.
+  const [confirmarBorrado, setConfirmarBorrado] = useState(null);
   const [programListView, setProgramListView] = useState(false); // show program list vs active program
   const [editingProgram, setEditingProgram] = useState(null); // program metadata editor
   const [importWizard, setImportWizard] = useState(null); // { step, data, mapping, preview, name }
@@ -520,6 +556,7 @@ export default function ForgeApp() {
   // Las superpuestas tambien: el atras del telefono tiene que cerrarlas a ellas
   // primero. Sin esto la caja quedaba abierta y la app de atras se movia sola.
   const descModalRef = useRef(descModal); descModalRef.current = descModal;
+  const confirmarBorradoRef = useRef(confirmarBorrado); confirmarBorradoRef.current = confirmarBorrado;
   const confirmActionRef = useRef(confirmAction); confirmActionRef.current = confirmAction;
   const editingRef = useRef(editing); editingRef.current = editing;
   const editingProgramRef = useRef(editingProgram); editingProgramRef.current = editingProgram;
@@ -1069,17 +1106,35 @@ export default function ForgeApp() {
    * Cambiar el ejercicio SIN series registradas es corregir lo que se cargo mal:
    * ahi se edita en el lugar y no se parte nada.
    */
-  function saveExercise(draft) {
+  function saveExercise(draft, despuesDe) {
     const esSustitucion = Boolean(nombreSustituido(draft));
+    // Mudarlo lo saca de la pantalla que se esta mirando. Sin decirlo, guardar
+    // se ve igual que borrarlo — y ademas hay que decir lo que NO pasa: el
+    // ejercicio conserva su id, asi que las series y el e1RM se van con el.
+    const original = program.find((e) => e.id === draft.id);
+    if (original && original.session !== draft.session && !esSustitucion) {
+      const dia = sessions.find((s) => s.id === draft.session);
+      setAviso(`"${draft.name}" pasó a ${dia?.name || draft.session}. Sus series registradas van con él.`);
+    }
     setProgram((P) => {
+      const antes = P.find((e) => e.id === draft.id);
+      // Mudarse de dia rompe toda superserie: agrupa ejercicios que se hacen uno
+      // atras del otro, y en otro dia no hay tal cosa. Se suelta la del que se
+      // va y la de quien lo apuntaba, en los dos sentidos.
+      const cambioDeDia = Boolean(antes) && antes.session !== draft.session;
+      let ex = cambioDeDia ? { ...draft, superset: null } : draft;
+      let lista;
       if (esSustitucion) {
-        const sustituto = { ...draft, id: uid() };
-        return P
-          .map((e) => (e.superset === draft.id ? { ...e, superset: sustituto.id } : e))
-          .map((e) => (e.id === draft.id ? sustituto : e));
+        ex = { ...ex, id: uid() };
+        lista = P
+          .map((e) => (e.superset === draft.id ? { ...e, superset: cambioDeDia ? null : ex.id } : e))
+          .map((e) => (e.id === draft.id ? ex : e));
+      } else {
+        const exists = P.some((e) => e.id === draft.id);
+        lista = exists ? P.map((e) => (e.id === draft.id ? ex : e)) : [...P, ex];
+        if (cambioDeDia) lista = lista.map((e) => (e.superset === ex.id && e.id !== ex.id ? { ...e, superset: null } : e));
       }
-      const exists = P.some((e) => e.id === draft.id);
-      return exists ? P.map((e) => (e.id === draft.id ? draft : e)) : [...P, draft];
+      return reubicar(lista, ex, despuesDe);
     });
     setEditing(null);
   }
@@ -1144,6 +1199,9 @@ export default function ForgeApp() {
       // confirmacion se dibujan ARRIBA de todo, asi que son las primeras en
       // cerrarse: si no, el atras movia la app de abajo y la caja se quedaba
       // flotando encima de otra pantalla.
+      // La confirmacion de borrado se dibuja sobre los editores, asi que va
+      // primera: el atras tiene que cancelarla a ella, no cerrar lo de abajo.
+      if (confirmarBorradoRef.current) { setConfirmarBorrado(null); return quedarse(); }
       if (descModalRef.current) { setDescModal(null); return quedarse(); }
       if (confirmActionRef.current) { setConfirmAction(null); return quedarse(); }
       if (editingRef.current) { setEditing(null); return quedarse(); }
@@ -1646,7 +1704,15 @@ export default function ForgeApp() {
             </header>
             <div className="weekchips">
               {sessions.map((s) => (<button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>{s.name}</button>))}
-              {session === null && <button className="chip chip-edit" onClick={() => setEditingSessions(true)}>&#9998;</button>}
+              {/* `!esAsignado` no es simetria con los otros botones de edicion:
+                  este era la unica puerta que quedaba abierta en un programa de
+                  solo lectura. Renombrar la sesion del entrenador ya es raro
+                  —el pull siguiente reemplaza el programa entero y lo deshace
+                  sin avisar—, pero el editor tambien BORRA la sesion con sus
+                  ejercicios, y los logs son `week|exId|setN`: las series
+                  registradas quedan colgando de ejercicios que ya no existen.
+                  Eso no lo deshace ningun pull. */}
+              {session === null && !esAsignado && <button className="chip chip-edit" onClick={() => setEditingSessions(true)}>&#9998;</button>}
             </div>
             <div className="plist">
               {progBlocks.map((b, bi) => (
@@ -2014,19 +2080,47 @@ export default function ForgeApp() {
           </div>
         )}
 
-        {/* ======== DESCRIPTION MODAL ======== */}
-        {descModal && (
+        {/* ======== DESCRIPTION MODAL ========
+            En un programa asignado esta ficha es lo UNICO que devuelve tocar una
+            fila, y dibujaba nada mas que `description`: los ejercicios sin nota
+            —que son la mayoria— abrian una caja muda con el nombre y un OK.
+            Ahora lo primero es la prescripcion, que existe siempre; la nota del
+            entrenador es lo que se agrega cuando la hay. */}
+        {descModal && (() => {
+          const tec = defDe(descModal);
+          const ref = refFor(descModal, null);
+          const carga = ref === null || ref === "" ? null
+            : ref === "BW" ? "peso corporal"
+            : `${ref}${isNum(ref) ? " kg" : ""}`;
+          const detalle = [
+            String(descModal.rir ?? "").trim() && `RIR ${descModal.rir}`,
+            descModal.rest && `descanso ${fmtRest(descModal.rest)}`,
+            descModal.tempo && `tempo ${descModal.tempo}`,
+          ].filter(Boolean).join(" · ");
+          return (
           <div className="overlay centered" onClick={() => setDescModal(null)}>
             <div className="confirm-box desc-modal" onClick={(e) => e.stopPropagation()}>
               <div className="desc-modal-head">
                 <div className="eyebrow">{descModal.group}</div>
                 <h3>{descModal.name}</h3>
               </div>
-              <p className="desc-modal-body">{descModal.description}</p>
+              <p className="desc-modal-presc mono">
+                {descModal.sets} × {descModal.repsMin}-{descModal.repsMax} {descModal.unit === "pasos" ? "pasos" : "reps"}
+                {carga ? ` · ${carga}` : ""}
+              </p>
+              {detalle && <p className="desc-modal-meta">{detalle}</p>}
+              {tec && (
+                <>
+                  <p className="desc-modal-tec"><span className="tecchip">{tec.icono} {tec.nombre}{tec.pasos > 1 ? ` ×${tec.pasos}` : ""}</span></p>
+                  <p className="tec-ayuda">{tec.ayuda}</p>
+                </>
+              )}
+              {descModal.description && <p className="desc-modal-body">{descModal.description}</p>}
               <button className="confirm-ok" style={{ width: "100%", marginTop: 12 }} onClick={() => setDescModal(null)}>OK</button>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ======== CONFIRM MODAL ======== */}
         {confirmAction && (
@@ -2069,10 +2163,18 @@ export default function ForgeApp() {
                       <input className="sess-name-input" value={s.name} onChange={(e) => setSessions((S) => S.map((x) => x.id === s.id ? { ...x, name: e.target.value } : x))} />
                       <span className="sess-count mono">{exCount} ej.</span>
                       <button className="sess-del" onClick={() => {
-                        if (exCount > 0 && !window.confirm(`"${s.name}" tiene ${exCount} ejercicios. Eliminar sesión y sus ejercicios?`)) return;
-                        setSessions((S) => S.filter((x) => x.id !== s.id));
-                        setProgram((P) => P.filter((e) => e.session !== s.id));
-                        if (activeProgSession === s.id) setProgSession(null);
+                        const borrar = () => {
+                          setSessions((S) => S.filter((x) => x.id !== s.id));
+                          setProgram((P) => P.filter((e) => e.session !== s.id));
+                          if (activeProgSession === s.id) setProgSession(null);
+                        };
+                        if (!exCount) return borrar();
+                        setConfirmarBorrado({
+                          mensaje: `¿Eliminar "${s.name}"?`,
+                          detalle: `Se van con ella ${exCount} ejercicio${exCount === 1 ? "" : "s"}. Las series que ya registraste quedan en el historial, pero sin el ejercicio del que colgaban.`,
+                          textoOk: "Eliminar",
+                          onOk: borrar,
+                        });
                       }}>×</button>
                     </div>
                   );
@@ -2099,6 +2201,8 @@ export default function ForgeApp() {
           onCrearEjercicio={crearEjercicio}
           sustituido={nombreSustituido(editing)}
           semanasDelPrograma={weeks}
+          sessions={sessions}
+          todos={program}
         />}
 
         {/* ======== PROGRAM EDITOR MODAL ======== */}
@@ -2195,24 +2299,28 @@ export default function ForgeApp() {
                     un parche: sin estado vacio, quedarse sin programas rompia la
                     app. Ahora la pantalla vacia existe y ofrece los tres caminos. */}
                 {(
-                  <button className="del" style={{ width: "100%" }} onClick={() => {
-                    if (!window.confirm(`Eliminar "${activeProgram.name}"? Esta accion no se puede deshacer.`)) return;
-                    const remaining = programs.filter((p) => p.id !== activeProgramId);
-                    // Lapida: el borrado tiene que viajar. Sin esto el pull
-                    // siguiente lo trae de vuelta como si nada.
-                    if (!activeProgram.readOnly) {
-                      setBorrados((b) => ({ ...b, [activeProgramId]: Date.now() }));
-                      if (signedIn) pushBorrados([activeProgramId]);
-                    }
-                    setPrograms(remaining);
-                    // Puede no quedar ninguno: `remaining[0].id` reventaba la app
-                    // al borrar el ultimo, que desde que las cuentas arrancan
-                    // vacias dejo de ser un caso imposible.
-                    setActiveProgramId(remaining[0]?.id ?? null);
-                    setProgSession(null);
-                    setEditingProgram(null);
-                    setProgramListView(true);
-                  }}>Eliminar programa</button>
+                  <button className="del" style={{ width: "100%" }} onClick={() => setConfirmarBorrado({
+                    mensaje: `¿Eliminar "${activeProgram.name}"?`,
+                    detalle: "No se puede deshacer. El historial de las sesiones que ya hiciste se queda.",
+                    textoOk: "Eliminar",
+                    onOk: () => {
+                      const remaining = programs.filter((p) => p.id !== activeProgramId);
+                      // Lapida: el borrado tiene que viajar. Sin esto el pull
+                      // siguiente lo trae de vuelta como si nada.
+                      if (!activeProgram.readOnly) {
+                        setBorrados((b) => ({ ...b, [activeProgramId]: Date.now() }));
+                        if (signedIn) pushBorrados([activeProgramId]);
+                      }
+                      setPrograms(remaining);
+                      // Puede no quedar ninguno: `remaining[0].id` reventaba la app
+                      // al borrar el ultimo, que desde que las cuentas arrancan
+                      // vacias dejo de ser un caso imposible.
+                      setActiveProgramId(remaining[0]?.id ?? null);
+                      setProgSession(null);
+                      setEditingProgram(null);
+                      setProgramListView(true);
+                    },
+                  })}>Eliminar programa</button>
                 )}
               </div>
             </div>
@@ -2252,6 +2360,25 @@ export default function ForgeApp() {
           setImportWizard(null);
         }} />}
 
+        {/* ======== CONFIRM DE BORRADO ========
+            Va DESPUES de los editores a proposito: todos los `.overlay` comparten
+            el mismo z-index, asi que el que gana es el ultimo del DOM — y esta
+            caja se abre desde adentro del editor de sesiones y del de programa. */}
+        {confirmarBorrado && (
+          <div className="overlay centered" onClick={() => setConfirmarBorrado(null)}>
+            <div className="confirm-box" onClick={(e) => e.stopPropagation()}>
+              <p className="confirm-msg">{confirmarBorrado.mensaje}</p>
+              {confirmarBorrado.detalle && <p className="confirm-detalle">{confirmarBorrado.detalle}</p>}
+              <div className="confirm-actions">
+                <button className="confirm-cancel" onClick={() => setConfirmarBorrado(null)}>Cancelar</button>
+                <button className="confirm-del" onClick={() => { const f = confirmarBorrado.onOk; setConfirmarBorrado(null); f(); }}>
+                  {confirmarBorrado.textoOk || "Eliminar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {confirmarSalida && (
           <div className="salir-aviso">Tocá atrás otra vez para salir de FORGE</div>
         )}
@@ -2281,12 +2408,38 @@ export default function ForgeApp() {
 /** Cuantas semanas tienen una referencia propia. */
 const contarRefs = (ex) => Object.keys(ex?.refsByWeek || {}).length;
 
-function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, catalog, onCrearEjercicio, sustituido, semanasDelPrograma }) {
+function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, catalog, onCrearEjercicio, sustituido, semanasDelPrograma, sessions, todos }) {
   const set = (f, v) => setDraft((d) => ({ ...d, [f]: v }));
   const num = (v, int) => { const n = int ? parseInt(v) : parseFloat(v); return isNaN(n) ? "" : n; };
   // Se abre solo si ya hay refs cargadas: para la mayoria de los ejercicios la
   // referencia general alcanza y esto seria ruido.
   const [verRefs, setVerRefs] = useState(contarRefs(draft) > 0);
+
+  /**
+   * Donde va el ejercicio: dia y posicion.
+   *
+   * La posicion se pregunta como "va despues de tal ejercicio" y no como un
+   * numero. El numero obliga a contar filas para responder algo que la pantalla
+   * de al lado ya muestra en orden, y despues a re-contar si uno se equivoca.
+   *
+   * `enDia` son los hermanos del dia ELEGIDO —no del dia original—, asi que al
+   * cambiar de dia la lista de destinos se rehace sola.
+   */
+  const enDia = (s) => todos.filter((e) => e.session === s && e.id !== draft.id).sort((a, b) => a.order - b.order);
+  const [despues, setDespues] = useState(() => {
+    const previos = enDia(draft.session).filter((e) => e.order < draft.order);
+    return previos.length ? previos[previos.length - 1].id : "";
+  });
+  const hermanos = enDia(draft.session);
+  const cambiarDeDia = (s) => {
+    // Al final del dia nuevo: es donde uno espera que caiga lo que acaba de
+    // mudar, y cualquier otra posicion seria una que nadie pidio.
+    const destino = enDia(s);
+    setDespues(destino.length ? destino[destino.length - 1].id : "");
+    // La superserie apunta a un ejercicio del dia viejo: en el nuevo no
+    // significa nada. `saveExercise` la suelta igual, esto lo muestra antes.
+    setDraft((d) => ({ ...d, session: s, superset: null }));
+  };
   // Elegir otro ejercicio del catalogo es sustituir, no renombrar: el nombre y
   // el grupo pasan a ser los del ejercicio nuevo.
   const elegirDelCatalogo = (c) => setDraft((d) => ({ ...d, exerciseId: c.id, name: c.name, group: c.group || "", unit: c.unit || d.unit }));
@@ -2302,6 +2455,23 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
               <strong> {sustituido}</strong> y su e1RM no se encadena con el nuevo.
             </p>
           )}
+          {/* `ed-donde` no es decorativa: es como se agarran estos dos selects
+              sin contar por indice. El editor tiene cinco, y el de Unidad
+              ocupaba este lugar hasta hoy — un test por posicion pasaba con la
+              pantalla vieja. */}
+          <div className="ed-row2 ed-donde">
+            <label><span>Día</span>
+              <select value={draft.session} onChange={(e) => cambiarDeDia(e.target.value)}>
+                {(sessions || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+            <label><span>Va después de</span>
+              <select value={despues} onChange={(e) => setDespues(e.target.value)}>
+                <option value="">— primero del día —</option>
+                {hermanos.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+          </div>
           <div className="ed-row3">
             <label><span>Series</span><input className="mono" inputMode="numeric" value={draft.sets} onChange={(e) => set("sets", num(e.target.value, true))} /></label>
             <label><span>Reps min</span><input className="mono" inputMode="numeric" value={draft.repsMin} onChange={(e) => set("repsMin", num(e.target.value, true))} /></label>
@@ -2387,7 +2557,7 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
         </div>
         <div className="sheetactions">
           {!isNew && <button className="del" onClick={() => onDelete(draft.id)}>Eliminar</button>}
-          <button className="save" disabled={!draft.name || !draft.sets} onClick={() => onSave({ ...draft, repsMin: draft.repsMin || 0, repsMax: draft.repsMax || 0, rest: draft.rest || 90 })}>Guardar</button>
+          <button className="save" disabled={!draft.name || !draft.sets} onClick={() => onSave({ ...draft, repsMin: draft.repsMin || 0, repsMax: draft.repsMax || 0, rest: draft.rest || 90 }, despues)}>Guardar</button>
         </div>
       </div>
     </div>
@@ -3021,6 +3191,12 @@ const CSS = `
 .note-hint { font-size: 11px; color: #8E8E93; text-align: left; margin: 6px 0 14px; line-height: 1.4; }
 .confirm-cancel { flex: 1; height: 44px; border-radius: 10px; border: 1px solid #D1D1D6; background: #FFF; color: #636366; font: 600 15px 'Inter'; cursor: pointer; }
 .confirm-ok { flex: 1; height: 44px; border-radius: 10px; border: none; background: #2C6BED; color: #FFF; font: 600 15px 'Inter'; cursor: pointer; }
+/* El detalle va bajo la pregunta: que se lleva puesto el borrado. La pregunta
+   sola —"¿Eliminar X?"— no alcanza para decidir. */
+.confirm-detalle { font-size: 13px; color: #636366; line-height: 1.45; text-align: left; margin: -12px 0 18px; }
+/* Confirmar un borrado no puede ser el mismo boton azul que confirma cualquier
+   otra cosa: el color es la mitad del aviso. */
+.confirm-del { flex: 1; height: 44px; border-radius: 10px; border: none; background: #FF3B30; color: #FFF; font: 600 15px 'Inter'; cursor: pointer; }
 
 /* Reentry modal */
 .reentry-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
@@ -3326,6 +3502,14 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .desc-modal-head { margin-bottom: 12px; }
 .desc-modal-head h3 { font-size: 18px; font-weight: 700; margin-top: 4px; }
 .desc-modal-body { font-size: 14px; color: #3A3A3C; line-height: 1.6; white-space: pre-wrap; }
+/* La prescripcion va antes que la nota y con el peso de un titulo: es el dato
+   que se busca parado al lado de la maquina. */
+.desc-modal-presc { font-size: 16px; font-weight: 500; color: #1C1C1E; }
+.desc-modal-meta { font-size: 13px; color: #636366; margin-top: 4px; }
+.desc-modal-tec { margin-top: 10px; }
+.desc-modal-tec + .tec-ayuda { margin-top: 6px; }
+.desc-modal-presc + .desc-modal-body, .desc-modal-meta + .desc-modal-body,
+.tec-ayuda + .desc-modal-body { margin-top: 12px; border-top: 1px solid #F2F2F7; padding-top: 12px; }
 /* Import wizard */
 .import-desc { font-size: 14px; color: #636366; line-height: 1.5; margin-bottom: 8px; }
 .import-mapping { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
