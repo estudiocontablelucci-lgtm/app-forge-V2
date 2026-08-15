@@ -616,11 +616,24 @@ de esa seccion. `check_coach_ui.py` la abre con `sincronizar_a_mano()`.
 linea: para que sean dos renglones hace falta `display: block`. `check_perfil_ui.py`
 lo vigila comparando la POSICION en pantalla de los dos, no el CSS.
 
-**Un hamburguesa significa "el menu de la app".** En Programa abria la lista de
-programas y nadie lo adivinaba; ahora es un boton rotulado. El nombre del programa
-se parte en TRES renglones antes que cortarse: "Hipertrofia …" no identifica a un
-programa, y es el dato que esa pantalla existe para mostrar. Con dos, "Plan de
-fuerza — Martín" entraba por un caracter y quedaba en "Plan de fuerza —…".
+**EL TITULO es el selector de programa.** Paso por tres formas y las dos primeras
+fallaron por lo mismo: un hamburguesa suelto significa "el menu de la app", y un
+boton rotulado al lado del titulo le disputa el ancho justo a lo unico que la
+pantalla existe para mostrar — con el avatar de cuenta reservando 46px arriba a la
+derecha, quedaba flotando contra el segundo renglon del nombre. Tocar el nombre
+para cambiar de programa es el patron de mobile, no cuesta ancho, y el `▾` es lo
+que lo delata. El nombre se parte en TRES renglones antes que cortarse: "Hipertrofia
+…" no identifica a un programa, y es el dato que esa pantalla existe para mostrar.
+
+**Los catorce campos del editor de ejercicio estan en tres secciones plegables**
+(`EdSec`). Arriba queda lo que se cambia seguido —que ejercicio, donde va, series,
+reps, ref, RIR—; abajo, plegado, lo que se define una vez al escribir el programa:
+"Cómo se ejecuta" (descanso, tempo, unidad, superserie, tecnica), "Referencias por
+semana" y "Notas". **Cerrada, cada seccion muestra un RESUMEN de lo que tiene**, y
+se abre sola si hay algo cargado: sin eso plegar no ordena, esconde — y quien busca
+por que ese ejercicio tiene dropset no encontraria nada. Es la misma regla que el
+Perfil. Las tres se ven IGUAL: tres plegables con estilos distintos entre si es
+otra vez el problema que esto vino a resolver.
 
 **MIRAR un programa y ENTRENARLO son dos cosas distintas, y eran la misma
 variable.** Abrir uno de la lista para ver que tenia lo dejaba activo, y el activo
@@ -650,10 +663,14 @@ de dia —tercera fila, cuando el programa tiene cuatro— sin decir que abria. 
 "Editar programa" y "Editar días" son dos botones rotulados juntos (`.prog-acciones`),
 debajo de los dias porque son lo secundario: primero se lee el plan.
 
-**Los dias van en UNA linea que se desliza** (`.weekchips.dias`), no apilados. Con
-nombres de verdad —"Volumen & Tempo", "Moderada & Variación"— entra uno por fila y
-tres dias se comen media pantalla antes del primer ejercicio. Las SEMANAS de
-Entrenar siguen con wrap: son cortas y conviene verlas todas juntas.
+**Los dias van en UN selector** (`.dia-sel`), no en chips. Con nombres de verdad
+—"Volumen & Tempo", "Moderada & Variación"— entraba uno por fila y tres dias se
+comian media pantalla antes del primer ejercicio; en una linea deslizable el
+tercero quedaba fuera de la vista, que es lo mismo que no estar. Desplegado se leen
+los tres enteros con su conteo, y **tocar afuera cierra** (`.dia-backdrop`): sin
+eso la unica salida es volver a tocar el selector, que en un telefono nadie prueba.
+Va tambien en la cadena del boton atras. Las SEMANAS de Entrenar siguen siendo
+chips: son cortas y conviene verlas todas juntas.
 
 **Lo que la pantalla Programa tiene que contestar sin abrir nada:** cuantos
 ejercicios tiene cada dia (el numero estaba en el editor de sesiones, no donde se

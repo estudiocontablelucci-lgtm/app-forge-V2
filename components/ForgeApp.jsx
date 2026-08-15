@@ -305,6 +305,7 @@ export default function ForgeApp() {
   const [editing, setEditing] = useState(null);
   const [progSession, setProgSession] = useState(null); // session id
   const [editingSessions, setEditingSessions] = useState(false);
+  const [verDias, setVerDias] = useState(false);   // el desplegable de dias del programa
   const [healthCheck, setHealthCheck] = useState(null);
   const [savedHealth, setSavedHealth] = useState(null);
   const [sessionStart, setSessionStart] = useState(null);
@@ -620,6 +621,7 @@ export default function ForgeApp() {
   // no re-suscribirse en cada pestaña que se toca.
   const tabRef = useRef(tab); tabRef.current = tab;
   const programListViewRef = useRef(programListView); programListViewRef.current = programListView;
+  const verDiasRef = useRef(verDias); verDiasRef.current = verDias;
   const sessionRef = useRef(session); sessionRef.current = session;
   const showProfileRef = useRef(showProfile); showProfileRef.current = showProfile;
   const showMedidasRef = useRef(showMedidas); showMedidasRef.current = showMedidas;
@@ -1275,6 +1277,9 @@ export default function ForgeApp() {
       // La confirmacion de borrado se dibuja sobre los editores, asi que va
       // primera: el atras tiene que cancelarla a ella, no cerrar lo de abajo.
       if (confirmarBorradoRef.current) { setConfirmarBorrado(null); return quedarse(); }
+      // El desplegable de dias no tapa la pantalla, pero esta ABIERTO: el atras
+      // tiene que cerrarlo a el antes de mover nada de abajo.
+      if (verDiasRef.current) { setVerDias(false); return quedarse(); }
       if (descModalRef.current) { setDescModal(null); return quedarse(); }
       if (confirmActionRef.current) { setConfirmAction(null); return quedarse(); }
       if (editingRef.current) { setEditing(null); return quedarse(); }
@@ -1767,17 +1772,21 @@ export default function ForgeApp() {
             <header className="top">
               <div className="brand">FORGE</div>
               <div className="prog-header-row">
-                <h1>{programaVisto?.name || "Programa"}</h1>
-                {/* Dice a donde lleva. Era un hamburguesa suelto, y ese icono
-                    en una app significa "el menu de la app": nadie adivina que
-                    abre la lista de programas para cambiar de programa.
+                {/* EL TITULO es el selector. Primero fue un hamburguesa suelto
+                    —que en una app significa "el menu de la app"— y despues un
+                    boton rotulado al lado del titulo; ese boton le disputaba el
+                    ancho justo a lo unico que la pantalla existe para mostrar,
+                    y con el avatar de cuenta reservando 46px arriba a la derecha
+                    quedaba flotando contra el segundo renglon del nombre.
 
-                    "Programas" y no "Mis programas": el nombre del programa
-                    activo es el titulo de la pantalla y con la etiqueta larga
-                    quedaba cortado en "Hipertrofi…". */}
-                <button className="prog-switch-btn" onClick={() => setProgramListView(true)}>
-                  <span aria-hidden="true">☰</span> Programas
-                </button>
+                    Tocar el nombre para cambiar de programa es el patron de
+                    mobile, no cuesta ancho, y el ▾ es lo que lo delata. */}
+                <h1 className="prog-titulo">
+                  <button className="prog-switch-btn" aria-haspopup="true" onClick={() => setProgramListView(true)}>
+                    {programaVisto?.name || "Programa"}
+                    <span className="prog-titulo-chevron" aria-hidden="true">▾</span>
+                  </button>
+                </h1>
               </div>
               <p className="sub">{esAsignadoVisto && <span className="prog-coach">de {programaVisto.coachName}</span>}{programaVisto?.weeks || 4} sem{programaVisto?.hasDeload ? " + deload" : ""} · {sesionesVistas.length} {sesionesVistas.length === 1 ? "sesión" : "sesiones"} · {ejerciciosVistos.length} ejercicio{ejerciciosVistos.length === 1 ? "" : "s"}</p>
             </header>
@@ -1800,19 +1809,40 @@ export default function ForgeApp() {
             )}
             {/* Los dias con cuantos ejercicios tiene cada uno. El numero estaba
                 —el editor de sesiones lo muestra— pero no donde se elige. */}
-            {/* En una linea que se desliza, no apilados. Con nombres de verdad
-                —"Volumen & Tempo", "Moderada & Variación"— entra uno por fila y
-                tres dias se comen media pantalla antes del primer ejercicio.
-                Que el ultimo quede cortado es lo que dice que hay mas. */}
-            <div className="weekchips dias">
-              {sesionesVistas.map((s) => {
-                const n = ejerciciosVistos.filter((e) => e.session === s.id).length;
-                return (
-                  <button key={s.id} className={`chip ${activeProgSession === s.id ? "on" : ""}`} onClick={() => setProgSession(s.id)}>
-                    {s.name}<span className="chip-n">{n}</span>
-                  </button>
-                );
-              })}
+            {/* Los dias, en UN selector. Como chips entraba uno por fila —los
+                nombres de verdad son "Volumen & Tempo", "Moderada & Variación"—
+                y tres dias se comian media pantalla antes del primer ejercicio;
+                en una linea deslizable el tercero quedaba fuera de la vista, que
+                es lo mismo que no estar. Desplegado se leen los tres enteros,
+                con cuantos ejercicios tiene cada uno. */}
+            <div className="dia-sel">
+              <button className="dia-sel-btn" aria-haspopup="listbox" aria-expanded={verDias} onClick={() => setVerDias((v) => !v)}>
+                <span className="dia-sel-lbl">Día</span>
+                <span className="dia-sel-nombre">{sesionesVistas.find((s) => s.id === activeProgSession)?.name || activeProgSession}</span>
+                <span className="dia-sel-n mono">{progBlocks.reduce((n, b) => n + b.exercises.length, 0)} ej.</span>
+                <span className="dia-sel-chevron" aria-hidden="true">{verDias ? "▴" : "▾"}</span>
+              </button>
+              {verDias && (
+                <>
+                  {/* Tocar afuera cierra. Sin esto la unica salida es volver a
+                      tocar el selector, que en un telefono nadie prueba. */}
+                  <button className="dia-backdrop" aria-label="Cerrar" onClick={() => setVerDias(false)} />
+                  <div className="dia-menu" role="listbox">
+                    {sesionesVistas.map((s) => {
+                      const n = ejerciciosVistos.filter((e) => e.session === s.id).length;
+                      const elegido = activeProgSession === s.id;
+                      return (
+                        <button key={s.id} role="option" aria-selected={elegido} className={`dia-op ${elegido ? "on" : ""}`}
+                          onClick={() => { setProgSession(s.id); setVerDias(false); }}>
+                          <span className="dia-op-tick" aria-hidden="true">{elegido ? "✓" : ""}</span>
+                          <span className="dia-op-nombre">{s.name}</span>
+                          <span className="dia-op-n mono">{n} ej.</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
             {/* Las dos ediciones juntas y ROTULADAS. El lapiz suelto entre los
                 chips era el hamburguesa otra vez: un icono sin nombre, y encima
@@ -2561,12 +2591,31 @@ export default function ForgeApp() {
 /** Cuantas semanas tienen una referencia propia. */
 const contarRefs = (ex) => Object.keys(ex?.refsByWeek || {}).length;
 
+/**
+ * Una seccion plegable del editor.
+ *
+ * Cerrada muestra un RESUMEN de lo que hay adentro: sin eso, plegar no ordena
+ * —esconde—, y quien busca por que ese ejercicio tiene dropset no encontraria
+ * nada. Es la misma regla que el Perfil, donde plegar "Conexión" escondia el
+ * unico diagnostico que hay para "no abre sin señal".
+ */
+function EdSec({ titulo, resumen, abiertoInicial, children }) {
+  const [abierto, setAbierto] = useState(Boolean(abiertoInicial));
+  return (
+    <div className="ed-sec ed-full">
+      <button type="button" className="ed-sec-head" onClick={() => setAbierto((a) => !a)}>
+        <span className="ed-sec-flecha" aria-hidden="true">{abierto ? "▾" : "▸"}</span>
+        <span className="ed-sec-t">{titulo}</span>
+        {!abierto && resumen && <span className="ed-sec-r mono">{resumen}</span>}
+      </button>
+      {abierto && <div className="ed-sec-body">{children}</div>}
+    </div>
+  );
+}
+
 function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, catalog, onCrearEjercicio, sustituido, semanasDelPrograma, sessions, todos }) {
   const set = (f, v) => setDraft((d) => ({ ...d, [f]: v }));
   const num = (v, int) => { const n = int ? parseInt(v) : parseFloat(v); return isNaN(n) ? "" : n; };
-  // Se abre solo si ya hay refs cargadas: para la mayoria de los ejercicios la
-  // referencia general alcanza y esto seria ruido.
-  const [verRefs, setVerRefs] = useState(contarRefs(draft) > 0);
 
   /**
    * Donde va el ejercicio: dia y posicion.
@@ -2630,21 +2679,21 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
             <label><span>Reps min</span><input className="mono" inputMode="numeric" value={draft.repsMin} onChange={(e) => set("repsMin", num(e.target.value, true))} /></label>
             <label><span>Reps max</span><input className="mono" inputMode="numeric" value={draft.repsMax} onChange={(e) => set("repsMax", num(e.target.value, true))} /></label>
           </div>
-          <div className="ed-row3">
+          <div className="ed-row2">
             <label><span>Ref KG</span><input className="mono" value={draft.refKg ?? ""} onChange={(e) => { const v = e.target.value.trim(); const n = parseFloat(v); set("refKg", v === "" ? null : !isNaN(n) && String(n) === v ? n : v); }} placeholder="120" /></label>
-            <label><span>Tempo</span><input className="mono" value={draft.tempo} onChange={(e) => set("tempo", e.target.value)} placeholder="2-0-1-0" /></label>
             <label><span>RIR</span><input className="mono" value={draft.rir} onChange={(e) => set("rir", e.target.value)} placeholder="2-3" /></label>
           </div>
 
           {/* Refs por semana: la progresion de este programa es autorregulada,
               asi que subir la ref en la semana 4 no puede cambiar la de las
-              semanas que ya se entrenaron. Vacio = usa la referencia general. */}
-          <div className="ed-full">
-            <button type="button" className="ref-toggle" onClick={() => setVerRefs((v) => !v)}>
-              {verRefs ? "▾" : "▸"} Referencias por semana
-              {contarRefs(draft) > 0 && <span className="ref-count">{contarRefs(draft)}</span>}
-            </button>
-            {verRefs && (
+              semanas que ya se entrenaron. Vacio = usa la referencia general.
+
+              Va como las otras dos secciones y no con su propio estilo: tres
+              plegables que se ven distinto entre si es otra vez el problema que
+              esto vino a resolver. */}
+          <EdSec titulo="Referencias por semana"
+            resumen={contarRefs(draft) > 0 ? `${contarRefs(draft)} cargadas` : ""}
+            abiertoInicial={contarRefs(draft) > 0}>
               <>
                 <div className="ref-grid">
                   {semanasDelPrograma.map((w) => (
@@ -2669,44 +2718,58 @@ function ExerciseEditor({ draft, setDraft, siblings, onSave, onDelete, isNew, ca
                 </div>
                 <p className="ed-hint">Vacío usa la referencia general ({draft.refKg ?? "sin definir"}). Sirve para subir la carga a mitad de ciclo sin tocar lo ya entrenado.</p>
               </>
-            )}
-          </div>
-          <div className="ed-row2">
-            <label><span>Descanso (seg)</span><input className="mono" inputMode="numeric" value={draft.rest} onChange={(e) => set("rest", num(e.target.value, true))} /></label>
-            <label><span>Unidad</span><select value={draft.unit} onChange={(e) => set("unit", e.target.value)}><option value="reps">reps</option><option value="pasos">pasos</option></select></label>
-          </div>
-          <label className="ed-full"><span>Superserie con</span><select value={draft.superset ?? ""} onChange={(e) => set("superset", e.target.value || null)}><option value="">— sin superserie —</option>{siblings.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-          {/* La tecnica va JUNTO a la superserie porque son la misma pregunta
-              vista desde dos lados: como se ejecuta. Pero no son lo mismo — una
-              agrupa ejercicios y la otra pasa adentro de una serie — asi que
-              llevan colores de familia distintos. */}
-          <label className="ed-full"><span>Técnica</span>
-            <select value={draft.technique?.tipo ?? ""} onChange={(e) => set("technique", e.target.value ? normalizarTecnica({ tipo: e.target.value }) : null)}>
-              <option value="">— sin técnica —</option>
-              {Object.values(TECNICAS).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-            </select>
-          </label>
-          {draft.technique?.tipo && (
-            <>
-              {/* "Bajadas" solo para las tecnicas que registran escalones. Una
-                  isometrica en estiramiento no tiene ninguna: preguntar cuantas
-                  es ofrecer configurar algo que no existe. */}
-              {TECNICAS[draft.technique.tipo]?.pasos > 0 && (
-                <label><span>Bajadas</span>
-                  <select value={draft.technique.pasos} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, pasos: Number(e.target.value) }))}>
-                    {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+          </EdSec>
+          {/* Lo de arriba es lo que se cambia seguido —que ejercicio, donde va,
+              cuantas series, con cuanto—. Lo de abajo se define una vez cuando
+              se escribe el programa y despues casi no se toca: catorce campos
+              seguidos hacen que encontrar el que uno vino a cambiar sea el
+              trabajo. Cada seccion lleva su RESUMEN cerrada, o plegar seria
+              esconder. */}
+          <EdSec titulo="Cómo se ejecuta"
+            resumen={[draft.tempo, `${fmtRest(draft.rest || 0)}`, draft.superset ? "superserie" : null, defDe(draft)?.corto].filter(Boolean).join(" · ")}
+            abiertoInicial={Boolean(draft.superset || draft.technique)}>
+            <div className="ed-row2">
+              <label><span>Descanso (seg)</span><input className="mono" inputMode="numeric" value={draft.rest} onChange={(e) => set("rest", num(e.target.value, true))} /></label>
+              <label><span>Tempo</span><input className="mono" value={draft.tempo} onChange={(e) => set("tempo", e.target.value)} placeholder="2-0-1-0" /></label>
+            </div>
+            <label className="ed-full"><span>Unidad</span><select value={draft.unit} onChange={(e) => set("unit", e.target.value)}><option value="reps">reps</option><option value="pasos">pasos</option></select></label>
+            <label className="ed-full"><span>Superserie con</span><select value={draft.superset ?? ""} onChange={(e) => set("superset", e.target.value || null)}><option value="">— sin superserie —</option>{siblings.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+            {/* La tecnica va JUNTO a la superserie porque son la misma pregunta
+                vista desde dos lados: como se ejecuta. Pero no son lo mismo — una
+                agrupa ejercicios y la otra pasa adentro de una serie — asi que
+                llevan colores de familia distintos. */}
+            <label className="ed-full"><span>Técnica</span>
+              <select value={draft.technique?.tipo ?? ""} onChange={(e) => set("technique", e.target.value ? normalizarTecnica({ tipo: e.target.value }) : null)}>
+                <option value="">— sin técnica —</option>
+                {Object.values(TECNICAS).map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
+            </label>
+            {draft.technique?.tipo && (
+              <div className="ed-row2">
+                {/* "Bajadas" solo para las tecnicas que registran escalones. Una
+                    isometrica en estiramiento no tiene ninguna: preguntar cuantas
+                    es ofrecer configurar algo que no existe. */}
+                {TECNICAS[draft.technique.tipo]?.pasos > 0 && (
+                  <label><span>Bajadas</span>
+                    <select value={draft.technique.pasos} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, pasos: Number(e.target.value) }))}>
+                      {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label><span>En qué series</span>
+                  <select value={draft.technique.aplica} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, aplica: e.target.value }))}>
+                    <option value="ultima">Solo la última</option>
+                    <option value="todas">Todas</option>
                   </select>
                 </label>
-              )}
-              <label><span>En qué series</span>
-                <select value={draft.technique.aplica} onChange={(e) => set("technique", normalizarTecnica({ ...draft.technique, aplica: e.target.value }))}>
-                  <option value="ultima">Solo la última</option>
-                  <option value="todas">Todas</option>
-                </select>
-              </label>
-            </>
-          )}
-          <label className="ed-full"><span>Notas / Descripción</span><textarea className="ed-textarea" rows={3} value={draft.description ?? ""} onChange={(e) => set("description", e.target.value)} placeholder="Postura, agarre, indicaciones del entrenador..." /></label>
+              </div>
+            )}
+          </EdSec>
+          <EdSec titulo="Notas"
+            resumen={draft.description?.trim() ? "1 nota" : ""}
+            abiertoInicial={Boolean(draft.description?.trim())}>
+            <label className="ed-full"><textarea className="ed-textarea" rows={3} value={draft.description ?? ""} onChange={(e) => set("description", e.target.value)} placeholder="Postura, agarre, indicaciones del entrenador..." /></label>
+          </EdSec>
         </div>
         <div className="sheetactions">
           {!isNew && <button className="del" onClick={() => onDelete(draft.id)}>Eliminar</button>}
@@ -3114,11 +3177,26 @@ const CSS = `
 .sub { color: #636366; font-size: 13px; margin-top: 4px; }
 .dlnote { font-size: 13px; color: #7A5600; background: #FFF8E1; border: 1px solid #E8C840; padding: 8px 14px; border-radius: 10px; margin-bottom: 12px; font-weight: 500; }
 .weekchips { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-/* Los dias del programa, a diferencia de las SEMANAS, tienen nombre propio y
-   largo. En una sola linea deslizable: apilados se comen la pantalla. */
-.weekchips.dias { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-.weekchips.dias::-webkit-scrollbar { display: none; }
-.weekchips.dias .chip { flex-shrink: 0; }
+/* El selector de dia. Los dias del programa, a diferencia de las SEMANAS de
+   Entrenar, tienen nombre propio y largo: no entran como chips. */
+.dia-sel { position: relative; margin-bottom: 12px; }
+.dia-sel-btn { display: flex; align-items: center; gap: 9px; width: 100%; height: 46px; padding: 0 14px; border-radius: 12px; border: 1px solid #D1D1D6; background: #FFF; cursor: pointer; text-align: left; }
+.dia-sel-lbl { font: 600 10px 'Inter'; letter-spacing: .1em; text-transform: uppercase; color: #8E8E93; flex-shrink: 0; }
+.dia-sel-nombre { flex: 1; min-width: 0; font: 600 15px 'Inter'; color: #1C1C1E; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dia-sel-n { font-size: 12px; color: #636366; flex-shrink: 0; }
+.dia-sel-chevron { font-size: 11px; color: #2C6BED; flex-shrink: 0; }
+/* Cubre la pantalla para que tocar afuera cierre, sin dibujar nada: un panel
+   anclado no oscurece lo de atras — solo hay que poder salir de el. */
+.dia-backdrop { position: fixed; inset: 0; z-index: 20; border: 0; padding: 0; background: transparent; cursor: default; }
+.dia-menu { position: absolute; top: 50px; left: 0; right: 0; z-index: 21; background: #FFF; border-radius: 12px; border: 1px solid #E5E5EA; box-shadow: 0 8px 24px rgba(0,0,0,.14); overflow: hidden; }
+.dia-op { display: flex; align-items: center; gap: 9px; width: 100%; padding: 13px 14px; border: 0; border-bottom: 1px solid #F2F2F7; background: none; cursor: pointer; text-align: left; }
+.dia-op:last-child { border-bottom: none; }
+.dia-op.on { background: #EBF2FF; }
+.dia-op:active { background: #F2F2F7; }
+.dia-op-tick { width: 14px; flex-shrink: 0; color: #2C6BED; font-size: 13px; font-weight: 700; }
+.dia-op-nombre { flex: 1; min-width: 0; font: 500 15px 'Inter'; color: #1C1C1E; }
+.dia-op.on .dia-op-nombre { font-weight: 600; }
+.dia-op-n { font-size: 12px; color: #8E8E93; flex-shrink: 0; }
 .chip { padding: 9px 16px; border-radius: 999px; border: 1px solid #D1D1D6; background: #FFF; color: #636366; font: 600 13px 'Inter'; cursor: pointer; transition: all .15s; }
 .chip.on { background: #2C6BED; border-color: #2C6BED; color: #FFF; }
 .chip.dl.on { background: #E8A317; border-color: #E8A317; color: #FFF; }
@@ -3611,12 +3689,17 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
 .consent-check { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 16px; cursor: pointer; }
 .consent-check input { margin-top: 2px; width: 18px; height: 18px; flex: 0 0 auto; }
 .consent-check span { font: 500 14px 'Inter'; color: #1C1C1E; }
-.ref-toggle { width: 100%; padding: 8px 0; background: none; border: 0; text-align: left; color: #2C6BED; font: 600 12.5px 'Inter'; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-.ref-count { padding: 1px 7px; border-radius: 999px; background: #EEF3FE; font: 600 10px 'Inter'; }
 .ref-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 4px; }
 .ref-cell { display: flex; flex-direction: column; gap: 3px; }
 .ref-cell input { width: 100%; box-sizing: border-box; text-align: center; padding: 8px 2px; }
 .ed-hint { width: 100%; margin: 2px 0 0; font: 400 12.5px 'Inter'; line-height: 1.45; color: #8E8E93; }
+/* Secciones plegables del editor. Cerradas dicen que hay adentro. */
+.ed-sec { border-top: 1px solid #F2F2F7; padding-top: 10px; }
+.ed-sec-head { display: flex; align-items: center; gap: 7px; width: 100%; padding: 4px 0; background: none; border: 0; cursor: pointer; text-align: left; }
+.ed-sec-flecha { color: #2C6BED; font-size: 11px; }
+.ed-sec-t { font: 600 13px 'Inter'; color: #1C1C1E; text-transform: none; letter-spacing: 0; }
+.ed-sec-r { flex: 1; min-width: 0; font-size: 11.5px; color: #8E8E93; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+.ed-sec-body { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
 .ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ed-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
@@ -3644,7 +3727,10 @@ a.btn-ghost { display: flex; align-items: center; justify-content: center; text-
    entraba por un caracter. Y break-word, no anywhere: anywhere parte la palabra
    aunque entre entera en el renglon siguiente ("Recomposició / n — Julia"). */
 .prog-header-row h1 { flex: 1; min-width: 0; overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.prog-switch-btn { height: 38px; padding: 0 13px; gap: 7px; border-radius: 999px; background: #FFF; border: 1px solid #2C6BED; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+/* El titulo ES el boton: hereda su tipografia y no le saca ancho a nada. */
+.prog-switch-btn { display: inline; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.prog-titulo-chevron { display: inline-block; margin-left: 8px; font-size: 0.62em; line-height: 1; color: #2C6BED; vertical-align: middle; }
+.prog-switch-btn:active .prog-titulo-chevron { opacity: .5; }
 .export-btn { height: 38px; padding: 0 14px; border-radius: 10px; background: #FFF; border: 1px solid #D1D1D6; color: #2C6BED; font: 600 13px 'Inter'; cursor: pointer; flex-shrink: 0; }
 .export-btn:active { background: #F2F2F7; }
 /* Las dos ediciones del programa, juntas y con nombre. Van despues de los dias
