@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import * as XLSX from "xlsx";
-import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, DELOAD_DEFAULT } from "@/lib/formulas";
+import { brzycki, keyOf, isNum, setsFor, repsFor, refFor, cargaEfectiva, DELOAD_DEFAULT } from "@/lib/formulas";
+import { pesoVigente } from "@/lib/medidas";
 import { TECNICAS, defDe, pasosDe, pasosDeLog, pasoHecho, serieCerrada, normalizar as normalizarTecnica, porAlias as tecnicaPorAlias } from "@/lib/tecnicas";
 import { migrarACatalogo, resolverEjercicios, agregarAlCatalogo, buscarEnCatalogo, tieneSeriesRegistradas, absorberDeProgramas, sinReferenciasHuerfanas } from "@/lib/catalog";
 import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCatalog, limpiarBorrados, pushBorrados, logsFromHistory, sesionesPendientes, claveSesion, marcarParaAlumnos, hayServidor } from "@/lib/sync/client";
@@ -89,12 +90,12 @@ function reubicar(exercises, ex, despuesDe) {
  * adentro de una pantalla porque lo usan dos —el grafico de bienestar y el
  * historial— y dos copias de la misma suma se separan al primer cambio.
  */
-function tonelajeSesion(h) {
+function tonelajeSesion(h, carga = (_exId, kg) => parseFloat(kg)) {
   let t = 0;
   for (const ex of h?.exercises || []) {
     for (const st of ex.sets || []) {
       for (const c of [st, ...(Array.isArray(st.pasos) ? st.pasos : [])]) {
-        const kg = parseFloat(c.kg), reps = parseInt(c.reps);
+        const kg = carga(ex.id, c.kg), reps = parseInt(c.reps);
         if (isNum(kg) && reps) t += kg * reps;
       }
     }
@@ -412,21 +413,26 @@ export default function ForgeApp() {
   const marcarRed = (llego) => setHayRed(llego);
 
   /**
-   * Las medidas, cuando se abre Progreso.
+   * Las medidas, al entrar con cuenta.
    *
-   * No al arrancar la app: son de otra pantalla y el gimnasio no las necesita.
-   * Se recargan al volver de cargar una toma —`showMedidas` pasa a false— asi
-   * el grafico no queda mostrando la version anterior.
+   * Empezaron cargandose solo al abrir Progreso, que alcanzaba para el grafico
+   * — pero desde que el peso corporal entra en el tonelaje de los ejercicios a
+   * peso corporal, el MISMO numero se muestra tambien en el Historial. Traerlas
+   * tarde hacia que una sesion valiera 12t antes de abrir Progreso y 14t
+   * despues. Se recargan al volver de cargar una toma (`showMedidas` a false).
+   *
+   * Sin red no llegan y los ejercicios a peso corporal quedan afuera, que es el
+   * comportamiento que la app tuvo siempre.
    */
   useEffect(() => {
-    if (!signedIn || tab !== "progreso" || showMedidas) return;
+    if (!signedIn || showMedidas) return;
     let vigente = true;
     fetch("/api/medidas")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (vigente && d?.medidas) setMedidas(d.medidas); })
       .catch(() => {});
     return () => { vigente = false; };
-  }, [signedIn, tab, showMedidas]);
+  }, [signedIn, showMedidas]);
 
   const [perfilLocal, setPerfilLocal] = useState(null);
   useEffect(() => {
@@ -1130,6 +1136,35 @@ export default function ForgeApp() {
     return fuera;
   }, [program, history]);
 
+  /**
+   * El peso corporal que tenia la persona cuando entreno esa sesion.
+   *
+   * Sale del historial (que tiene la fecha de cada sesion) contra las tomas de
+   * medidas. Una sesion que todavia no termino no esta en el historial: ahi
+   * vale el peso de hoy, que es el correcto para lo que se esta haciendo ahora.
+   */
+  const pesoDeLaSesion = useMemo(() => {
+    const fechas = new Map();
+    for (const h of history) fechas.set(`${h.week}|${h.session}`, h.date);
+    return (week, session) => pesoVigente(medidas, fechas.get(`${week}|${session}`) ?? Date.now());
+  }, [history, medidas]);
+
+  /**
+   * Los kilos de una serie del HISTORIAL, con el peso corporal incluido si el
+   * ejercicio va a peso corporal. El historial guarda el nombre y las series
+   * pero no la referencia, asi que hay que resolver el ejercicio contra el
+   * programa — incluidos los retirados, o una dominada que salio del programa
+   * dejaria de sumar hacia atras.
+   */
+  const cargaDelHistorial = (h) => (exId, kg) => {
+    const ex = program.find((e) => e.id === exId) || exercisesFueraDelPrograma.get(exId);
+    return cargaEfectiva({
+      ref: refFor(ex, h.week),
+      kg,
+      pesoCorporal: pesoDeLaSesion(h.week, h.session),
+    });
+  };
+
   const metrics = useMemo(() => {
     const tonnage = {}; const e1rms = {};
     for (const [k, l] of Object.entries(logs)) {
@@ -1157,18 +1192,28 @@ export default function ForgeApp() {
       //
       // Importa mas de lo que parece: el semaforo y las reglas de progresion
       // leen este numero para decidir si subir carga.
-      const kg = parseFloat(l.kg), reps = parseInt(l.reps);
+      // En un ejercicio a peso corporal el campo de kilos es el LASTRE, asi que
+      // ocho dominadas quedaban en cero: sin tonelaje y sin e1RM. `cargaEfectiva`
+      // le suma el peso corporal VIGENTE a la fecha de esa sesion — no el de
+      // hoy, que reescribiria hacia atras cada dominada ya registrada cada vez
+      // que la balanza cambia. Sin medidas cargadas devuelve null y el
+      // ejercicio queda afuera, como antes.
+      const ref = refFor(exercise, w);
+      const bw = pesoDeLaSesion(w, exercise.session);
+      const kg = cargaEfectiva({ ref, kg: l.kg, pesoCorporal: bw });
+      const reps = parseInt(l.reps);
       if (isNum(kg) && reps) {
         const e1 = brzycki(kg, reps);
         if (e1) { e1rms[exId] = e1rms[exId] || {}; e1rms[exId][w] = Math.max(e1rms[exId][w] || 0, e1); }
       }
       for (const c of [l, ...pasosDeLog(l)]) {
-        const k = parseFloat(c?.kg), r = parseInt(c?.reps);
+        const k = cargaEfectiva({ ref, kg: c?.kg, pesoCorporal: bw });
+        const r = parseInt(c?.reps);
         if (isNum(k) && r) tonnage[w] = (tonnage[w] || 0) + k * r;
       }
     }
     return { tonnage, e1rms };
-  }, [logs, program, exercisesFueraDelPrograma]);
+  }, [logs, program, exercisesFueraDelPrograma, pesoDeLaSesion]);
 
   /**
    * Filas de la tabla de e1RM: los del programa primero, y despues los
@@ -1422,10 +1467,12 @@ export default function ForgeApp() {
    * corresponda a la sesion que se estaba respondiendo.
    */
   const datosBienestar = useMemo(() => {
-    const tonelajeDe = (h) => tonelajeSesion(h) || null;
+    const tonelajeDe = (h) => tonelajeSesion(h, cargaDelHistorial(h)) || null;
     const propias = history.filter((h) => !h.programId || h.programId === activeProgramId);
     return bienestar(propias, tonelajeDe);
-  }, [history, activeProgramId]);
+    // Las medidas entran por `cargaDelHistorial`: sin recalcular cuando llegan,
+    // el gráfico seguiría mostrando el tonelaje sin el peso corporal.
+  }, [history, activeProgramId, medidas, program]);
 
   /**
    * Tonelaje por grupo muscular y semana.
@@ -1442,14 +1489,16 @@ export default function ForgeApp() {
       const ex = program.find((e) => e.id === exId) || exercisesFueraDelPrograma.get(exId);
       if (!ex || ex.unit === "pasos") continue;
       const g = ex.group || "Sin grupo";
+      const ref = refFor(ex, w);
+      const bw = pesoDeLaSesion(w, ex.session);
       for (const c of [l, ...pasosDeLog(l)]) {
-        const kg = parseFloat(c?.kg), reps = parseInt(c?.reps);
+        const kg = cargaEfectiva({ ref, kg: c?.kg, pesoCorporal: bw }), reps = parseInt(c?.reps);
         if (!isNum(kg) || !reps) continue;
         (out[g] ||= {})[w] = ((out[g] || {})[w] || 0) + kg * reps;
       }
     }
     return out;
-  }, [logs, program, exercisesFueraDelPrograma]);
+  }, [logs, program, exercisesFueraDelPrograma, pesoDeLaSesion]);
 
   // Blocks for Programa tab (must be before early return)
   const progBlocks = useMemo(() => getBlocks(ejerciciosVistos.filter((e) => e.session === activeProgSession)), [ejerciciosVistos, activeProgSession]);
@@ -2023,7 +2072,7 @@ export default function ForgeApp() {
                 </div>
                 {sesiones.map((h) => {
                   const hechos = h.exercises.filter((e) => e.sets.length > 0);
-                  const ton = tonelajeSesion(h);
+                  const ton = tonelajeSesion(h, cargaDelHistorial(h));
                   // Como fue la sesion, sin abrirla: cuantos ejercicios
                   // quedaron en cada color. El semaforo ya existia adentro y
                   // habia que desplegar para verlo, ejercicio por ejercicio.

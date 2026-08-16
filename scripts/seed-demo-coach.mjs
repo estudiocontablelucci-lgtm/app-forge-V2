@@ -150,7 +150,17 @@ await tr.saveSession({
   performedAt: hace(1), durationMin: 47, health: { sleep: 3, stress: 4, energy: 3 },
   note: "Semana con mucho laburo, llegué cansada. Las dominadas salieron igual.",
   sets: [
-    serie(5, 1, null, 7, 1), serie(5, 2, null, 6, 1), serie(5, 3, null, 5, 0),
+    // Dominadas es `e6`, que en la lista es el indice 6 y no el 5: `serie(5)`
+    // apuntaba a Hip thrust, asi que la unica sesion con un ejercicio a PESO
+    // CORPORAL de toda la demo en realidad no lo tenia — y por eso ninguna
+    // verificacion habia tocado nunca ese camino.
+    //
+    // La primera con LASTRE y las otras dos sin nada: en un ejercicio a peso
+    // corporal el campo de kilos es el lastre, y hay que poder ver que se SUMA
+    // al cuerpo en vez de reemplazarlo. Va adentro de esta sesion y no en una
+    // nueva: agregar una completaba la semana 1 y la demo dejaba de tener una
+    // semana a medias, que es lo que verifica el aviso de Progreso.
+    serie(6, 1, 5, 6, 1), serie(6, 2, null, 6, 1), serie(6, 3, null, 5, 0),
   ],
 });
 
