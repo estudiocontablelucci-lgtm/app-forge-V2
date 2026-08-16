@@ -347,11 +347,29 @@ rastro del anterior — o sea, ninguna evolucion posible — mientras
 para el mismo dato, y el que servia estaba escondido detras de "Ver mis medidas".
 El Perfil ahora lo MUESTRA (ultimo valor y su fecha) y lleva a cargarlo.
 
-Ese hint ademas mentia: decia "se usa para el e1RM de los ejercicios con peso
-corporal" y **no lo leia ningun calculo** — era una intencion que nunca se cableo.
-La columna sigue existiendo y sin uso. Conectarla es otra tarea y toca numeros
-historicos: con las tomas fechadas, lo correcto es que cada sesion use el peso
-VIGENTE a esa fecha, no el de hoy.
+**El peso corporal ES la carga en dominadas y fondos.** En un ejercicio con
+`refKg: "BW"` el campo de kilos es el LASTRE —la pantalla de Entrenar lo rotula
+"+KG"— asi que ocho dominadas se registraban con `kg` vacio y valian CERO: fuera
+del tonelaje y sin e1RM. La app decia que no habias movido nada mientras te
+levantabas ochenta kilos ocho veces. `cargaEfectiva()` en `lib/formulas.js` suma
+las dos cosas; sin peso conocido devuelve null y el ejercicio queda afuera, que
+es el comportamiento de siempre.
+
+**Y el peso que entra es el VIGENTE A ESA FECHA** (`pesoVigente()` en
+`lib/medidas.js`), no el de hoy. Es la razon por la que el peso tuvo que dejar de
+ser un numero suelto: con uno solo, bajar tres kilos reescribia hacia atras el
+e1RM de cada dominada que hiciste en tu vida. Entrenar antes de haberse medido
+usa la primera medicion que exista — aproximar es mejor que dejar las primeras
+semanas sin e1RM.
+
+Va en las dos puntas: la pantalla de Progreso del atleta y la ficha del
+entrenador (`cargaConPeso` en `lib/coach/metrics.js`, con las medidas del
+alumno). Si estuviera en una sola, los dos verian un e1RM distinto del mismo
+ejercicio, que es justo lo que ese modulo existe para evitar. `set_logs.e1rm`
+sigue guardando el de la carga EXTERNA: nadie lo lee para mostrar —las dos
+pantallas recalculan— pero conviene saberlo antes de usarlo.
+
+`npm run verify:bodyweight` cubre las dos funciones y el camino del coach.
 
 **La evolucion se ve en Progreso** (`components/EvolucionMedidas.jsx`), que es
 donde uno va a preguntarse si algo cambio; cargar sigue en su pantalla. **UNA

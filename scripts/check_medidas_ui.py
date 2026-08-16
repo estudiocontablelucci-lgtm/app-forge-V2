@@ -113,6 +113,18 @@ def main() -> int:
               "up" not in clase and "dn" not in clase,
               f"pinta el cambio de peso como bueno o malo: {clase!r}")
 
+        print("\nel peso corporal es carga")
+        # La demo tiene Dominadas con `refKg: "BW"`. El campo de kilos ahi es el
+        # LASTRE, asi que sin peso corporal esas series valian cero: ni tonelaje
+        # ni e1RM. Con las tomas cargadas arriba, tienen que aparecer.
+        cuerpo = pg.inner_text("body")
+        check("las dominadas ya tienen e1RM", "Dominadas" in cuerpo,
+              "la tabla de e1RM sigue sin el ejercicio a peso corporal")
+        fila = pg.locator(".e1row", has_text="Dominadas")
+        valores = fila.first.inner_text().replace("\n", " ") if fila.count() else ""
+        check("y no es cero", any(c.isdigit() for c in valores.replace("Dominadas", "")),
+              f"la fila dice {valores!r}")
+
         print("\nel peso salio del Perfil")
         pg.locator(".acct").click()
         pg.wait_for_timeout(1500)

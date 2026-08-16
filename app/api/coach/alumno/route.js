@@ -19,6 +19,7 @@ import { getProgram } from "@/lib/repo/programs.js";
 import { asignacionDeMiAlumno, loQueEntreno } from "@/lib/repo/training.js";
 import { unscope, unscopeProgram } from "@/lib/sync/ids.js";
 import { fichaDeAlumno } from "@/lib/coach/metrics.js";
+import { listar as listarMedidas } from "@/lib/repo/medidas.js";
 
 export async function GET(request) {
   const s = await getServerSession(authOptions);
@@ -46,8 +47,14 @@ export async function GET(request) {
   const programa = unscopeProgram(s.user.id, completo);
   const { sesiones, sets } = await loQueEntreno(asignacion.assignmentId);
 
+  // Las medidas del alumno entran en el calculo: en dominadas y fondos el peso
+  // corporal ES la carga, y sin el la ficha mostraria un e1RM distinto del que
+  // ve el alumno en su propia pantalla.
+  const medidas = await listarMedidas(alumno);
+
   const ficha = fichaDeAlumno({
     programa,
+    medidas,
     sesiones,
     // Las series apuntan al ejercicio con el id prefijado del coach (el alumno
     // no lo vuelve a prefijar). Sin sacarle el prefijo no matchean con los
