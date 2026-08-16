@@ -34,6 +34,14 @@ function Seccion({ titulo, resumen, children, abiertaPorDefecto = false }) {
   );
 }
 
+/** "01 ago" — la fecha de la ultima medicion, no su forma ISO. */
+function fechaCorta(iso) {
+  const d = new Date(`${iso}T12:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+}
+
 /** Una preferencia: titulo, explicacion de que hace, y el interruptor. */
 function Pref({ id, titulo, detalle, valor, onChange, deshabilitado = false }) {
   return (
@@ -239,8 +247,8 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
         <div className="vacio-card">
           <p className="vacio-t">Sin conexión</p>
           <p className="vacio-p">
-            Esto es lo último que sabemos de tu cuenta. Los cambios de nombre o peso
-            necesitan conexión; el resto de la app funciona igual.
+            Esto es lo último que sabemos de tu cuenta. Cambiar el nombre necesita
+            conexión; el resto de la app funciona igual.
           </p>
         </div>
       )}
@@ -274,7 +282,7 @@ export default function ProfileScreen({ onClose, syncState, onSync, syncing, per
                 <div className="prof-peso-l">Peso corporal</div>
                 <div className="prof-peso-v mono">
                   {ultimoPeso ? `${ultimoPeso.v} kg` : "sin registrar"}
-                  {ultimoPeso && <i>{ultimoPeso.fecha}</i>}
+                  {ultimoPeso && <i>{fechaCorta(ultimoPeso.fecha)}</i>}
                 </div>
               </div>
               <button className="cbtn-chico" onClick={onVerMedidas}>Medidas</button>
