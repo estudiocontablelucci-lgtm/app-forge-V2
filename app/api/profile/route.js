@@ -2,11 +2,17 @@
  * Perfil del usuario.
  *
  *   GET   /api/profile   datos de la cuenta
- *   PATCH /api/profile   editar nombre y peso corporal
+ *   PATCH /api/profile   editar el nombre
  *
  * El email no se edita: es la identidad con la que entra (clave natural en
  * `users`). Cambiarlo seria crear otra cuenta, no editar esta.
  * La foto viene del proveedor OAuth y tampoco se edita a mano.
+ *
+ * El PESO tampoco, y es lo unico que se saco de aca: se carga con las medidas,
+ * que llevan FECHA, porque de ahi sale la carga de dominadas y fondos. Un
+ * numero suelto sin fecha reescribia hacia atras el e1RM de cada serie ya
+ * registrada cada vez que la balanza cambiaba. La columna `users.body_weight_kg`
+ * queda sin uso: las migraciones aplicadas no se editan.
  */
 import { getServerSession } from "@/lib/auth/nextauth-interop";
 import { authOptions } from "@/lib/auth/options";
@@ -46,19 +52,10 @@ export async function PATCH(request) {
     cambios.displayName = nombre;
   }
 
-  if (body.bodyWeightKg !== undefined) {
-    if (body.bodyWeightKg === null || body.bodyWeightKg === "") {
-      cambios.bodyWeightKg = null;
-    } else {
-      const kg = Number(body.bodyWeightKg);
-      // Rango amplio a proposito: no es validacion medica, es atajar el dedazo
-      // (poner 700 en vez de 70) que despues ensucia el e1RM de los BW.
-      if (!Number.isFinite(kg) || kg <= 0 || kg > 400) {
-        return Response.json({ error: "peso fuera de rango" }, { status: 400 });
-      }
-      cambios.bodyWeightKg = kg;
-    }
-  }
+  // `bodyWeightKg` ya no se acepta: el peso se carga con las medidas, que llevan
+  // fecha, y desde ahi alimenta el e1RM de los ejercicios a peso corporal. Un
+  // cliente viejo —una PWA cacheada que todavia mande el campo— no rompe: se
+  // ignora en silencio, que es lo correcto para un campo que dejo de existir.
 
   try {
     const user = await updateProfile(id, cambios);

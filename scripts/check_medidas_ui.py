@@ -132,8 +132,9 @@ def main() -> int:
         check("el Perfil ya no tiene un campo de peso editable",
               pg.locator("input.finput.mono").count() == 0,
               "sigue habiendo un input de peso suelto")
+        # La fecha va como la escribe el resto de la app ("01 ago"), no en ISO.
         check("pero muestra el ultimo, con su fecha",
-              "82.1 kg" in perfil and "2026-08-01" in perfil,
+              "82.1 kg" in perfil and "01-ago" in perfil,
               f"el perfil dice: {perfil[:200]!r}")
         check("y lleva a las medidas", pg.locator(".cbtn-chico").count() == 1,
               "no hay como llegar a cargarlo")
