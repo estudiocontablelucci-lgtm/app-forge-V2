@@ -621,3 +621,52 @@ del ejercicio entre dispositivos, que es lo que la v04 vino a arreglar.
 quede consistente. Hay que mover todo a un rango libre primero. Un `--dry` no lo
 detecta — se descubre escribiendo, y para eso esta `scripts/ensayo-ciclo2.mjs`,
 que copia produccion a una base descartable.
+
+### 2026-08-18 — Benchmark de apps: cinco huecos tomados, dos frenados
+
+**Decision**: relevamiento de MyFitCoach, RP Hypertrophy, Liftosaur y Hevy contra
+lo que FORGE ya tiene. Detalle completo en `docs/benchmark-apps-2026-08.md`.
+
+Se toman: **"la vez pasada"** en Entrenar · **volumen semanal por grupo muscular** ·
+**resumen de progreso** que propone las refs siguientes · **feedback de recuperacion
+por grupo** · **cierre de sesion** · **imagenes en la ficha de ejercicio**.
+Se posterga: **records personales**. Backlog sin definir: **social**.
+
+**Motivo**: los tres primeros no agregan una sola pregunta al usuario — muestran
+algo que la app ya sabe y no dice. La serie anterior esta en `logs`, el grupo
+muscular esta en `lib/catalog.js` y el veredicto del semaforo se calcula y se
+descarta. El hueco no era de datos, era de pantalla.
+
+**Corolario 1 — el semaforo propone, no aplica.** La progresion automatica es lo
+que hace Liftosaur con Liftoscript, pero aca una ref ya entrenada es un HECHO y
+en un programa asignado el que decide es el entrenador. Va en un resumen para
+revisar de una sentada, no serie por serie ni autoaplicado.
+
+**Corolario 2 — la recuperacion y el resultado son dos preguntas y tienen dos
+momentos, los dos ya construidos.** La recuperacion va en el health check (al
+terminar de entrenar nadie sabe como se recupero: recien entreno) y el resultado
+junto a la nota de sesion, que ya viaja al entrenador. Una encuesta semanal
+aparte necesitaria un momento que la app no tiene, y la memoria del dolor
+muscular no llega al domingo. El agregado semanal se CALCULA, como en
+`lib/asistencia.js`.
+
+**Corolario 3 — un "¡buen trabajo!" fijo es el error del `Sincronizado · 4
+programas`.** Una frase que se emite pase lo que pase deja de informar. El cierre
+dice el hecho —duracion, tonelaje, colores, comparacion con la vez pasada— y
+despues de una sesion mala reconoce en vez de felicitar: "Dia dificil.
+Terminaste igual" es verdad, que es el punto.
+
+**Lo que NO se copia**: nutricion y macros (otro producto, y consejo nutricional
+sobre datos de salud de terceros es responsabilidad que este proyecto no toma) y
+el plan generado automaticamente (ninguna generacion sabe que no puede proponer
+peso muerto convencional con discopatias L3-S1).
+
+**Corolario 4 — "la vez pasada" se MUESTRA, no prellena.** El prellenado se queda
+como esta: sale del programa (`refFor` en `ForgeApp.jsx:266-282`, con `refsByWeek`
+sobre `refKg`; REPS y RIR son solo placeholder). Hevy prellena con lo ultimo
+porque es un LOG y no hay programa que mande; FORGE es un programa EJECUTADO. Con
+el prefill de la vez pasada el mesociclo deriva solo a repetir carga, **el deload
+se anula sin que nadie lo note** —es -40% a proposito— y `refsByWeek` queda
+decorativo. Ademas se cae el hallazgo del resumen: como el prefill sale de la ref,
+la unica forma de que "subir carga" se materialice es cambiar la ref, que es
+justo lo que el resumen propone.

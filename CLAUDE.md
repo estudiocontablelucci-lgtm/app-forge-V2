@@ -932,6 +932,13 @@ entrenador se suma cuando la hay. `npm run verify:programa-ui` cubre las dos reg
    que se cierre la app), aviso que suena con la pantalla apagada, preferencias
    y ayudas contextuales~~ Done
 
+**Lo que sigue sale de `docs/benchmark-apps-2026-08.md`** (relevamiento contra
+MyFitCoach, RP Hypertrophy, Liftosaur y Hevy). Los tres primeros no agregan
+ninguna pregunta al usuario — muestran algo que la app YA sabe y no dice: la
+serie de la vez pasada (esta en `logs`), el volumen semanal por grupo muscular
+(el grupo esta en `lib/catalog.js` y hoy solo lo imprime `gen:programa`) y el
+veredicto del semaforo, que se calcula y se descarta sin que nadie lo ejecute.
+
 ### Dos cosas del sync que ya rompieron
 
 **Un programa que NO sube se dice, con su nombre.** `sincronizar` recorria los programas,
