@@ -708,3 +708,36 @@ reproduccion de la version vieja y contrasta cada caso contra ella; y
 `check_anterior_ui.py` corrido contra un build con el comportamiento anterior da
 4 FALLAS —las dos lineas y las dos cabeceras— mientras los checks del prellenado
 y del no-mezclar pasan igual. Un test verde que nunca se vio en rojo no prueba nada.
+
+### 2026-08-20 — Series semanales por grupo: el plan y lo hecho, juntos
+
+**Decision**: `lib/volumen.js`. El PLAN al pie de Programa, el plan CONTRA lo
+hecho en Progreso, pegado a "Tonelaje por grupo muscular" y antes que el.
+
+**Motivo**: es la metrica con la que se programa hipertrofia y el dato estaba
+entero desde siempre — el grupo vive en `lib/catalog.js` y `gen:programa` ya lo
+imprimia para cruzarlo contra el documento de Salud. Vivia en la salida de un
+script de terminal y en ninguna pantalla.
+
+**Corolario 1 — una serie cuenta si tiene REPS, no si esta marcada `done`.**
+`isDone` da true con kg O reps, y el campo de kilos se PRELLENA con la ref al
+enfocarlo: con el criterio ingenuo, tocar el input sumaba una serie que nadie
+hizo. El tonelaje no se infla con eso porque ademas exige reps para multiplicar;
+un conteo de series, si. Con el bug puesto, el grupo pasa de 0/3 a 1/3 y el
+total de 14 a 15 — las dos capas de verificacion lo detectan.
+
+**Corolario 2 — las dos mitades por separado no dicen lo mismo.** El plan es una
+propiedad del programa; el real sale de lo registrado. Lo que solo se ve
+teniendo las dos es la DIFERENCIA, que es como se descubrio que `ASIM-IZQ` nunca
+se ejecuto — pero a mano y meses despues.
+
+**Corolario 3 — dos tarjetas que dicen "por grupo" no pueden estar separadas.**
+"Tonelaje por grupo muscular" ya existia y quedaba cuatro tarjetas mas abajo,
+con Medidas y Asistencia en el medio: se leen como la misma repetida y hay que
+descifrar cual mirar. Las series van PRIMERO porque son las unicas con vara —el
+programa prescribe series, no kilos—, asi que solo estas se comparan contra el
+plan.
+
+**Corolario 4 — en el deload el plan son las series REDUCIDAS.** Pasa por
+`setsFor`. Contra las de una semana normal, la descarga se leeria como
+incumplimiento justo en la semana en que bajar ES el plan.
