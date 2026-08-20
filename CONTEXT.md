@@ -670,3 +670,41 @@ se anula sin que nadie lo note** —es -40% a proposito— y `refsByWeek` queda
 decorativo. Ademas se cae el hallazgo del resumen: como el prefill sale de la ref,
 la unica forma de que "subir carga" se materialice es cambiar la ref, que es
 justo lo que el resumen propone.
+
+### 2026-08-20 — La vez pasada: se muestra bajo su columna, y no prellena
+
+**Decision**: `lib/anterior.js` + una linea `.antes` bajo cada serie en Entrenar,
+con cada valor debajo de su columna (kg, reps, RIR). El prellenado NO cambia:
+sigue saliendo de `refFor`.
+
+**Motivo**: la pantalla mostraba `Ref: 140kg × 8-10` —la prescripcion— y nada de
+lo que se hizo de verdad, aunque el dato estuviera en `logs` desde el primer dia.
+Salir a Historial a buscarlo es lo que nadie hace a mitad de serie, asi que el
+peso se elegia de memoria.
+
+**No era una feature nueva sino una que estaba a medias.** `prevWeekSummary` ya
+existia y mostraba el e1RM de la semana anterior en la cabecera, con dos
+defectos: `const pw = week === "DL" ? 4 : week - 1` miraba la semana LITERAL
+anterior —un ejercicio no entrenado esa semana se quedaba sin comparacion
+teniendo datos mas atras— y ese **`4` escrito a mano** hacia que el deload de un
+programa de 6 semanas comparara contra la 4, siendo que las semanas son
+dinamicas por programa desde la fase 3. Ademas decia de cuando era el numero con
+un `title`: en un telefono no hay hover.
+
+**Corolario 1 — una sola semana para todo el ejercicio.** Resolver cada serie por
+separado parece mas completo y miente: la S1 de la semana pasada y la S4 de hace
+un mes en la misma pantalla, sin decir que son dias distintos. Si la ultima vez
+se hicieron tres series y hoy tocan cuatro, la cuarta no tiene comparacion.
+
+**Corolario 2 — el deload nunca es fuente**, en los dos sentidos. Es -40% a
+proposito: comparar contra el diria que todo el mundo mejoro.
+
+**Corolario 3 — los escalones del dropset quedan afuera.** `logsFromHistory` no
+los reconstruye, asi que apareceria en el telefono que los cargo y no en el que
+sincronizo. Un dato que depende del dispositivo es peor que no mostrarlo.
+
+**Verificado con el bug puesto.** `verify-anterior.mjs` lleva adentro una
+reproduccion de la version vieja y contrasta cada caso contra ella; y
+`check_anterior_ui.py` corrido contra un build con el comportamiento anterior da
+4 FALLAS —las dos lineas y las dos cabeceras— mientras los checks del prellenado
+y del no-mezclar pasan igual. Un test verde que nunca se vio en rojo no prueba nada.

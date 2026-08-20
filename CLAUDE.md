@@ -51,6 +51,7 @@ app-forge-v2/
 │   ├── formulas.js        # brzycki, keyOf, isNum — fuente unica (UI y server)
 │   ├── auth/              # options, adapter propio, envio Resend, interop v4
 │   ├── coach/             # metrics.js (funciones puras) + invite-email.js
+│   ├── anterior.js        # la vez pasada: la ultima semana CON DATOS, una sola
 │   ├── medidas.js         # medidas corporales: derivadas, proporciones, asimetrias
 │   ├── asistencia.js      # dias de gimnasio por mes, promedios, racha
 │   ├── descanso.js        # el descanso como VENCIMIENTO + las preferencias
@@ -92,6 +93,8 @@ app-forge-v2/
 │   ├── gen_iconos.py          # rasteriza favicon.svg a los PNG del manifest
 │   ├── check_coach_ui.py      # headless: la seccion de entrenador, con 2 sesiones
 │   ├── check_programa_ui.py   # headless: solo lectura, la ficha y los borrados
+│   ├── verify-anterior.mjs    # la vez pasada, contra una reproduccion del bug viejo
+│   ├── check_anterior_ui.py   # headless: se muestra y NO prellena, dentro del deload
 │   ├── verify-descanso.mjs    # el vencimiento, la restauracion y las preferencias
 │   ├── check_descanso_ui.py   # headless: el cronometro, con el reloj adelantado
 │   └── check_perfil_ui.py     # headless: orden, secciones plegadas y renglones
@@ -932,12 +935,59 @@ entrenador se suma cuando la hay. `npm run verify:programa-ui` cubre las dos reg
    que se cierre la app), aviso que suena con la pantalla apagada, preferencias
    y ayudas contextuales~~ Done
 
+9. ~~La vez pasada: lo que se hizo la ultima vez, bajo su columna en Entrenar~~ Done
+
 **Lo que sigue sale de `docs/benchmark-apps-2026-08.md`** (relevamiento contra
-MyFitCoach, RP Hypertrophy, Liftosaur y Hevy). Los tres primeros no agregan
-ninguna pregunta al usuario — muestran algo que la app YA sabe y no dice: la
-serie de la vez pasada (esta en `logs`), el volumen semanal por grupo muscular
-(el grupo esta en `lib/catalog.js` y hoy solo lo imprime `gen:programa`) y el
-veredicto del semaforo, que se calcula y se descarta sin que nadie lo ejecute.
+MyFitCoach, RP Hypertrophy, Liftosaur y Hevy). Ninguno agrega una pregunta al
+usuario — muestran algo que la app YA sabe y no dice: el volumen semanal por
+grupo muscular (el grupo esta en `lib/catalog.js` y hoy solo lo imprime
+`gen:programa`) y el veredicto del semaforo, que se calcula y se descarta sin
+que nadie lo ejecute.
+
+## La vez pasada (fase 9)
+
+Entrenar mostraba `Ref: 140kg × 8-10`, que es la PRESCRIPCION, y nada de lo que
+se hizo de verdad. El dato estaba guardado desde el primer dia —`logs` es
+`week|exId|setN` y conserva todas las semanas— pero para verlo habia que salir a
+Historial, que es lo que nadie hace a mitad de serie: se decidia de memoria.
+Ahora va bajo cada serie, **cada valor debajo de su columna** (`lib/anterior.js`).
+
+**Se MUESTRA, no prellena.** El campo se sigue llenando desde el programa
+(`refFor`, con `refsByWeek` sobre `refKg`). Hevy prellena con lo ultimo porque es
+un LOG y no hay programa que mande; FORGE es un programa EJECUTADO. Con el
+prefill de la vez pasada el mesociclo deriva solo a repetir carga y **el deload
+se anula sin que nadie lo note** —es -40% a proposito—. Ademas es la ref lo que
+hay que cambiar para que "subir carga" se materialice, que es lo que el resumen
+de progreso va a proponer. `verify:anterior-ui` lo prueba dentro del deload, que
+es donde los dos numeros son distintos y confundirlos se ve.
+
+**Es la ultima semana CON DATOS, no la literal anterior.** Lo que habia
+(`prevWeekSummary`) hacia `week === "DL" ? 4 : week - 1` y fallaba de dos formas:
+un ejercicio que esa semana no se entreno no tenia comparacion aunque hubiera
+datos mas atras, y ese **`4` escrito a mano** hacia que el deload de un programa
+de 6 semanas mirara la 4. Las semanas son dinamicas por programa desde la fase 3.
+
+**El deload nunca es FUENTE de comparacion**, en los dos sentidos: ni desde una
+semana normal ni desde el propio deload, que se compara contra la ultima normal.
+Mismo criterio que `deltaE1rm`.
+
+**UNA sola semana para todo el ejercicio, no una por serie.** Buscar cada serie
+por su cuenta parece mas completo y miente: la S1 saldria de la semana pasada y
+la S4 de hace un mes sin que la pantalla diga que son dias distintos. Si la
+ultima vez se hicieron tres series y hoy tocan cuatro, la cuarta no tiene
+comparacion — y eso es la verdad.
+
+**No trae los escalones del dropset**: `logsFromHistory` no los reconstruye, asi
+que estarian en el dispositivo que los cargo y no en el que sincronizo. Un dato
+que aparece segun el telefono es peor que no mostrarlo.
+
+**La semana iba en un `title`.** El e1RM de la cabecera ya existia y decia de
+cuando era con un atributo `title` — en un telefono no hay hover, asi que el
+numero aparecia sin fecha. Va escrito.
+
+`npm run verify:anterior` (14 checks, incluye una reproduccion del comportamiento
+viejo para que cada caso pruebe la diferencia) y `npm run verify:anterior-ui`
+(navegador, sin cuenta ni base).
 
 ### Dos cosas del sync que ya rompieron
 

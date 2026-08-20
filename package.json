@@ -41,11 +41,13 @@
     "verify:programa-ui": "python scripts/check_programa_ui.py",
     "verify:medidas-ui": "python scripts/check_medidas_ui.py",
     "gen:iconos": "python scripts/gen_iconos.py",
-    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor && npm run verify:identidad && npm run verify:medidas && npm run verify:bodyweight && npm run verify:asistencia && npm run verify:progreso && npm run verify:tecnicas && npm run verify:descanso && npm run verify:aviso && npm run verify:huerfanos && npm run verify:importar",
+    "verify": "npm run verify:excel && npm run verify:schema && npm run verify:repo && npm run verify:sync && npm run verify:deload && npm run verify:catalog && npm run verify:catalog-sync && npm run verify:coaching && npm run verify:metrics && npm run verify:editor && npm run verify:identidad && npm run verify:medidas && npm run verify:bodyweight && npm run verify:asistencia && npm run verify:progreso && npm run verify:anterior && npm run verify:tecnicas && npm run verify:descanso && npm run verify:aviso && npm run verify:huerfanos && npm run verify:importar",
     "verify:huerfanos": "node scripts/verify-catalogo-huerfanos.mjs",
     "verify:huerfanos-ui": "python scripts/check_huerfanos_ui.py",
     "verify:importar": "node scripts/verify-importar.mjs",
-    "verify:programa": "node scripts/verificar-programa.mjs"
+    "verify:programa": "node scripts/verificar-programa.mjs",
+    "verify:anterior": "node scripts/verify-anterior.mjs",
+    "verify:anterior-ui": "python scripts/check_anterior_ui.py"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

@@ -11,6 +11,7 @@ import { pushSession, pushProgram, pullAll, mergeHistory, mergePrograms, mergeCa
 import { crearProgramaBasico } from "@/lib/programa-basico";
 import { fusionarPrograma, candidatoAActualizar } from "@/lib/importar";
 import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
+import { anteriorDe, e1rmDe } from "@/lib/anterior";
 import { crearDescanso, restante, avance, restaurarDescanso, normalizarPrefs } from "@/lib/descanso";
 import { despertarAudio, agendarBeep, beepArmado, audioVivo, sonarAhora, notificarFinDescanso, limpiarAviso } from "@/lib/aviso";
 import AccountButton from "./AccountButton";
@@ -258,7 +259,21 @@ function limpiarEstado() {
 }
 
 /* ---------- Mini components ---------- */
-function ExSetRow({ ex, n, week, logs, onSetChange, onPasoChange, deload, totalSets }) {
+
+/**
+ * Los kilos de la vez pasada, tal como se leen en ESA columna.
+ *
+ * En un ejercicio con `refKg: "BW"` el campo es el LASTRE (la cabecera dice
+ * "+KG"), asi que un 8 pelado se leeria como si se hubieran hecho dominadas con
+ * ocho kilos. Y el vacio ahi no es un dato que falta: es peso corporal solo.
+ */
+const antesKg = (kg, ex) => {
+  const v = String(kg ?? "").trim();
+  if (v === "" || parseFloat(v) === 0) return ex.refKg === "BW" ? "BW" : "·";
+  return ex.refKg === "BW" ? `+${v}` : v;
+};
+
+function ExSetRow({ ex, n, week, logs, onSetChange, onPasoChange, deload, totalSets, antes }) {
   const k = keyOf(week, ex.id, n);
   const l = logs[k] || {};
   const handleChange = (field, val) => onSetChange(ex, n, field, val);
@@ -281,6 +296,18 @@ function ExSetRow({ ex, n, week, logs, onSetChange, onPasoChange, deload, totalS
         <input className="nf mono" inputMode="decimal" placeholder={ex.rir || "—"}
           value={l.rir ?? ""} onChange={(e) => handleChange("rir", e.target.value)} />
       </div>
+      {/* La vez pasada. Cada valor cae DEBAJO de su columna: asi no hace falta
+          un "×" ni leer un renglon aparte para saber cual es cual. Es un dato
+          para decidir, no un valor cargado — de ahi el gris y el tamaño.
+          El prellenado NO sale de aca: sigue saliendo del programa. */}
+      {antes ? (
+        <div className="antes mono">
+          <span className="antes-ico" aria-hidden="true">↺</span>
+          <span>{antesKg(antes.kg, ex)}</span>
+          <span>{String(antes.reps ?? "").trim() || "·"}</span>
+          <span>{String(antes.rir ?? "").trim() || "·"}</span>
+        </div>
+      ) : null}
       {abiertos ? Array.from({ length: nPasos }, (_, i) => i).map((i) => (
         <div key={i} className={`setrow paso ${pasoHecho(ps[i]) ? "done" : ""}`}>
           <span className="setn mono">↓{i + 1}</span>
@@ -1009,19 +1036,18 @@ export default function ForgeApp() {
     if (justLogged) maybeStartRest(exercise, setN, siguiente);
   }
 
+  /**
+   * La vez pasada, para la cabecera y para cada serie.
+   *
+   * Buscaba la semana LITERAL anterior (`week === "DL" ? 4 : week - 1`) y eso
+   * fallaba de dos formas: un ejercicio que esa semana no se entreno no tenia
+   * comparacion aunque hubiera datos mas atras, y el `4` escrito a mano hacia
+   * que el deload de un programa de 6 semanas comparara contra la 4. Las dos
+   * las cubre `npm run verify:anterior`.
+   */
   function prevWeekSummary(exercise) {
-    const pw = week === "DL" ? 4 : week - 1;
-    if (!pw || pw < 1) return null;
-    const rows = [];
-    for (let i = 1; i <= setsFor(exercise, pw, deloadCfg); i++) { const l = logs[keyOf(pw, exercise.id, i)]; if (l?.done) rows.push(l); }
-    if (!rows.length) return null;
-    // Los logs guardan lo que sale del input: strings. `isNum` exige un number,
-    // asi que sin parsear esto daba 0 siempre y la referencia nunca aparecia.
-    const best = Math.max(...rows.map((r) => {
-      const kg = parseFloat(r.kg), reps = parseInt(r.reps);
-      return isNum(kg) && reps ? brzycki(kg, reps) || 0 : 0;
-    }));
-    return { pw, rows, e1rm: best > 0 ? Math.round(best) : null };
+    const a = anteriorDe(logs, exercise?.id, week, weeks);
+    return a ? { ...a, e1rm: e1rmDe(a, brzycki) } : null;
   }
 
   function hasSessionData(w, sessId) {
@@ -1713,7 +1739,7 @@ export default function ForgeApp() {
               </div>
             )}
 
-            {block.exercises.map((ex, exI) => (
+            {block.exercises.map((ex, exI) => { const pv = prevWeekSummary(ex); return (
               <div key={ex.id} className={`excard ${defDe(ex) ? "con-tec" : ""} ${block.type === "superset" ? "ss-grouped" : ""} ${exI === 0 && block.type === "superset" ? "ss-first" : ""} ${exI === block.exercises.length - 1 && block.type === "superset" ? "ss-last" : ""}`}>
                 <div className="excard-head">
                   <div>
@@ -1721,7 +1747,10 @@ export default function ForgeApp() {
                     <h2 className={ex.description ? "has-desc" : ""} onClick={() => ex.description && setDescModal(ex)}>{ex.name}{ex.description ? <span className="desc-hint">i</span> : null}</h2>
                     {(() => { const t = defDe(ex); return t ? <span className="tecchip">{t.icono} {t.nombre}{t.pasos > 1 ? ` ×${t.pasos}` : ""}</span> : null; })()}
                   </div>
-                  {(() => { const pv = prevWeekSummary(ex); return pv?.e1rm ? <span className="pv-mini mono" title={weekLabel(pv.pw)}>e1RM {pv.e1rm}</span> : null; })()}
+                  {/* La semana iba en un `title`, que en un telefono no existe:
+                      no hay hover, asi que el numero aparecia sin decir de
+                      cuando era. Va escrita. */}
+                  {pv ? <span className="pv-mini mono">{weekLabel(pv.week)}{pv.e1rm ? <> · e1RM {pv.e1rm}</> : null}</span> : null}
                 </div>
                 <div className="refline mono">
                   Ref: {refLine(ex, week, deloadCfg)}{ex.tempo ? <><span className="sep">|</span> T {ex.tempo}</> : null}<span className="sep">|</span> D {fmtRest(ex.rest)}{ex.rir ? <><span className="sep">|</span> RIR {ex.rir}</> : null}
@@ -1737,6 +1766,7 @@ export default function ForgeApp() {
                     {ex.tempo && <p><b>T</b> — tempo, en segundos por fase: bajada · pausa abajo · subida · pausa arriba. <span className="mono">2-0-1-0</span> es bajar en dos, subir en uno, sin pausas.</p>}
                     <p><b>D</b> — el descanso hasta la serie siguiente.</p>
                     {ex.rir && <p><b>RIR</b> — repeticiones en reserva: cuántas te <em>sobraban</em> al cortar. RIR 2 es terminar pudiendo hacer dos más. Es como se mide el esfuerzo sin ir al fallo.</p>}
+                    {pv && <p><b>↺</b> — lo que hiciste la última vez en esa misma serie, {weekLabel(pv.week).toLowerCase()}. Está para decidir el peso, no se carga solo: lo que aparece en el campo sale del programa.</p>}
                   </Ayuda>
                 )}
 
@@ -1746,7 +1776,8 @@ export default function ForgeApp() {
                   <div className="setshead"><span></span><span>{ex.refKg === "BW" ? "+KG" : "KG"}</span><span>{ex.unit === "pasos" ? "PASOS" : "REPS"}</span><span>RIR</span></div>
                   {Array.from({ length: setsFor(ex, week, deloadCfg) }, (_, i) => i + 1).map((n) => (
                     <ExSetRow key={n} ex={ex} n={n} week={week} logs={logs} onSetChange={onSetChange}
-                      onPasoChange={onPasoChange} deload={deloadCfg} totalSets={setsFor(ex, week, deloadCfg)} />
+                      onPasoChange={onPasoChange} deload={deloadCfg} totalSets={setsFor(ex, week, deloadCfg)}
+                      antes={pv?.series?.[n]} />
                   ))}
                 </div>
 
@@ -1762,7 +1793,7 @@ export default function ForgeApp() {
                   return best > 0 ? <div className="ex-footer"><span className="e1rmnow mono">e1RM: <b>{Math.round(best)}</b></span></div> : null;
                 })()}
               </div>
-            ))}
+            ); })}
 
             <div className="navrow">
               <button className="navbtn" disabled={blockIdx === 0} onClick={() => setBlockIdx((i) => i - 1)}>&#8249; Anterior</button>
@@ -3453,6 +3484,14 @@ const CSS = `
 .setshead span { text-align: center; } .setshead span:first-child { text-align: left; }
 .setrow { display: grid; grid-template-columns: 34px 1fr 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
 .setn { color: #48484A; font-size: 14px; font-weight: 600; }
+/* La vez pasada: mismo grid que la fila, para que cada numero caiga bajo su
+   columna. Gris y chico a proposito — es una referencia, no un valor cargado. */
+/* Pegada a SU fila y separada de la siguiente: con el mismo aire arriba y
+   abajo quedaba a mitad de camino entre las dos series y no se sabia de cual
+   hablaba. */
+.antes { display: grid; grid-template-columns: 34px 1fr 1fr 1fr; gap: 8px; margin: -5px 0 14px; font-size: 11px; color: #AEAEB2; }
+.antes span { text-align: center; }
+.antes-ico { text-align: left; font-size: 12px; }
 .nf { width: 100%; height: 50px; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 12px; color: #1C1C1E; font-size: 20px; text-align: center; transition: border-color .15s; }
 .nf::placeholder { color: #AEAEB2; }
 .nf:focus { outline: none; border-color: #2C6BED; box-shadow: 0 0 0 3px rgba(44,107,237,.12); }
