@@ -52,6 +52,7 @@ app-forge-v2/
 │   ├── auth/              # options, adapter propio, envio Resend, interop v4
 │   ├── coach/             # metrics.js (funciones puras) + invite-email.js
 │   ├── anterior.js        # la vez pasada: la ultima semana CON DATOS, una sola
+│   ├── volumen.js         # series semanales por grupo: el plan y lo hecho
 │   ├── medidas.js         # medidas corporales: derivadas, proporciones, asimetrias
 │   ├── asistencia.js      # dias de gimnasio por mes, promedios, racha
 │   ├── descanso.js        # el descanso como VENCIMIENTO + las preferencias
@@ -95,6 +96,8 @@ app-forge-v2/
 │   ├── check_programa_ui.py   # headless: solo lectura, la ficha y los borrados
 │   ├── verify-anterior.mjs    # la vez pasada, contra una reproduccion del bug viejo
 │   ├── check_anterior_ui.py   # headless: se muestra y NO prellena, dentro del deload
+│   ├── verify-volumen.mjs     # series por grupo: plan, real y la serie que no cuenta
+│   ├── check_volumen_ui.py    # headless: las dos tarjetas por grupo, juntas
 │   ├── verify-descanso.mjs    # el vencimiento, la restauracion y las preferencias
 │   ├── check_descanso_ui.py   # headless: el cronometro, con el reloj adelantado
 │   └── check_perfil_ui.py     # headless: orden, secciones plegadas y renglones
@@ -936,13 +939,13 @@ entrenador se suma cuando la hay. `npm run verify:programa-ui` cubre las dos reg
    y ayudas contextuales~~ Done
 
 9. ~~La vez pasada: lo que se hizo la ultima vez, bajo su columna en Entrenar~~ Done
+10. ~~Series semanales por grupo muscular: el plan y lo hecho, juntos~~ Done
 
 **Lo que sigue sale de `docs/benchmark-apps-2026-08.md`** (relevamiento contra
-MyFitCoach, RP Hypertrophy, Liftosaur y Hevy). Ninguno agrega una pregunta al
-usuario — muestran algo que la app YA sabe y no dice: el volumen semanal por
-grupo muscular (el grupo esta en `lib/catalog.js` y hoy solo lo imprime
-`gen:programa`) y el veredicto del semaforo, que se calcula y se descarta sin
-que nadie lo ejecute.
+MyFitCoach, RP Hypertrophy, Liftosaur y Hevy). Queda el **resumen de progreso**
+que propone las refs siguientes — el veredicto del semaforo se calcula y se
+descarta sin que nadie lo ejecute. **Bloqueado hasta definir tres cosas**:
+cuanto propone subir, cuando aparece, y que pasa en un programa asignado.
 
 ## La vez pasada (fase 9)
 
@@ -988,6 +991,50 @@ numero aparecia sin fecha. Va escrito.
 `npm run verify:anterior` (14 checks, incluye una reproduccion del comportamiento
 viejo para que cada caso pruebe la diferencia) y `npm run verify:anterior-ui`
 (navegador, sin cuenta ni base).
+
+## Series semanales por grupo muscular (fase 10)
+
+Es la metrica con la que se programa hipertrofia —MEV/MRV se miden en series
+semanales por grupo— y el dato estaba entero desde siempre: el grupo vive en
+`lib/catalog.js` y `gen:programa` ya lo imprimia para cruzarlo contra el
+documento de Salud. **La app no lo mostraba en ningun lado.** Ahora esta en
+`lib/volumen.js`, en las dos puntas: el PLAN al pie de Programa y el plan
+CONTRA lo hecho en Progreso.
+
+**Una serie cuenta si tiene REPS, no si esta marcada `done`.** `isDone` da true
+con kg O reps, y el campo de kilos se PRELLENA con la ref al enfocarlo: con el
+criterio ingenuo, tocar el input sumaba una serie que nadie hizo. El tonelaje no
+se infla con eso porque ademas exige reps para multiplicar; un conteo de series,
+si. Verificado poniendo el bug: el grupo pasa de 0/3 a 1/3 y el total de 14 a 15.
+
+**Las dos mitades por separado no dicen lo mismo.** El plan es una propiedad del
+programa —se lee antes de entrenar, al revisar si un dia quedo flaco de espalda—;
+el real sale de lo registrado. Lo que solo se ve teniendo las dos es la
+DIFERENCIA: un ejercicio que se saltea siempre las hace divergir, y asi se
+descubrio que `ASIM-IZQ` nunca se ejecuto —0 series en 8 sesiones— pero a mano y
+meses despues.
+
+**En el deload el plan son las series REDUCIDAS** (pasa por `setsFor`). Mostrar
+las de una semana normal ahi diria que se dejo de cumplir el plan justo en la
+semana en que bajar ES el plan.
+
+**Va PEGADA a "Tonelaje por grupo muscular", que ya existia**, y primera de las
+dos. Separadas por Medidas y Asistencia, dos tarjetas que dicen "por grupo" se
+leen como la misma repetida. Y las series van antes porque son **las unicas con
+vara**: el programa prescribe series, no kilos, asi que solo estas se pueden
+comparar contra el plan. El tonelaje contesta "donde movi mas peso"; estas,
+"estoy haciendo el volumen que el programa pide".
+
+**Las dos barras van en la MISMA escala de series y superpuestas**, no como un
+porcentaje por grupo: 2 de 2 y 8 de 8 se dibujarian iguales, y lo primero que
+hay que ver es donde esta puesto el volumen.
+
+Detalles que ya estan decididos: un ejercicio **retirado** conserva sus series
+(descartarlas bajaria el volumen de una semana ya entrenada), los **escalones**
+del dropset no son series aparte, y un ejercicio en **pasos** SI cuenta — no da
+tonelaje porque no hay kilos que multiplicar, pero es trabajo igual.
+
+`npm run verify:volumen` (17 checks) y `npm run verify:volumen-ui`.
 
 ### Dos cosas del sync que ya rompieron
 

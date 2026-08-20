@@ -12,6 +12,7 @@ import { crearProgramaBasico } from "@/lib/programa-basico";
 import { fusionarPrograma, candidatoAActualizar } from "@/lib/importar";
 import { deltaE1rm, resumenCiclo, bienestar, fuerzaCorrelacion, BIENESTAR } from "@/lib/progreso";
 import { anteriorDe, e1rmDe } from "@/lib/anterior";
+import { porGrupo, totales, ultimaSemanaConDatos } from "@/lib/volumen";
 import { crearDescanso, restante, avance, restaurarDescanso, normalizarPrefs } from "@/lib/descanso";
 import { despertarAudio, agendarBeep, beepArmado, audioVivo, sonarAhora, notificarFinDescanso, limpiarAviso } from "@/lib/aviso";
 import AccountButton from "./AccountButton";
@@ -272,6 +273,37 @@ const antesKg = (kg, ex) => {
   if (v === "" || parseFloat(v) === 0) return ex.refKg === "BW" ? "BW" : "·";
   return ex.refKg === "BW" ? `+${v}` : v;
 };
+
+/**
+ * Series por grupo muscular, en la MISMA escala para todos.
+ *
+ * Las dos barras van superpuestas y con la misma unidad —series— en vez de
+ * pintar cada grupo como un porcentaje de si mismo: un 100% de gemelos (2 de 2)
+ * y un 80% de espalda (4 de 5) se dibujarian casi iguales, cuando la espalda
+ * lleva el doble de trabajo. Lo primero que esta pantalla tiene que contestar
+ * es DONDE esta puesto el volumen, y despues cuanto se cumplio.
+ *
+ * Si lo hecho supera lo planificado, la barra azul sobresale de la gris. Eso es
+ * un dato, no un error: series de mas es lo que pasa cuando se agrega trabajo
+ * sobre la marcha.
+ */
+function VolumenGrupos({ filas, conReal = false }) {
+  const max = Math.max(...filas.map((f) => Math.max(f.plan, f.real)), 1);
+  return (
+    <div className="volgrid">
+      {filas.map((f) => (
+        <div key={f.grupo} className="volrow">
+          <span className="vollbl">{f.grupo}</span>
+          <div className="volbar">
+            <div className="volplan" style={{ width: `${(f.plan / max) * 100}%` }} />
+            {conReal && <div className="volreal" style={{ width: `${(f.real / max) * 100}%` }} />}
+          </div>
+          <span className="volval mono">{conReal ? `${f.real}/${f.plan}` : f.plan}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function ExSetRow({ ex, n, week, logs, onSetChange, onPasoChange, deload, totalSets, antes }) {
   const k = keyOf(week, ex.id, n);
@@ -2048,6 +2080,30 @@ export default function ForgeApp() {
                 <button className="addbtn" hidden={esAsignadoVisto} onClick={() => setEditing({ id: uid(), session: activeProgSession, order: (Math.max(0, ...ejerciciosVistos.filter((e) => e.session === activeProgSession).map((e) => e.order)) + 1), name: "", group: "", sets: 3, refKg: "", repsMin: 8, repsMax: 12, tempo: "2-0-1-0", rest: 120, rir: "2", superset: null, technique: null, unit: "reps", description: "" })}>+ Agregar ejercicio</button>
               </>
             )}
+            {/* El reparto del volumen es del PROGRAMA ENTERO, no del dia que se
+                esta mirando — por eso va al pie y lo aclara. Arriba, pegado al
+                selector de dia, se leeria como el volumen de ese dia.
+
+                Y es solo el PLAN: esta pantalla es la prescripcion. Lo que se
+                hizo de verdad vive en Progreso, contra este mismo numero. */}
+            {(() => {
+              const filas = porGrupo(ejerciciosVistos, {}, 1, deloadVisto, () => null);
+              if (!filas.length) return null;
+              return (
+                <div className="card prog-volumen">
+                  <div className="cardtitle">Series por grupo · por semana</div>
+                  <p className="fhint" style={{ marginBottom: 10 }}>
+                    Lo que pide el programa completo, sumando {sesionesVistas.length === 1 ? "el día" : `los ${sesionesVistas.length} días`}.
+                    En la descarga baja.
+                  </p>
+                  <VolumenGrupos filas={filas} />
+                  <p className="fhint" style={{ marginTop: 10 }}>
+                    <b className="mono">{totales(filas).plan}</b> series semanales
+                    {esElActivo ? <> · lo que estás haciendo de verdad, en Progreso</> : null}
+                  </p>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2294,6 +2350,46 @@ export default function ForgeApp() {
               </p>
               <button className="btn-secondary" onClick={() => setShowAsistencia(true)}>Ver mi asistencia</button>
             </div>
+
+            {/* Va PEGADA a "Tonelaje por grupo muscular", que ya existia: dos
+                tarjetas que dicen "por grupo" separadas por Medidas y
+                Asistencia se leen como la misma repetida, y hay que descifrar
+                cual mirar. Juntas, la diferencia se lee de una.
+
+                Y va PRIMERA de las dos porque es la unica con VARA: el programa
+                prescribe series, no kilos, asi que esta se puede comparar
+                contra el plan y la otra no. El tonelaje por grupo contesta
+                "donde movi mas peso"; esta contesta "estoy haciendo el volumen
+                que el programa pide".
+
+                La semana es la ultima CON SERIES REGISTRADAS, no la del selector
+                de Entrenar: eso es donde el usuario esta parado mirando, no
+                donde entreno. */}
+            {(() => {
+              const w = ultimaSemanaConDatos(logs, weeks);
+              if (w === null) return null;
+              const buscarEx = (id) => program.find((e) => e.id === id) || exercisesFueraDelPrograma.get(id) || null;
+              const filas = porGrupo(program, logs, w, deloadCfg, buscarEx);
+              if (!filas.length) return null;
+              const t = totales(filas);
+              const est = semanasHechas[String(w)];
+              return (
+                <div className="card">
+                  <div className="cardtitle">Series por grupo · {weekLabel(w)}</div>
+                  <Ayuda titulo="Qué son las series por grupo" mostrar={prefs.ayudas}>
+                    <p>Cuántas series le tocaron a cada músculo en la semana. La barra gris es lo que <b>pide el programa</b> y la azul lo que <b>hiciste</b>.</p>
+                    <p>Es la medida con la que se programa hipertrofia: importa el reparto entre grupos, no solo el total. Un grupo que queda siempre corto es un ejercicio que se saltea.</p>
+                    <p>En la semana de descarga el programa pide menos a propósito — ahí la barra gris también baja.</p>
+                    <p>Abajo está el mismo reparto en <b>kilos</b>. Son dos preguntas distintas: las series dicen si cumpliste el plan, el tonelaje dice dónde moviste más peso.</p>
+                  </Ayuda>
+                  <VolumenGrupos filas={filas} conReal />
+                  <p className="fhint" style={{ marginTop: 10 }}>
+                    <b className="mono">{t.real}</b> de <b className="mono">{t.plan}</b> series
+                    {est && !est.cerrada ? <> · {weekLabel(w).toLowerCase()} está en curso, {est.hechas} de {est.total} sesiones</> : null}
+                  </p>
+                </div>
+              );
+            })()}
 
             <div className="card">
               <div className="cardtitle">Tonelaje por grupo muscular</div>
@@ -3581,6 +3677,17 @@ const CSS = `
 .tonbar { height: 10px; background: #E5E5EA; border-radius: 5px; overflow: hidden; }
 .tonbar div { height: 100%; background: #2C6BED; border-radius: 5px; transition: width .3s; }
 .tonval { font-size: 13px; color: #1C1C1E; text-align: right; font-weight: 500; }
+/* Series por grupo. Las dos barras van en la MISMA escala de series y
+   superpuestas: un porcentaje por grupo dibujaria 2 de 2 igual que 8 de 8, y lo
+   primero que hay que ver es donde esta puesto el volumen. */
+.volrow { display: grid; grid-template-columns: 92px 1fr 44px; gap: 10px; align-items: center; margin-bottom: 9px; }
+.vollbl { color: #3A3A3C; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.volbar { height: 10px; background: #F2F2F7; border-radius: 5px; position: relative; }
+.volplan, .volreal { position: absolute; left: 0; top: 0; height: 100%; border-radius: 5px; transition: width .3s; }
+.volplan { background: #D6DCE5; }
+.volreal { background: #2C6BED; }
+.volval { font-size: 13px; color: #1C1C1E; text-align: right; font-weight: 500; }
+.prog-volumen { margin-top: 18px; }
 .tondelta { font-size: 12px; text-align: right; color: #636366; }
 .tondelta.up { color: #34C759; } .tondelta.dn { color: #FF3B30; }
 .e1head { display: grid; grid-template-columns: 1fr repeat(4, 42px); gap: 5px; font-size: 11px; color: #636366; padding-bottom: 8px; border-bottom: 1px solid #E5E5EA; margin-bottom: 6px; }

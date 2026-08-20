@@ -22,7 +22,7 @@ generado + macros, y eso es otro producto.
 
 ---
 
-## 1. "La vez pasada" en Entrenar — SE TOMA
+## 1. "La vez pasada" en Entrenar — HECHO (2026-08-20)
 
 **La referencia**: Hevy y Strong muestran, al lado de cada serie, lo que hiciste
 la ultima vez en esa misma serie de ese mismo ejercicio.
@@ -95,7 +95,7 @@ refs de la vuelta siguiente, para revisar de una sentada.
 gemelo sentado, ver CONTEXT.md 2026-08-05). Cualquier propuesta de subir carga
 que lea ese numero hereda ese sesgo.
 
-## 3. Volumen semanal por grupo muscular — SE TOMA
+## 3. Volumen semanal por grupo muscular — HECHO (2026-08-20)
 
 **La referencia**: es la metrica que gobierna toda la programacion de hipertrofia
 (MEV/MRV en RP).
@@ -233,9 +233,15 @@ entrenador. No definido.
 
 ## Orden sugerido
 
-1. **"La vez pasada"** — el dato ya esta guardado y cambia la pantalla que mas se usa.
-2. **Volumen por grupo** — el dato ya esta calculado y hoy muere en una terminal.
-3. **Resumen de progreso con propuesta de refs** — cierra un loop que la app ya empezo.
+1. ~~**"La vez pasada"**~~ — hecho el 2026-08-20 (fase 9).
+2. ~~**Volumen por grupo**~~ — hecho el 2026-08-20 (fase 10). Aparecio algo que
+   este relevamiento no habia visto: **"Tonelaje por grupo muscular" ya existia**
+   en Progreso. No es lo mismo —kilos contra series— pero obliga a que las dos
+   vivan pegadas, o se leen como la misma repetida.
+3. **Resumen de progreso con propuesta de refs** — cierra un loop que la app ya
+   empezo. **Bloqueado hasta definir tres cosas**: cuanto propone subir, cuando
+   aparece, y que pasa en un programa asignado. Las tres son de producto, no de
+   implementacion.
 4. **Feedback por grupo en los dos momentos** — necesita definir la pregunta antes que el codigo.
 5. **Cierre de sesion** — depende de 1 para tener con que comparar.
 6. Imagenes (bloqueado por licencia) · Discos (suelto) · PR (postergado) · Social (sin definir).
