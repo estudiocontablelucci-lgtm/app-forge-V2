@@ -63,6 +63,11 @@ PROGRAMA = dict(
         ex(1, 1, "Prensa 45", "Cuádriceps", refKg=140),
         ex(2, 2, "Press plano", "Pecho", refKg=80),
         ex(3, 3, "Dominadas", "Espalda", refKg="BW", repsMin=6, repsMax=10),
+        # La linea de la vez pasada se dibuja DENTRO de `ExSetRow`, entre la
+        # serie y sus escalones. Este ejercicio esta para que se note si los
+        # rompio: los escalones aparecen recien al cargar las reps.
+        ex(4, 4, "Gemelo sentado", "Gemelos", refKg=50, repsMin=15, repsMax=20,
+           technique={"tipo": "dropset", "pasos": 2, "aplica": "todas"}),
     ],
     status="active", createdAt=1_740_000_000_000)
 
@@ -203,6 +208,18 @@ def main() -> int:
         check("en dominadas el lastre vacio se lee BW, no un guion",
               (antes_de(domi, 0) or [None, None])[1] == "BW",
               f"la linea dice {antes_de(domi, 0)}")
+
+        print("\nla linea nueva no se lleva puestos los escalones del dropset")
+        siguiente()
+        gemelo = tarjeta("Gemelo sentado")
+        check("sin reps cargadas no hay escalones",
+              gemelo.locator(".setrow.paso").count() == 0,
+              f"aparecieron {gemelo.locator('.setrow.paso').count()} escalones antes de tiempo")
+        gemelo.locator(".setrow").first.locator("input").nth(1).fill("15")
+        pg.wait_for_timeout(800)
+        check("al cargar las reps aparecen los dos escalones",
+              gemelo.locator(".setrow.paso").count() == 2,
+              f"aparecieron {gemelo.locator('.setrow.paso').count()}")
 
         # ---------------------------------------------------------------
         print("\nSemana 1 — no hay con que comparar")
