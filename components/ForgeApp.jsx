@@ -3486,7 +3486,10 @@ const CSS = `
 .setn { color: #48484A; font-size: 14px; font-weight: 600; }
 /* La vez pasada: mismo grid que la fila, para que cada numero caiga bajo su
    columna. Gris y chico a proposito — es una referencia, no un valor cargado. */
-.antes { display: grid; grid-template-columns: 34px 1fr 1fr 1fr; gap: 8px; margin: -2px 0 8px; font-size: 11px; color: #AEAEB2; }
+/* Pegada a SU fila y separada de la siguiente: con el mismo aire arriba y
+   abajo quedaba a mitad de camino entre las dos series y no se sabia de cual
+   hablaba. */
+.antes { display: grid; grid-template-columns: 34px 1fr 1fr 1fr; gap: 8px; margin: -5px 0 14px; font-size: 11px; color: #AEAEB2; }
 .antes span { text-align: center; }
 .antes-ico { text-align: left; font-size: 12px; }
 .nf { width: 100%; height: 50px; background: #F2F2F7; border: 1.5px solid #D1D1D6; border-radius: 12px; color: #1C1C1E; font-size: 20px; text-align: center; transition: border-color .15s; }
